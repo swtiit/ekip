@@ -1,7 +1,6 @@
-import { spawn } from "node:child_process";
-import { mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 import type { Adapter, SpawnRequest, SpawnResult } from "./index.js";
+import { bridgeEnv, launchDetached } from "./spawn.js";
 
 /**
  * Generic command adapter — plugs any headless CLI into the bridge without
@@ -28,10 +27,7 @@ export const commandAdapter: Adapter = {
       };
     }
 
-    const logDir = join(req.cwd, ".agent-bridge", "logs");
-    mkdirSync(logDir, { recursive: true });
-    const logFile = join(logDir, `${req.agentName}-${req.taskId}.log`);
-    const fd = openSync(logFile, "a");
+    const logFile = join(req.cwd, ".agent-bridge", "logs", `${req.agentName}-${req.taskId}.log`);
 
     const substitute = (arg: string): string =>
       arg
@@ -45,25 +41,14 @@ export const commandAdapter: Adapter = {
     const args = template.map(substitute);
     if (!template.some((a) => a.includes("{prompt}"))) args.push(req.prompt);
 
-    const child = spawn(req.command, args, {
+    return launchDetached({
+      command: req.command,
+      args,
       cwd: req.cwd,
-      detached: true,
-      stdio: ["ignore", fd, fd],
-      env: {
-        ...process.env,
-        AGENT_BRIDGE_URL: req.hubUrl,
-        AGENT_BRIDGE_AGENT: req.agentName,
-        AGENT_BRIDGE_TASK: req.taskId,
-        AGENT_BRIDGE_DEPTH: String(req.depth),
-      },
+      env: bridgeEnv(req),
+      logFile,
+      label: req.command,
     });
-    child.unref();
-
-    return {
-      launched: true,
-      pid: child.pid,
-      detail: `${req.command} (log: ${logFile})`,
-    };
   },
 
   mcpConfigSnippet(hubUrl: string) {

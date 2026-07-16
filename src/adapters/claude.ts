@@ -1,7 +1,6 @@
-import { spawn } from "node:child_process";
-import { mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 import type { Adapter, SpawnRequest, SpawnResult } from "./index.js";
+import { bridgeEnv, launchDetached } from "./spawn.js";
 
 /**
  * Claude Code adapter — drives the `claude` CLI in headless (`-p`) mode.
@@ -14,10 +13,7 @@ export const claudeAdapter: Adapter = {
   description: "Anthropic Claude Code (headless `claude -p`)",
 
   async spawn(req: SpawnRequest): Promise<SpawnResult> {
-    const logDir = join(req.cwd, ".agent-bridge", "logs");
-    mkdirSync(logDir, { recursive: true });
-    const logFile = join(logDir, `${req.agentName}-${req.taskId}.log`);
-    const fd = openSync(logFile, "a");
+    const logFile = join(req.cwd, ".agent-bridge", "logs", `${req.agentName}-${req.taskId}.log`);
 
     // Pre-approve the bridge's own MCP tools so the headless run can claim
     // tasks and post results without stalling on permission prompts. Broader
@@ -41,24 +37,14 @@ export const claudeAdapter: Adapter = {
       "--strict-mcp-config",
       ...(req.extraArgs ?? []),
     ];
-    const child = spawn("claude", args, {
+    return launchDetached({
+      command: "claude",
+      args,
       cwd: req.cwd,
-      detached: true,
-      stdio: ["ignore", fd, fd],
-      env: {
-        ...process.env,
-        AGENT_BRIDGE_URL: req.hubUrl,
-        AGENT_BRIDGE_AGENT: req.agentName,
-        AGENT_BRIDGE_DEPTH: String(req.depth),
-      },
+      env: bridgeEnv(req),
+      logFile,
+      label: "claude -p",
     });
-    child.unref();
-
-    return {
-      launched: true,
-      pid: child.pid,
-      detail: `claude -p (log: ${logFile})`,
-    };
   },
 
   mcpConfigSnippet(hubUrl: string) {

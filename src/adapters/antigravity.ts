@@ -1,7 +1,6 @@
-import { spawn } from "node:child_process";
-import { mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 import type { Adapter, SpawnRequest, SpawnResult } from "./index.js";
+import { bridgeEnv, launchDetached } from "./spawn.js";
 
 /**
  * Antigravity adapter — drives the `agy` CLI in headless (`-p`) mode.
@@ -38,33 +37,20 @@ export const antigravityAdapter: Adapter = {
   description: "Google Antigravity (headless `agy -p`)",
 
   async spawn(req: SpawnRequest): Promise<SpawnResult> {
-    const logDir = join(req.cwd, ".agent-bridge", "logs");
-    mkdirSync(logDir, { recursive: true });
-    const logFile = join(logDir, `${req.agentName}-${req.taskId}.log`);
-    const fd = openSync(logFile, "a");
+    const logFile = join(req.cwd, ".agent-bridge", "logs", `${req.agentName}-${req.taskId}.log`);
 
     // --add-dir registers the project as a workspace directory: without it a
     // headless run in an untrusted folder ignores cwd and writes files into
     // agy's own scratch directory (field-tested).
     const args = ["-p", req.prompt, "--add-dir", req.cwd, ...(req.extraArgs ?? [])];
-    const child = spawn("agy", args, {
+    return launchDetached({
+      command: "agy",
+      args,
       cwd: req.cwd,
-      detached: true,
-      stdio: ["ignore", fd, fd],
-      env: {
-        ...process.env,
-        AGENT_BRIDGE_URL: req.hubUrl,
-        AGENT_BRIDGE_AGENT: req.agentName,
-        AGENT_BRIDGE_DEPTH: String(req.depth),
-      },
+      env: bridgeEnv(req),
+      logFile,
+      label: "agy -p",
     });
-    child.unref();
-
-    return {
-      launched: true,
-      pid: child.pid,
-      detail: `agy -p (log: ${logFile})`,
-    };
   },
 
   mcpConfigSnippet(hubUrl: string) {

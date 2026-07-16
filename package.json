@@ -21,7 +21,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
-    "serve": "node dist/cli/index.js serve"
+    "serve": "node dist/cli/index.js serve",
+    "test": "node test/e2e.mjs"
   },
   "keywords": [
     "mcp",
@@ -34,11 +35,9 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "express": "^4.21.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
     "@types/node": "^22.0.0",
     "typescript": "^5.6.0"
   },

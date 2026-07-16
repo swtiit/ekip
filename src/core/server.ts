@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
-import express from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { BridgeConfig } from "./config.js";
@@ -17,8 +17,51 @@ export interface RunningHub {
   close: () => Promise<void>;
 }
 
+const BODY_LIMIT = 8 * 1024 * 1024;
+
+function readJsonBody(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolvePromise, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > BODY_LIMIT) {
+        reject(new Error("body too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw) {
+        resolvePromise(undefined);
+        return;
+      }
+      try {
+        resolvePromise(JSON.parse(raw));
+      } catch {
+        reject(new Error("invalid JSON body"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
+  const text = JSON.stringify(body);
+  res.writeHead(status, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(text);
+}
+
+function sendText(res: ServerResponse, status: number, body: string, type = "text/plain"): void {
+  res.writeHead(status, { "Content-Type": `${type}; charset=utf-8` });
+  res.end(body);
+}
+
 /**
- * Boots the Streamable HTTP MCP endpoint. All agent sessions share one Store
+ * Boots the Streamable HTTP MCP endpoint plus the dashboard/observation API
+ * on plain node:http — no web framework. All agent sessions share one Store
  * and Dispatcher (so delegation and context are common), but each MCP session
  * gets its own server+transport pair as the SDK requires.
  */
@@ -28,89 +71,56 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   const watchdog = new Watchdog(config, store);
   watchdog.start();
 
-  const app = express();
-  app.use(express.json({ limit: "8mb" }));
-
   const transports: Record<string, StreamableHTTPServerTransport> = {};
+  const sseClients = new Set<ServerResponse>();
 
-  app.post("/mcp", async (req, res) => {
+  async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     let transport = sessionId ? transports[sessionId] : undefined;
 
-    if (!transport) {
-      if (sessionId || !isInitializeRequest(req.body)) {
-        res.status(400).json({
-          jsonrpc: "2.0",
-          error: { code: -32000, message: "No valid session; send an initialize request first." },
-          id: null,
+    if (req.method === "POST") {
+      const body = await readJsonBody(req);
+      if (!transport) {
+        if (sessionId || !isInitializeRequest(body)) {
+          sendJson(res, 400, {
+            jsonrpc: "2.0",
+            error: { code: -32000, message: "No valid session; send an initialize request first." },
+            id: null,
+          });
+          return;
+        }
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => {
+            transports[sid] = transport!;
+          },
         });
-        return;
+        transport.onclose = () => {
+          if (transport!.sessionId) delete transports[transport!.sessionId];
+        };
+        const server = buildHub(config, store, dispatcher);
+        await server.connect(transport);
       }
-      transport = new StreamableHTTPServerTransport({
-        sessionIdGenerator: () => randomUUID(),
-        onsessioninitialized: (sid) => {
-          transports[sid] = transport!;
-        },
-      });
-      transport.onclose = () => {
-        if (transport!.sessionId) delete transports[transport!.sessionId];
-      };
-      const server = buildHub(config, store, dispatcher);
-      await server.connect(transport);
+      await transport.handleRequest(req, res, body);
+      return;
     }
 
-    await transport.handleRequest(req, res, req.body);
-  });
-
-  // GET (SSE stream) and DELETE (session teardown) reuse the same transport.
-  const bySession = async (req: express.Request, res: express.Response) => {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    const transport = sessionId ? transports[sessionId] : undefined;
+    // GET (SSE stream) and DELETE (session teardown) reuse the same transport.
     if (!transport) {
-      res.status(400).send("Unknown or missing session id");
+      sendText(res, 400, "Unknown or missing session id");
       return;
     }
     await transport.handleRequest(req, res);
-  };
-  app.get("/mcp", bySession);
-  app.delete("/mcp", bySession);
+  }
 
-  app.get("/health", (_req, res) => {
-    res.json({ ok: true, project: config.project, sessions: Object.keys(transports).length });
-  });
-
-  // ---- Dashboard + observation API (same-process view onto the store) ----
-
-  app.get("/", (_req, res) => res.redirect("/ui"));
-  app.get("/ui", (_req, res) => {
-    res.type("html").send(dashboardHtml());
-  });
-
-  app.get("/api/state", (_req, res) => {
-    res.json({
-      project: config.project,
-      hubUrl: hubUrl(config),
-      agents: config.agents.map((a) => ({
-        name: a.name,
-        adapter: a.adapter,
-        spawnable: a.spawnable !== false,
-      })),
-      tasks: store.listTasks(),
-      context: store.listContext(),
-    });
-  });
-
-  // SSE change feed: one `data:` line per store mutation, plus keep-alives.
-  const sseClients = new Set<express.Response>();
-  app.get("/api/events", (req, res) => {
-    res.set({
+  function handleEvents(req: IncomingMessage, res: ServerResponse): void {
+    res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
     });
-    res.flushHeaders();
     res.write("retry: 2000\n\n");
-    const onChange = (event: unknown) => {
+    const onChange = (event: unknown): void => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
     };
     store.on("change", onChange);
@@ -121,19 +131,16 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       store.off("change", onChange);
       sseClients.delete(res);
     });
-  });
+  }
 
-  // Human-in-the-loop endpoints: the dashboard user acts as one more peer
-  // ("human" by default), going through the exact same store + dispatcher
-  // path as bridge_delegate / bridge_context_set.
-  app.post("/api/delegate", async (req, res) => {
-    const { to, prompt, title, from } = (req.body ?? {}) as Record<string, unknown>;
+  async function handleDelegate(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const { to, prompt, title, from } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
     if (typeof to !== "string" || !to || typeof prompt !== "string" || !prompt) {
-      res.status(400).json({ error: "`to` and `prompt` are required" });
+      sendJson(res, 400, { error: "`to` and `prompt` are required" });
       return;
     }
     if (!config.agents.some((a) => a.name === to)) {
-      res.status(400).json({
+      sendJson(res, 400, {
         error: `unknown agent "${to}" — configured agents: ${config.agents.map((a) => a.name).join(", ")}`,
       });
       return;
@@ -146,22 +153,23 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       depth: 1,
     });
     const outcome = await dispatcher.dispatch(task);
-    res.json({ task: store.getTask(task.id), dispatch: outcome });
-  });
+    sendJson(res, 200, { task: store.getTask(task.id), dispatch: outcome });
+  }
 
-  app.post("/api/context", (req, res) => {
-    const { key, value, by } = (req.body ?? {}) as Record<string, unknown>;
+  async function handleContext(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const { key, value, by } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
     if (typeof key !== "string" || !key) {
-      res.status(400).json({ error: "`key` is required" });
+      sendJson(res, 400, { error: "`key` is required" });
       return;
     }
-    res.json({ entry: store.setContext(key, value, typeof by === "string" && by ? by : "human") });
-  });
+    sendJson(res, 200, {
+      entry: store.setContext(key, value, typeof by === "string" && by ? by : "human"),
+    });
+  }
 
-  app.get("/api/logs/:taskId", (req, res) => {
-    const { taskId } = req.params;
+  function handleLogs(res: ServerResponse, taskId: string): void {
     if (!/^[A-Za-z0-9-]{1,64}$/.test(taskId)) {
-      res.status(400).type("text/plain").send("Invalid task id.");
+      sendText(res, 400, "Invalid task id.");
       return;
     }
     const dir = join(config.projectRoot, ".agent-bridge", "logs");
@@ -169,17 +177,73 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       ? readdirSync(dir).find((f) => f.endsWith(`-${taskId}.log`))
       : undefined;
     if (!file) {
-      res.status(404).type("text/plain").send("No log for this task.");
+      sendText(res, 404, "No log for this task.");
       return;
     }
     const buf = readFileSync(join(dir, file));
     const tail = buf.length > 32_768 ? buf.subarray(buf.length - 32_768) : buf;
-    res.type("text/plain").send(tail.toString("utf8"));
+    sendText(res, 200, tail.toString("utf8"));
+  }
+
+  const httpServer = createServer((req, res) => {
+    const path = (req.url ?? "/").split("?")[0];
+    const route = `${req.method} ${path}`;
+
+    const routed = (async (): Promise<void> => {
+      if (path === "/mcp") return handleMcp(req, res);
+      switch (route) {
+        case "GET /health":
+          return sendJson(res, 200, {
+            ok: true,
+            project: config.project,
+            sessions: Object.keys(transports).length,
+          });
+        case "GET /":
+          res.writeHead(302, { Location: "/ui" });
+          res.end();
+          return;
+        case "GET /ui":
+          return sendText(res, 200, dashboardHtml(), "text/html");
+        case "GET /api/state":
+          return sendJson(res, 200, {
+            project: config.project,
+            hubUrl: hubUrl(config),
+            agents: config.agents.map((a) => ({
+              name: a.name,
+              adapter: a.adapter,
+              spawnable: a.spawnable !== false,
+            })),
+            tasks: store.listTasks(),
+            context: store.listContext(),
+          });
+        case "GET /api/events":
+          return handleEvents(req, res);
+        case "POST /api/delegate":
+          return handleDelegate(req, res);
+        case "POST /api/context":
+          return handleContext(req, res);
+        default:
+          if (req.method === "GET" && path.startsWith("/api/logs/")) {
+            return handleLogs(res, decodeURIComponent(path.slice("/api/logs/".length)));
+          }
+          return sendText(res, 404, "Not found");
+      }
+    })();
+
+    routed.catch((err: Error) => {
+      if (!res.headersSent) {
+        sendJson(res, err.message === "invalid JSON body" || err.message === "body too large" ? 400 : 500, {
+          error: err.message,
+        });
+      } else {
+        res.end();
+      }
+    });
   });
 
-  return new Promise((resolve) => {
-    const httpServer = app.listen(config.port, config.host, () => {
-      resolve({
+  return new Promise((resolvePromise) => {
+    httpServer.listen(config.port, config.host, () => {
+      resolvePromise({
         store,
         close: () =>
           new Promise<void>((done) => {
