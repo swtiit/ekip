@@ -1,0 +1,48 @@
+{
+  "name": "agent-bridge",
+  "version": "0.4.0",
+  "description": "Vendor-neutral coordination hub that lets multiple coding agents (Claude Code, Antigravity, \u2026) delegate tasks and share context over MCP \u2014 droppable into any project.",
+  "type": "module",
+  "bin": {
+    "agent-bridge": "dist/cli/index.js"
+  },
+  "exports": {
+    ".": "./dist/core/index.js",
+    "./protocol": "./dist/protocol/index.js"
+  },
+  "files": [
+    "dist",
+    "examples",
+    "PROTOCOL.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "serve": "node dist/cli/index.js serve"
+  },
+  "keywords": [
+    "mcp",
+    "agents",
+    "claude-code",
+    "antigravity",
+    "orchestration",
+    "multi-agent"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "express": "^4.21.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
