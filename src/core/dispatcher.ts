@@ -54,6 +54,9 @@ export class Dispatcher {
       `Task (id ${task.id}): ${task.title}`,
       ``,
       task.prompt,
+      ...(task.context && Object.keys(task.context).length > 0
+        ? ["", "Attached context from the delegating agent:", JSON.stringify(task.context, null, 2)]
+        : []),
     ].join("\n");
   }
 

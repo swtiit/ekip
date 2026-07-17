@@ -13,7 +13,7 @@ export type TaskStatus =
   | "failed"; // finished with an error
 
 export interface Artifact {
-  /** e.g. "diff", "file", "screenshot", "log", "url" */
+  /** standard kinds: "file", "diff", "url", "log", "note" (others pass through) */
   kind: string;
   /** human label */
   label?: string;
