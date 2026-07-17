@@ -6,11 +6,20 @@ import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile, execFileSync } from "node:child_process";
+import { createServer } from "node:net";
 import { startServer } from "../dist/core/index.js";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TMP = mkdtempSync(join(tmpdir(), "ekip-e2e-"));
-const PORT = 4399;
+// Ask the OS for a free port so a stale hub (or a concurrent suite) can
+// never EADDRINUSE-crash the run — this once broke `npm publish`.
+const PORT = await new Promise((res) => {
+  const probe = createServer();
+  probe.listen(0, "127.0.0.1", () => {
+    const p = probe.address().port;
+    probe.close(() => res(p));
+  });
+});
 const BASE = `http://127.0.0.1:${PORT}`;
 const MOCK = join(REPO, "test", "mock-agent.mjs");
 
