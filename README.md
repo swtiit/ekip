@@ -155,6 +155,13 @@ The examples ship a field-tested crew and flow:
 }
 ```
 
+- **Machine defaults**: once a project's cast feels right, run
+  `agent-bridge init --global` there — it saves the agents and role files to
+  `~/.agent-bridge/`. Every future `agent-bridge init` materializes that
+  cast (and wires `.mcp.json`) automatically, so a new project is just
+  `init && serve`. Project files always win over machine defaults, field by
+  field; role `promptFile`s resolve in the project first, then
+  `~/.agent-bridge/roles/` by filename.
 - **Model-per-role**: register the same adapter several times with different
   `--model` args — delegating to a *name* picks a *model*.
 - `spawnable: false` registers an agent that polls (`bridge_claim`) instead

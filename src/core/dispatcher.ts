@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import type { Task } from "../protocol/index.js";
 import { DEFAULT_MAX_DEPTH } from "../protocol/index.js";
 import { getAdapter } from "../adapters/index.js";
 import type { AgentConfig, BridgeConfig } from "./config.js";
-import { hubUrl } from "./config.js";
+import { hubUrl, resolveRoleFile } from "./config.js";
 
 export interface DispatchOutcome {
   spawned: boolean;
@@ -25,11 +24,10 @@ export class Dispatcher {
   /** Standing role instructions from the agent's promptFile, if configured. */
   private rolePrompt(agent: AgentConfig): string | undefined {
     if (!agent.promptFile) return undefined;
+    const path = resolveRoleFile(this.config.projectRoot, agent.promptFile);
+    if (!path) return undefined;
     try {
-      const text = readFileSync(
-        resolve(this.config.projectRoot, agent.promptFile),
-        "utf8",
-      ).trim();
+      const text = readFileSync(path, "utf8").trim();
       return text || undefined;
     } catch {
       // Missing role file shouldn't block dispatch; the bootstrap still works.

@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { homedir } from "node:os";
+import { basename, resolve, join } from "node:path";
 
 export interface AgentConfig {
   /** unique agent name within this project, e.g. "claude" or "antigravity" */
@@ -67,6 +68,40 @@ export function defaultConfig(projectRoot: string): BridgeConfig {
   };
 }
 
+/** Machine-wide defaults directory (override with AGENT_BRIDGE_HOME for tests). */
+export function globalDir(): string {
+  return process.env.AGENT_BRIDGE_HOME ?? join(homedir(), ".agent-bridge");
+}
+
+/**
+ * Machine-wide default config (`~/.agent-bridge/config.json`), if present.
+ * Identity fields (`project`, `projectRoot`) never come from here.
+ */
+export function loadGlobalDefaults(): Partial<BridgeConfig> | undefined {
+  const path = join(globalDir(), "config.json");
+  if (!existsSync(path)) return undefined;
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8")) as Partial<BridgeConfig>;
+    delete raw.project;
+    delete raw.projectRoot;
+    return raw;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolve a role promptFile: the project's own file wins; otherwise fall back
+ * to `~/.agent-bridge/roles/<basename>` so one machine-wide role library
+ * serves every project.
+ */
+export function resolveRoleFile(projectRoot: string, promptFile: string): string | undefined {
+  const local = resolve(projectRoot, promptFile);
+  if (existsSync(local)) return local;
+  const global = join(globalDir(), "roles", basename(promptFile));
+  return existsSync(global) ? global : undefined;
+}
+
 export function loadConfig(projectRoot = process.cwd()): BridgeConfig {
   const path = resolve(projectRoot, CONFIG_FILENAME);
   if (!existsSync(path)) {
@@ -75,7 +110,8 @@ export function loadConfig(projectRoot = process.cwd()): BridgeConfig {
     );
   }
   const raw = JSON.parse(readFileSync(path, "utf8")) as Partial<BridgeConfig>;
-  const merged = { ...defaultConfig(projectRoot), ...raw };
+  // Field-level precedence: project file > machine-wide defaults > built-ins.
+  const merged = { ...defaultConfig(projectRoot), ...loadGlobalDefaults(), ...raw };
   // projectRoot always reflects where the config actually lives.
   merged.projectRoot = projectRoot;
   return merged as BridgeConfig;

@@ -1,7 +1,7 @@
 // End-to-end suite: boots a real hub on a scratch port and exercises the
 // HTTP API, the MCP tool surface, the dispatcher, the watchdog, and the CLI.
 // No LLMs involved — agents are scripted mocks. Run with `npm test`.
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -275,6 +275,41 @@ try {
   t("cli unknown prefix errors", strip(await cli("task", "zzzzzz")).startsWith("EXIT1"));
   t("cli model set", strip(await cli("model", "modeled", "m2")).includes("saved modeled → m2"));
   t("cli agents lists models", strip(await cli("agents")).includes("m2"));
+
+  // ---- global defaults: machine-wide config + role fallback ----
+  const GHOME = mkdtempSync(join(tmpdir(), "ab-ghome-"));
+  mkdirSync(join(GHOME, "roles"), { recursive: true });
+  writeFileSync(
+    join(GHOME, "config.json"),
+    JSON.stringify({
+      project: "IGNORED",
+      port: 4444,
+      agents: [{ name: "gdefault", adapter: "command", command: "true", spawnable: false, promptFile: "anywhere/gr.md" }],
+    }),
+  );
+  writeFileSync(join(GHOME, "roles", "gr.md"), "GLOBAL ROLE");
+  const FRESH = mkdtempSync(join(tmpdir(), "ab-fresh-"));
+  await new Promise((r) =>
+    execFile(
+      process.execPath,
+      [join(REPO, "dist/cli/index.js"), "init"],
+      { cwd: FRESH, env: { ...process.env, AGENT_BRIDGE_HOME: GHOME } },
+      r,
+    ),
+  );
+  const freshCfg = JSON.parse(readFileSync(join(FRESH, "agent-bridge.config.json"), "utf8"));
+  t(
+    "init materializes global agents",
+    freshCfg.agents?.[0]?.name === "gdefault" && freshCfg.port === 4444 && freshCfg.project !== "IGNORED",
+  );
+  const freshMcp = JSON.parse(readFileSync(join(FRESH, ".mcp.json"), "utf8"));
+  t("init wires .mcp.json", freshMcp.mcpServers?.["agent-bridge"]?.url?.includes("4444"));
+  process.env.AGENT_BRIDGE_HOME = GHOME;
+  const { resolveRoleFile } = await import("../dist/core/index.js");
+  const rolePath = resolveRoleFile(FRESH, "anywhere/gr.md");
+  t("role file falls back to global", rolePath && readFileSync(rolePath, "utf8") === "GLOBAL ROLE");
+  delete process.env.AGENT_BRIDGE_HOME;
+  t("project agents still win over global", (await api("/api/state")).agents.some((a) => a.name === "mock"));
 } finally {
   await hub.close();
 }
