@@ -265,7 +265,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       sendText(res, 400, "Invalid task id.");
       return;
     }
-    const dir = join(config.projectRoot, ".agent-bridge", "logs");
+    const dir = join(config.projectRoot, ".ekip", "logs");
     const file = existsSync(dir)
       ? readdirSync(dir).find((f) => f.endsWith(`-${taskId}.log`))
       : undefined;

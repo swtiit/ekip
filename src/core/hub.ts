@@ -20,7 +20,7 @@ export function buildHub(
   dispatcher: Dispatcher,
 ): McpServer {
   const server = new McpServer({
-    name: "agent-bridge",
+    name: "ekip",
     version: PROTOCOL_VERSION,
   });
 

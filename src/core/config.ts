@@ -53,7 +53,7 @@ export interface BridgeConfig {
   watchdog?: WatchdogConfig;
 }
 
-export const CONFIG_FILENAME = "agent-bridge.config.json";
+export const CONFIG_FILENAME = "ekip.config.json";
 
 export function defaultConfig(projectRoot: string): BridgeConfig {
   return {
@@ -68,13 +68,13 @@ export function defaultConfig(projectRoot: string): BridgeConfig {
   };
 }
 
-/** Machine-wide defaults directory (override with AGENT_BRIDGE_HOME for tests). */
+/** Machine-wide defaults directory (override with EKIP_HOME for tests). */
 export function globalDir(): string {
-  return process.env.AGENT_BRIDGE_HOME ?? join(homedir(), ".agent-bridge");
+  return process.env.EKIP_HOME ?? join(homedir(), ".ekip");
 }
 
 /**
- * Machine-wide default config (`~/.agent-bridge/config.json`), if present.
+ * Machine-wide default config (`~/.ekip/config.json`), if present.
  * Identity fields (`project`, `projectRoot`) never come from here.
  */
 export function loadGlobalDefaults(): Partial<BridgeConfig> | undefined {
@@ -92,7 +92,7 @@ export function loadGlobalDefaults(): Partial<BridgeConfig> | undefined {
 
 /**
  * Resolve a role promptFile: the project's own file wins; otherwise fall back
- * to `~/.agent-bridge/roles/<basename>` so one machine-wide role library
+ * to `~/.ekip/roles/<basename>` so one machine-wide role library
  * serves every project.
  */
 export function resolveRoleFile(projectRoot: string, promptFile: string): string | undefined {
@@ -106,7 +106,7 @@ export function loadConfig(projectRoot = process.cwd()): BridgeConfig {
   const path = resolve(projectRoot, CONFIG_FILENAME);
   if (!existsSync(path)) {
     throw new Error(
-      `No ${CONFIG_FILENAME} found in ${projectRoot}. Run \`agent-bridge init\` first.`,
+      `No ${CONFIG_FILENAME} found in ${projectRoot}. Run \`ekip init\` first.`,
     );
   }
   const raw = JSON.parse(readFileSync(path, "utf8")) as Partial<BridgeConfig>;
@@ -138,5 +138,5 @@ export function hubUrl(config: BridgeConfig): string {
 }
 
 export function stateFilePath(config: BridgeConfig): string {
-  return join(config.projectRoot, ".agent-bridge", "state.json");
+  return join(config.projectRoot, ".ekip", "state.json");
 }

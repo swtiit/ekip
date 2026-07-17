@@ -9,7 +9,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { startServer } from "../dist/core/index.js";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const TMP = mkdtempSync(join(tmpdir(), "agent-bridge-e2e-"));
+const TMP = mkdtempSync(join(tmpdir(), "ekip-e2e-"));
 const PORT = 4399;
 const BASE = `http://127.0.0.1:${PORT}`;
 const MOCK = join(REPO, "test", "mock-agent.mjs");
@@ -31,8 +31,8 @@ const config = {
   watchdog: { pendingTtlSeconds: 2, claimedTtlSeconds: 3, sweepIntervalSeconds: 1 },
 };
 writeFileSync(join(TMP, "role.md"), "# Role: roleful\nProbe role content MARKER-XYZZY.");
-// The CLI resolves the hub from agent-bridge.config.json in its cwd.
-writeFileSync(join(TMP, "agent-bridge.config.json"), JSON.stringify(config));
+// The CLI resolves the hub from ekip.config.json in its cwd.
+writeFileSync(join(TMP, "ekip.config.json"), JSON.stringify(config));
 
 const results = [];
 function t(name, ok, detail = "") {
@@ -100,7 +100,7 @@ try {
   // ---- agent config API (hot model switching) ----
   const cfgSet = await (await post("/api/config/agent", { name: "modeled", model: "m1", effort: "high" })).json();
   t("config set model+effort", cfgSet.agent?.model === "m1" && cfgSet.agent?.effort === "high");
-  const onDisk = JSON.parse(readFileSync(join(TMP, "agent-bridge.config.json"), "utf8"));
+  const onDisk = JSON.parse(readFileSync(join(TMP, "ekip.config.json"), "utf8"));
   const diskArgs = onDisk.agents.find((a) => a.name === "modeled").args;
   t("config persisted to file", diskArgs.includes("m1") && diskArgs.includes("--effort"));
   t("config unknown agent → 400", (await post("/api/config/agent", { name: "nope", model: "x" })).status === 400);
@@ -293,22 +293,22 @@ try {
     execFile(
       process.execPath,
       [join(REPO, "dist/cli/index.js"), "init"],
-      { cwd: FRESH, env: { ...process.env, AGENT_BRIDGE_HOME: GHOME } },
+      { cwd: FRESH, env: { ...process.env, EKIP_HOME: GHOME } },
       r,
     ),
   );
-  const freshCfg = JSON.parse(readFileSync(join(FRESH, "agent-bridge.config.json"), "utf8"));
+  const freshCfg = JSON.parse(readFileSync(join(FRESH, "ekip.config.json"), "utf8"));
   t(
     "init materializes global agents",
     freshCfg.agents?.[0]?.name === "gdefault" && freshCfg.port === 4444 && freshCfg.project !== "IGNORED",
   );
   const freshMcp = JSON.parse(readFileSync(join(FRESH, ".mcp.json"), "utf8"));
-  t("init wires .mcp.json", freshMcp.mcpServers?.["agent-bridge"]?.url?.includes("4444"));
-  process.env.AGENT_BRIDGE_HOME = GHOME;
+  t("init wires .mcp.json", freshMcp.mcpServers?.["ekip"]?.url?.includes("4444"));
+  process.env.EKIP_HOME = GHOME;
   const { resolveRoleFile } = await import("../dist/core/index.js");
   const rolePath = resolveRoleFile(FRESH, "anywhere/gr.md");
   t("role file falls back to global", rolePath && readFileSync(rolePath, "utf8") === "GLOBAL ROLE");
-  delete process.env.AGENT_BRIDGE_HOME;
+  delete process.env.EKIP_HOME;
   t("project agents still win over global", (await api("/api/state")).agents.some((a) => a.name === "mock"));
 } finally {
   await hub.close();
@@ -328,12 +328,12 @@ try {
       return `${err.status}:${err.stderr}`;
     }
   })();
-  t("cli friendly hub-down error", out.startsWith("1:") && out.includes("agent-bridge serve"));
+  t("cli friendly hub-down error", out.startsWith("1:") && out.includes("ekip serve"));
 }
 
 // persistence across restart
 {
-  const state = JSON.parse(readFileSync(join(TMP, ".agent-bridge", "state.json"), "utf8"));
+  const state = JSON.parse(readFileSync(join(TMP, ".ekip", "state.json"), "utf8"));
   t("state persisted to disk", state.tasks.length >= 8 && state.context.some((c) => c.key === "e2e.mcp"));
 }
 

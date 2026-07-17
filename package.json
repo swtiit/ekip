@@ -1,9 +1,10 @@
 {
-  "name": "agent-bridge",
+  "name": "ekip",
   "version": "0.4.0",
-  "description": "Vendor-neutral coordination hub that lets multiple coding agents (Claude Code, Antigravity, \u2026) delegate tasks and share context over MCP \u2014 droppable into any project.",
+  "description": "Assemble an ekip (\u00ea-k\u00edp \u2014 a tight-knit working crew) of coding agents: Claude Code, Antigravity, and any headless CLI delegate tasks and share context over MCP.",
   "type": "module",
   "bin": {
+    "ekip": "dist/cli/index.js",
     "agent-bridge": "dist/cli/index.js"
   },
   "exports": {
@@ -46,10 +47,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/swtiit/agent-bridge.git"
+    "url": "git+https://github.com/swtiit/ekip.git"
   },
-  "homepage": "https://github.com/swtiit/agent-bridge#readme",
+  "homepage": "https://github.com/swtiit/ekip#readme",
   "bugs": {
-    "url": "https://github.com/swtiit/agent-bridge/issues"
+    "url": "https://github.com/swtiit/ekip/issues"
   }
 }

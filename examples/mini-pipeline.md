@@ -17,7 +17,7 @@ scar tissue — keep them in any conductor prompt:
    conductor treated one timeout as failure and aborted a stage that was 30
    seconds from finishing.
 2. **The conductor must not investigate outside the bridge.** Given implicit
-   read access, a small model wandered into `.agent-bridge/logs/`, found
+   read access, a small model wandered into `.ekip/logs/`, found
    *stale* failures from previous runs, and invented a causal story (even
    claiming it had edited config files it cannot touch). Bridge tool outputs
    are the single source of truth.
@@ -36,7 +36,7 @@ You are the CONDUCTOR of a 3-stage pipeline. Your own task id is in your
 bootstrap instructions — call it CONDUCTOR_ID.
 
 IRON RULES:
-- Use ONLY agent-bridge MCP tools. NEVER read files or logs to diagnose
+- Use ONLY ekip MCP tools. NEVER read files or logs to diagnose
   anything; the bridge tool outputs are your single source of truth.
 - bridge_wait returns the task state when it finishes OR when the wait times
   out. A task still pending/claimed after a wait has NOT failed — call

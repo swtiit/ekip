@@ -1,5 +1,5 @@
 /**
- * agent-bridge protocol — vendor-neutral contract shared by every agent.
+ * ekip protocol — vendor-neutral contract shared by every agent.
  *
  * Nothing here knows about Claude, Antigravity, or any specific project.
  * A "task" is a unit of delegated work addressed from one agent to another;

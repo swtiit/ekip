@@ -13,25 +13,25 @@ export const claudeAdapter: Adapter = {
   description: "Anthropic Claude Code (headless `claude -p`)",
 
   async spawn(req: SpawnRequest): Promise<SpawnResult> {
-    const logFile = join(req.cwd, ".agent-bridge", "logs", `${req.agentName}-${req.taskId}.log`);
+    const logFile = join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`);
 
     // Pre-approve the bridge's own MCP tools so the headless run can claim
     // tasks and post results without stalling on permission prompts. Broader
     // permissions (Edit, Bash, …) are the user's policy — pass them via the
-    // agent's `args` in agent-bridge.config.json.
+    // agent's `args` in ekip.config.json.
     //
     // The bridge server is injected inline and --strict-mcp-config keeps the
     // run from loading the user's global MCP servers (field-tested: those can
     // add minutes of startup and keep the process alive after the task is
     // posted). Extra --mcp-config entries in `args` still compose on top.
     const bridgeMcpConfig = JSON.stringify({
-      mcpServers: { "agent-bridge": { type: "http", url: req.hubUrl } },
+      mcpServers: { "ekip": { type: "http", url: req.hubUrl } },
     });
     const args = [
       "-p",
       req.prompt,
       "--allowedTools",
-      "mcp__agent-bridge",
+      "mcp__ekip",
       "--mcp-config",
       bridgeMcpConfig,
       "--strict-mcp-config",
@@ -49,7 +49,7 @@ export const claudeAdapter: Adapter = {
 
   mcpConfigSnippet(hubUrl: string) {
     return {
-      "agent-bridge": {
+      "ekip": {
         type: "http",
         url: hubUrl,
       },

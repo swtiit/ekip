@@ -5,7 +5,7 @@ reviewing — you delegate, wait, check conditions, and report.
 
 ## Iron rules
 
-- Use ONLY agent-bridge MCP tools. NEVER read files or logs to diagnose
+- Use ONLY ekip MCP tools. NEVER read files or logs to diagnose
   anything; bridge tool outputs are your single source of truth.
 - A `bridge_wait` timeout is NOT a failure. If the task is still
   pending/claimed after a wait, call `bridge_wait` again on the same task_id

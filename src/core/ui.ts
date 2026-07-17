@@ -12,7 +12,7 @@ export function dashboardHtml(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>agent-bridge</title>
+<title>ekip</title>
 <style>
 :root{--bg:#f6f6f4;--card:#ffffff;--border:#e4e3de;--text:#1c1c1a;--muted:#6d6c66;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;}
 @media (prefers-color-scheme:dark){:root{--bg:#161619;--card:#1f1f24;--border:#33333b;--text:#e9e8e3;--muted:#9d9c94;}}
@@ -85,7 +85,7 @@ button:hover{border-color:var(--muted);}
 <body>
 <div class="wrap">
 <header>
-  <div><h1 style="display:inline">agent-bridge · <span id="project"></span></h1><code class="endpoint" id="endpoint"></code></div>
+  <div><h1 style="display:inline">ekip · <span id="project"></span></h1><code class="endpoint" id="endpoint"></code></div>
   <div class="chips" id="agents"></div>
   <span class="pill" id="conn">connecting</span>
 </header>

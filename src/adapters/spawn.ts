@@ -53,9 +53,9 @@ export function bridgeEnv(req: {
 }): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    AGENT_BRIDGE_URL: req.hubUrl,
-    AGENT_BRIDGE_AGENT: req.agentName,
-    AGENT_BRIDGE_TASK: req.taskId,
-    AGENT_BRIDGE_DEPTH: String(req.depth),
+    EKIP_URL: req.hubUrl,
+    EKIP_AGENT: req.agentName,
+    EKIP_TASK: req.taskId,
+    EKIP_DEPTH: String(req.depth),
   };
 }

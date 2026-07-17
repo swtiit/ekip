@@ -5,7 +5,7 @@ The full 7-stage flow, generalized from the field-tested
 hub-and-spoke (delegation depth stays ≤ 2), all hand-off state lives on the
 blackboard, every loop has a hard cap.
 
-## Cast (agent-bridge.config.json)
+## Cast (ekip.config.json)
 
 | agent | adapter | model (suggested) | promptFile |
 |---|---|---|---|
@@ -16,7 +16,7 @@ blackboard, every loop has a hard cap.
 | reviewer | claude | sonnet | examples/roles/reviewer.md |
 | auditor | claude | opus | examples/roles/auditor.md |
 
-Copy `examples/roles/` into the project (e.g. `.agent-bridge/roles/`) and
+Copy `examples/roles/` into the project (e.g. `.ekip/roles/`) and
 point each agent's `promptFile` at its role.
 
 **Cost estimate before you run**: best case 6 spawns (2 opus, 3 sonnet-class,

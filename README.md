@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌉 agent-bridge
+# 🌉 ekip
 
 **Make your coding agents work as a team.**
 
@@ -25,7 +25,7 @@ unattended, using this hub.
 
 Coding agents are getting great — but they work **alone**. The tools that do
 connect them are one-way ("use agent B as a tool inside agent A") or heavy
-(tmux supervisors, Python stacks). agent-bridge takes a different shape:
+(tmux supervisors, Python stacks). ekip takes a different shape:
 
 - **Symmetric peers.** No agent is the boss. Everything flows through one
   hub, so either side can delegate to the other — including you, from the
@@ -41,7 +41,7 @@ connect them are one-way ("use agent B as a tool inside agent A") or heavy
 
 ```mermaid
 flowchart LR
-    subgraph hub["agent-bridge hub · one per project"]
+    subgraph hub["ekip hub · one per project"]
         Q["task queue<br/>pending → claimed → done"]
         B["context blackboard"]
         D["dispatcher + watchdog"]
@@ -57,11 +57,11 @@ flowchart LR
 
 ```bash
 # Not on npm yet — from a clone:
-npm install && npm run build && npm link   # gives you the `agent-bridge` command
+npm install && npm run build && npm link   # gives you the `ekip` command
 
 cd /any/project
-agent-bridge init      # writes config + prints the MCP snippets to paste
-agent-bridge serve     # hub + dashboard, one terminal tab
+ekip init      # writes config + prints the MCP snippets to paste
+ekip serve     # hub + dashboard, one terminal tab
 ```
 
 `init` prints exactly what to paste into each agent (Claude Code's
@@ -69,7 +69,7 @@ agent-bridge serve     # hub + dashboard, one terminal tab
 headless runs need). Then, from any connected agent or your own terminal:
 
 ```bash
-agent-bridge run coder "Add input validation to src/api/users.ts"
+ekip run coder "Add input validation to src/api/users.ts"
 ```
 
 ```text
@@ -133,7 +133,7 @@ The examples ship a field-tested crew and flow:
 
 ## Configuration
 
-`agent-bridge.config.json`, one per project:
+`ekip.config.json`, one per project:
 
 ```json
 {
@@ -143,7 +143,7 @@ The examples ship a field-tested crew and flow:
   "agents": [
     { "name": "planner", "adapter": "claude",
       "args": ["--model", "claude-opus-4-8", "--effort", "high"],
-      "promptFile": ".agent-bridge/roles/planner.md" },
+      "promptFile": ".ekip/roles/planner.md" },
     { "name": "coder", "adapter": "antigravity",
       "args": ["--model", "Gemini 3.5 Flash (High)"] },
     { "name": "codex", "adapter": "command",
@@ -156,12 +156,12 @@ The examples ship a field-tested crew and flow:
 ```
 
 - **Machine defaults**: once a project's cast feels right, run
-  `agent-bridge init --global` there — it saves the agents and role files to
-  `~/.agent-bridge/`. Every future `agent-bridge init` materializes that
+  `ekip init --global` there — it saves the agents and role files to
+  `~/.ekip/`. Every future `ekip init` materializes that
   cast (and wires `.mcp.json`) automatically, so a new project is just
   `init && serve`. Project files always win over machine defaults, field by
   field; role `promptFile`s resolve in the project first, then
-  `~/.agent-bridge/roles/` by filename.
+  `~/.ekip/roles/` by filename.
 - **Model-per-role**: register the same adapter several times with different
   `--model` args — delegating to a *name* picks a *model*.
 - `spawnable: false` registers an agent that polls (`bridge_claim`) instead
@@ -183,7 +183,7 @@ Out of the box a spawned run can only talk to the bridge. For real coding
 - **Antigravity**: headless agy soft-denies anything needing a prompt, and a
   single denial kills the whole run. Grants live in
   `~/.gemini/config/config.json` under
-  `userSettings.globalPermissionGrants.allow`: `"mcp(agent-bridge/*)"` for
+  `userSettings.globalPermissionGrants.allow`: `"mcp(ekip/*)"` for
   the bridge tools, `"write_file(*)"` for a coder (scope tighter if you
   like), plus `"command(<cmd>)"` for each command it may run. The adapter
   always passes `--add-dir <cwd>` — without it, headless runs write into
@@ -238,7 +238,7 @@ One-way bridges that expose agy as a *tool inside* Claude Code exist
 ([agy-bridge](https://github.com/sshahzaiib/agy-bridge),
 [claude-to-agy](https://github.com/rauls-kjarners/claude-to-agy)), and
 [AWS Labs CAO](https://github.com/awslabs/cli-agent-orchestrator)
-orchestrates CLIs under a tmux supervisor–worker hierarchy. agent-bridge
+orchestrates CLIs under a tmux supervisor–worker hierarchy. ekip
 occupies the gap: **symmetric peer delegation + a shared blackboard**,
 per-project, npm-light.
 

@@ -38,7 +38,7 @@ export async function apiState(base: string): Promise<HubState> {
     return (await res.json()) as HubState;
   } catch {
     throw new HubDownError(
-      `Cannot reach the hub at ${base} — is \`agent-bridge serve\` running in this project?`,
+      `Cannot reach the hub at ${base} — is \`ekip serve\` running in this project?`,
     );
   }
 }

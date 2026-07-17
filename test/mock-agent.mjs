@@ -1,7 +1,7 @@
 // Test mock agent: speaks raw MCP Streamable HTTP, claims the exact task id
 // it was spawned for (argv[2], substituted from {taskId}), posts a result.
-const url = process.env.AGENT_BRIDGE_URL;
-const agent = process.env.AGENT_BRIDGE_AGENT;
+const url = process.env.EKIP_URL;
+const agent = process.env.EKIP_AGENT;
 const taskId = process.argv[2];
 
 async function rpc(method, params, id, session) {

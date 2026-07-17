@@ -19,7 +19,7 @@ import { bridgeEnv, launchDetached } from "./spawn.js";
  *   `serverUrl`; `url`/`httpUrl` are rejected).
  * - Headless soft-denies any tool needing a permission prompt (agy >= 1.1.3
  *   prints the needed rule class to the log). The allow-rule for bridge
- *   tools is `mcp(agent-bridge/*)`, and the location that actually works is
+ *   tools is `mcp(ekip/*)`, and the location that actually works is
  *   `~/.gemini/config/config.json` under
  *   `userSettings.globalPermissionGrants.allow` — the error text points at
  *   settings.json, but rules in `~/.gemini/settings.json` had no effect.
@@ -37,7 +37,7 @@ export const antigravityAdapter: Adapter = {
   description: "Google Antigravity (headless `agy -p`)",
 
   async spawn(req: SpawnRequest): Promise<SpawnResult> {
-    const logFile = join(req.cwd, ".agent-bridge", "logs", `${req.agentName}-${req.taskId}.log`);
+    const logFile = join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`);
 
     // --add-dir registers the project as a workspace directory: without it a
     // headless run in an untrusted folder ignores cwd and writes files into
@@ -57,7 +57,7 @@ export const antigravityAdapter: Adapter = {
     // Antigravity's schema is strict: remote Streamable HTTP servers use
     // `serverUrl`. Legacy `url` / `httpUrl` keys are NOT supported.
     return {
-      "agent-bridge": {
+      "ekip": {
         serverUrl: hubUrl,
       },
     };
@@ -66,7 +66,7 @@ export const antigravityAdapter: Adapter = {
   mcpConfigLocation() {
     return [
       "~/.gemini/config/mcp_config.json (global — workspace .agents/mcp_config.json is ignored by headless runs until the folder is trusted).",
-      'Also add "mcp(agent-bridge/*)" to userSettings.globalPermissionGrants.allow in ~/.gemini/config/config.json so headless runs may call the bridge tools.',
+      'Also add "mcp(ekip/*)" to userSettings.globalPermissionGrants.allow in ~/.gemini/config/config.json so headless runs may call the bridge tools.',
     ].join("\n  ");
   },
 };

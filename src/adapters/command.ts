@@ -27,7 +27,7 @@ export const commandAdapter: Adapter = {
       };
     }
 
-    const logFile = join(req.cwd, ".agent-bridge", "logs", `${req.agentName}-${req.taskId}.log`);
+    const logFile = join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`);
 
     const substitute = (arg: string): string =>
       arg
@@ -53,7 +53,7 @@ export const commandAdapter: Adapter = {
 
   mcpConfigSnippet(hubUrl: string) {
     return {
-      "agent-bridge": {
+      "ekip": {
         type: "http",
         url: hubUrl,
       },

@@ -67,7 +67,7 @@ export class Watchdog {
 
   /** Pull the most telling line (quota / permission failure) from the spawn log. */
   private logHint(taskId: string, agent: string): string | undefined {
-    const dir = join(this.config.projectRoot, ".agent-bridge", "logs");
+    const dir = join(this.config.projectRoot, ".ekip", "logs");
     if (!existsSync(dir)) return undefined;
     const file = readdirSync(dir).find((f) => f === `${agent}-${taskId}.log`);
     if (!file) return "no spawn log found (agent may never have started)";

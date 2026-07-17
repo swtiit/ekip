@@ -41,7 +41,7 @@ export class Dispatcher {
       : [];
     return [
       ...header,
-      `You are the agent "${task.to}" in an agent-bridge session.`,
+      `You are the agent "${task.to}" in an ekip session.`,
       `A task has been delegated to you by "${task.from}".`,
       ``,
       `1. Call the MCP tool \`bridge_claim\` with { as: "${task.to}", task_id: "${task.id}" } to acknowledge it.`,

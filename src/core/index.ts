@@ -1,5 +1,5 @@
 /**
- * Public entrypoint for embedding agent-bridge programmatically.
+ * Public entrypoint for embedding ekip programmatically.
  */
 import { antigravityAdapter } from "../adapters/antigravity.js";
 import { claudeAdapter } from "../adapters/claude.js";

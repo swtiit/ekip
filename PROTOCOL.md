@@ -1,4 +1,4 @@
-# agent-bridge protocol (v0.2.0)
+# ekip protocol (v0.2.0)
 
 Vendor-neutral contract for coordinating multiple coding agents over MCP. No
 part of it names a specific agent or project — Claude Code and Antigravity are
