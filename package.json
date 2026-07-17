@@ -23,7 +23,8 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "serve": "node dist/cli/index.js serve",
-    "test": "node test/e2e.mjs"
+    "test": "node test/e2e.mjs",
+    "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
     "mcp",
