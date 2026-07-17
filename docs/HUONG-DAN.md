@@ -23,8 +23,9 @@ một thành viên ngang hàng trong ê-kíp đó.
 ## 2. Cài đặt (một lần cho máy)
 
 ```bash
-git clone https://github.com/swtiit/ekip && cd ekip
-npm install -g @swtiit/ekip   # lệnh vẫn là `ekip`   # có lệnh `ekip`
+npm install -g @swtiit/ekip   # lệnh cài xong tên là `ekip`
+# hoặc từ source: git clone https://github.com/swtiit/ekip && cd ekip
+#                 npm install && npm run build && npm link
 ```
 
 Phía **Antigravity** cần 2 chỉnh global (một lần duy nhất):
