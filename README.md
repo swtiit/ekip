@@ -17,6 +17,8 @@ and any headless CLI agent **delegate tasks to each other and share context**
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
 unattended, using this hub.
 
+🇻🇳 [Hướng dẫn tiếng Việt](docs/HUONG-DAN.md)
+
 </div>
 
 ---
