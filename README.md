@@ -8,10 +8,10 @@ A vendor-neutral coordination hub that lets Claude Code, Google Antigravity,
 and any headless CLI agent **delegate tasks to each other and share context**
 — droppable into any project.
 
+[![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-45_cases-brightgreen)
-![status](https://img.shields.io/badge/status-v0.4-orange)
+![tests](https://img.shields.io/badge/e2e_tests-58_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -58,8 +58,7 @@ flowchart LR
 ## Quickstart
 
 ```bash
-# Not on npm yet — from a clone:
-npm install && npm run build && npm link   # gives you the `ekip` command
+npm install -g @swtiit/ekip      # the installed command is `ekip`
 
 cd /any/project
 ekip init      # writes config + prints the MCP snippets to paste
