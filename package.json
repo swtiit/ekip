@@ -46,10 +46,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/noi-da/agent-bridge.git"
+    "url": "git+https://github.com/swtiit/agent-bridge.git"
   },
-  "homepage": "https://github.com/noi-da/agent-bridge#readme",
+  "homepage": "https://github.com/swtiit/agent-bridge#readme",
   "bugs": {
-    "url": "https://github.com/noi-da/agent-bridge/issues"
+    "url": "https://github.com/swtiit/agent-bridge/issues"
   }
 }
