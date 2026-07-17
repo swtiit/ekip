@@ -43,5 +43,13 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/noi-da/agent-bridge.git"
+  },
+  "homepage": "https://github.com/noi-da/agent-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/noi-da/agent-bridge/issues"
   }
 }
