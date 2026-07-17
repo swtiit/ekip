@@ -24,7 +24,7 @@ một thành viên ngang hàng trong ê-kíp đó.
 
 ```bash
 git clone https://github.com/swtiit/ekip && cd ekip
-npm install && npm run build && npm link   # có lệnh `ekip`
+npm install -g @swtiit/ekip   # lệnh vẫn là `ekip`   # có lệnh `ekip`
 ```
 
 Phía **Antigravity** cần 2 chỉnh global (một lần duy nhất):
