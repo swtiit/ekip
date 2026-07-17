@@ -81,6 +81,22 @@ export function loadConfig(projectRoot = process.cwd()): BridgeConfig {
   return merged as BridgeConfig;
 }
 
+/** Read the value following a CLI flag in an agent's args (e.g. "--model"). */
+export function getAgentFlag(agent: AgentConfig, flag: string): string | undefined {
+  const args = agent.args ?? [];
+  const i = args.indexOf(flag);
+  return i >= 0 && i + 1 < args.length ? args[i + 1] : undefined;
+}
+
+/** Set, replace, or (with undefined) remove a `flag value` pair in agent args. */
+export function setAgentFlag(agent: AgentConfig, flag: string, value: string | undefined): void {
+  const args = agent.args ?? [];
+  const i = args.indexOf(flag);
+  if (i >= 0) args.splice(i, 2);
+  if (value !== undefined && value !== "") args.push(flag, value);
+  agent.args = args;
+}
+
 export function hubUrl(config: BridgeConfig): string {
   return `http://${config.host}:${config.port}/mcp`;
 }

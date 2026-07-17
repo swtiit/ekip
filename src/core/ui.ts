@@ -34,7 +34,7 @@ code,pre{font-family:var(--mono);font-size:12px;}
 .metric .n{font-size:22px;font-weight:600;}
 .metric .l{font-size:12px;color:var(--muted);}
 .cols{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start;}
-@media (max-width:800px){.cols{grid-template-columns:1fr;}}
+@media (max-width:800px){.cols{grid-template-columns:minmax(0,1fr);}}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
 .card-h{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);}
 .card-h .hint{color:var(--muted);font-size:12px;margin-left:auto;}
@@ -66,6 +66,15 @@ input,select,textarea,button{font:inherit;color:inherit;background:var(--bg);bor
 textarea{resize:vertical;}
 button{cursor:pointer;background:var(--card);}
 button:hover{border-color:var(--muted);}
+.agent-row{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:6px;}
+.agent-row:last-child{border-bottom:none;}
+.agent-row .top{display:flex;align-items:baseline;gap:8px;}
+.agent-row .top .nm{font-weight:600;}
+.agent-row .top .ad{color:var(--muted);font-size:12px;}
+.agent-row .top label{margin-left:auto;font-size:12px;color:var(--muted);display:flex;gap:5px;align-items:center;}
+.agent-row .ctl{display:flex;gap:6px;}
+.agent-row .ctl input{flex:1;font-family:var(--mono);font-size:12px;padding:5px 8px;}
+.agent-row .ctl select,.agent-row .ctl button{font-size:12px;padding:5px 8px;}
 .artifacts{display:flex;gap:6px;flex-wrap:wrap;}
 .artifact{font-size:12px;border:1px solid var(--border);border-radius:999px;padding:2px 10px;color:var(--muted);}
 .actions{display:flex;gap:8px;}
@@ -87,6 +96,12 @@ button:hover{border-color:var(--muted);}
     <div id="tasks"></div>
   </section>
   <div class="side">
+    <section class="card">
+      <div class="card-h"><h2>Agents</h2><span class="hint">applies to the next spawn</span></div>
+      <div id="agent-cfg"></div>
+    </section>
+    <datalist id="models-claude"></datalist>
+    <datalist id="models-antigravity"></datalist>
     <section class="card">
       <div class="card-h"><h2>Blackboard</h2></div>
       <div id="context"></div>
@@ -113,7 +128,7 @@ button:hover{border-color:var(--muted);}
 </section>
 </div>
 <script>
-var state = null, expanded = null, logTask = null;
+var state = null, expanded = null, logTask = null, agentsSig = null;
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function ago(iso){ var s = Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
@@ -136,6 +151,22 @@ function render(){
   var sel = $('d-to');
   if (sel.options.length !== state.agents.length) {
     sel.innerHTML = state.agents.map(function(a){ return '<option>' + esc(a.name) + '</option>'; }).join('');
+  }
+  var sig = JSON.stringify(state.agents);
+  if (sig !== agentsSig) {
+    agentsSig = sig;
+    $('agent-cfg').innerHTML = state.agents.map(function(a){
+      var effort = a.adapter === 'claude'
+        ? '<select data-f="effort">' + ['', 'low', 'medium', 'high', 'xhigh', 'max'].map(function(o){
+            return '<option value="' + o + '"' + ((a.effort || '') === o ? ' selected' : '') + '>' + (o || 'effort') + '</option>';
+          }).join('') + '</select>'
+        : '';
+      return '<div class="agent-row" data-name="' + esc(a.name) + '">' +
+        '<div class="top"><span class="nm">' + esc(a.name) + '</span><span class="ad">' + esc(a.adapter) + '</span>' +
+        '<label><input type="checkbox" data-f="spawnable"' + (a.spawnable ? ' checked' : '') + '> auto-spawn</label></div>' +
+        '<div class="ctl"><input data-f="model" list="models-' + esc(a.adapter) + '" placeholder="model (adapter default)" value="' + esc(a.model || '') + '">' +
+        effort + '<button class="save-agent">Save</button></div></div>';
+    }).join('');
   }
   var tasks = state.tasks.slice().sort(function(a,b){ return b.createdAt.localeCompare(a.createdAt); }).slice(0,50);
   $('task-count').textContent = state.tasks.length + ' total';
@@ -190,6 +221,27 @@ $('ctx-form').addEventListener('submit', function(e){ e.preventDefault();
   try { value = JSON.parse(raw); } catch (err) { value = raw; }
   fetch('/api/context', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key: $('ctx-key').value, value: value }) })
     .then(function(){ $('ctx-key').value = ''; $('ctx-value').value = ''; });
+});
+$('agent-cfg').addEventListener('click', function(e){
+  if (!e.target.classList.contains('save-agent')) return;
+  var row = e.target.closest('.agent-row');
+  var body = { name: row.getAttribute('data-name') };
+  row.querySelectorAll('[data-f]').forEach(function(el){
+    var f = el.getAttribute('data-f');
+    body[f] = f === 'spawnable' ? el.checked : el.value;
+  });
+  var btn = e.target;
+  fetch('/api/config/agent', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      btn.textContent = d.error ? 'error' : 'Saved ✓';
+      if (d.error) alert(d.error);
+      setTimeout(function(){ btn.textContent = 'Save'; }, 1500);
+    });
+});
+fetch('/api/models').then(function(r){ return r.json(); }).then(function(m){
+  $('models-claude').innerHTML = (m.claude || []).map(function(x){ return '<option value="' + esc(x) + '">'; }).join('');
+  $('models-antigravity').innerHTML = (m.antigravity || []).map(function(x){ return '<option value="' + esc(x) + '">'; }).join('');
 });
 var es = new EventSource('/api/events');
 es.onopen = function(){ var c = $('conn'); c.textContent = 'live'; c.className = 'pill live'; load(); };

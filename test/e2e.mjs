@@ -25,6 +25,7 @@ const config = {
     { name: "ghost", adapter: "command", spawnable: true, command: "definitely-not-a-real-binary-xyz" },
     { name: "manual", adapter: "command", spawnable: false, command: "true" },
     { name: "roleful", adapter: "command", spawnable: true, command: process.execPath, args: [MOCK, "{taskId}"], promptFile: "role.md" },
+    { name: "modeled", adapter: "command", spawnable: false, command: "true", args: ["--model", "m0"] },
   ],
   maxDepth: 3,
   watchdog: { pendingTtlSeconds: 2, claimedTtlSeconds: 3, sweepIntervalSeconds: 1 },
@@ -93,7 +94,21 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 5 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 6 && state0.hubUrl.endsWith("/mcp"));
+  t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
+
+  // ---- agent config API (hot model switching) ----
+  const cfgSet = await (await post("/api/config/agent", { name: "modeled", model: "m1", effort: "high" })).json();
+  t("config set model+effort", cfgSet.agent?.model === "m1" && cfgSet.agent?.effort === "high");
+  const onDisk = JSON.parse(readFileSync(join(TMP, "agent-bridge.config.json"), "utf8"));
+  const diskArgs = onDisk.agents.find((a) => a.name === "modeled").args;
+  t("config persisted to file", diskArgs.includes("m1") && diskArgs.includes("--effort"));
+  t("config unknown agent → 400", (await post("/api/config/agent", { name: "nope", model: "x" })).status === 400);
+  t("config bad effort → 400", (await post("/api/config/agent", { name: "modeled", effort: "hyper" })).status === 400);
+  const cfgUnset = await (await post("/api/config/agent", { name: "modeled", model: "", effort: "" })).json();
+  t("config unset model", cfgUnset.agent?.model === null && cfgUnset.agent?.effort === null);
+  const models = await api("/api/models");
+  t("models endpoint", Array.isArray(models.claude) && models.claude.includes("sonnet"));
 
   const d1 = await (await post("/api/delegate", { to: "mock", prompt: "ping", title: "api-mock-1" })).json();
   t("delegate accepted", d1.task?.status === "pending" && d1.dispatch?.spawned === true);
@@ -258,6 +273,8 @@ try {
   t("cli run follows to done", runOut.includes("━━ DONE ━━") && runOut.includes("mock done: cli-run-1"), runOut.slice(-200));
   t("cli status works", strip(await cli("status")).includes("e2e"));
   t("cli unknown prefix errors", strip(await cli("task", "zzzzzz")).startsWith("EXIT1"));
+  t("cli model set", strip(await cli("model", "modeled", "m2")).includes("saved modeled → m2"));
+  t("cli agents lists models", strip(await cli("agents")).includes("m2"));
 } finally {
   await hub.close();
 }

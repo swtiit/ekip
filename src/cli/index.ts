@@ -62,6 +62,54 @@ async function cmdFollow(): Promise<void> {
   process.exit(await followTask(base, task.id));
 }
 
+async function cmdAgents(): Promise<void> {
+  const state = await apiState(apiBase());
+  for (const a of state.agents as Array<Record<string, unknown>>) {
+    const model = (a.model as string) ?? `${C.dim}(adapter default)${C.reset}`;
+    const effort = a.effort ? `  effort:${a.effort}` : "";
+    const spawn = a.spawnable ? "" : `  ${C.yellow}polls${C.reset}`;
+    console.log(
+      `${C.bold}${String(a.name).padEnd(12)}${C.reset} ${C.dim}${String(a.adapter).padEnd(12)}${C.reset} ${model}${effort}${spawn}`,
+    );
+  }
+}
+
+/** `model <agent> [model] [effort]` — show or hot-set an agent's model. */
+async function cmdModel(): Promise<void> {
+  const [agent, model, effort] = process.argv.slice(3);
+  if (!agent) {
+    console.error("Usage: agent-bridge model <agent> [model] [effort]");
+    process.exit(1);
+  }
+  const base = apiBase();
+  if (model === undefined) {
+    const a = (await apiState(base)).agents.find((x) => x.name === agent) as
+      | Record<string, unknown>
+      | undefined;
+    if (!a) {
+      console.error(`${C.red}Unknown agent "${agent}"${C.reset}`);
+      process.exit(1);
+    }
+    console.log(`${a.model ?? "(adapter default)"}${a.effort ? `  effort:${a.effort}` : ""}`);
+    return;
+  }
+  const body: Record<string, unknown> = { name: agent, model };
+  if (effort !== undefined) body.effort = effort;
+  const res = await fetch(`${base}/api/config/agent`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json()) as { agent?: Record<string, unknown>; error?: string };
+  if (data.error) {
+    console.error(`${C.red}${data.error}${C.reset}`);
+    process.exit(1);
+  }
+  console.log(
+    `${C.green}saved${C.reset} ${agent} → ${data.agent?.model ?? "(adapter default)"}${data.agent?.effort ? `  effort:${data.agent.effort}` : ""}  ${C.dim}(applies to the next spawn)${C.reset}`,
+  );
+}
+
 async function cmdTasks(): Promise<void> {
   const status = process.argv[3];
   const state = await apiState(apiBase());
@@ -317,6 +365,12 @@ try {
     case "follow":
       await cmdFollow();
       break;
+    case "agents":
+      await cmdAgents();
+      break;
+    case "model":
+      await cmdModel();
+      break;
     case "tasks":
       await cmdTasks();
       break;
@@ -353,6 +407,10 @@ try {
           "  run <agent> <prompt|@file>  delegate and live-follow the task tree",
           "  delegate <agent> <prompt>   delegate without following",
           "  follow <task-id>            attach to a running task (and children)",
+          "",
+          "Configure:",
+          "  agents                      list agents with their models",
+          "  model <agent> [model] [effort]  show or hot-set an agent's model",
           "",
           "Inspect:",
           "  watch                       full-screen live view, refreshes every second",

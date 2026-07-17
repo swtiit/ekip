@@ -1,11 +1,12 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { BridgeConfig } from "./config.js";
-import { hubUrl, stateFilePath } from "./config.js";
+import { CONFIG_FILENAME, getAgentFlag, hubUrl, setAgentFlag, stateFilePath } from "./config.js";
 import { Dispatcher } from "./dispatcher.js";
 import { buildHub } from "./hub.js";
 import { Store } from "./store.js";
@@ -167,6 +168,98 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     });
   }
 
+  // Known Claude model names plus live `agy models` output, cached briefly.
+  const CLAUDE_MODELS = [
+    "fable",
+    "opus",
+    "sonnet",
+    "haiku",
+    "claude-fable-5",
+    "claude-opus-4-8",
+    "claude-sonnet-5",
+    "claude-haiku-4-5-20251001",
+  ];
+  let agyModelsCache: { at: number; models: string[] } | undefined;
+  function agyModels(): Promise<string[]> {
+    if (agyModelsCache && Date.now() - agyModelsCache.at < 600_000) {
+      return Promise.resolve(agyModelsCache.models);
+    }
+    return new Promise((resolveModels) => {
+      execFile("agy", ["models"], { timeout: 10_000 }, (err, stdout) => {
+        const models = err
+          ? []
+          : stdout
+              .split("\n")
+              .map((l) => l.trim())
+              .filter(Boolean);
+        agyModelsCache = { at: Date.now(), models };
+        resolveModels(models);
+      });
+    });
+  }
+
+  async function handleModels(res: ServerResponse): Promise<void> {
+    sendJson(res, 200, { claude: CLAUDE_MODELS, antigravity: await agyModels() });
+  }
+
+  /**
+   * Update one agent's model/effort/spawnable: patches the in-memory config
+   * (the dispatcher reads it at spawn time, so changes apply to the next
+   * task with no restart) and persists the same change to the config file.
+   */
+  async function handleConfigAgent(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    const { name } = body;
+    const agent = config.agents.find((a) => a.name === name);
+    if (!agent) {
+      sendJson(res, 400, {
+        error: `unknown agent "${String(name)}" — configured agents: ${config.agents.map((a) => a.name).join(", ")}`,
+      });
+      return;
+    }
+    if ("model" in body) {
+      if (typeof body.model !== "string") {
+        sendJson(res, 400, { error: "`model` must be a string (empty to unset)" });
+        return;
+      }
+      setAgentFlag(agent, "--model", body.model);
+    }
+    if ("effort" in body) {
+      const effort = body.effort;
+      if (effort !== "" && !["low", "medium", "high", "xhigh", "max"].includes(effort as string)) {
+        sendJson(res, 400, { error: "`effort` must be low|medium|high|xhigh|max, or empty to unset" });
+        return;
+      }
+      setAgentFlag(agent, "--effort", effort as string);
+    }
+    if ("spawnable" in body) agent.spawnable = body.spawnable !== false;
+
+    // Persist to the project's config file, touching only this agent's entry.
+    try {
+      const path = join(config.projectRoot, CONFIG_FILENAME);
+      const raw = JSON.parse(readFileSync(path, "utf8")) as { agents?: Array<Record<string, unknown>> };
+      const entry = raw.agents?.find((a) => a.name === agent.name);
+      if (entry) {
+        entry.args = agent.args;
+        entry.spawnable = agent.spawnable;
+        writeFileSync(path, JSON.stringify(raw, null, 2) + "\n");
+      }
+    } catch {
+      // In-memory config still applied; a missing/hand-broken file shouldn't 500.
+    }
+    store.emit("change", { kind: "config", agent: agent.name });
+    sendJson(res, 200, { agent: describeAgent(agent) });
+  }
+
+  const describeAgent = (a: BridgeConfig["agents"][number]) => ({
+    name: a.name,
+    adapter: a.adapter,
+    spawnable: a.spawnable !== false,
+    model: getAgentFlag(a, "--model") ?? null,
+    effort: getAgentFlag(a, "--effort") ?? null,
+    promptFile: a.promptFile ?? null,
+  });
+
   function handleLogs(res: ServerResponse, taskId: string): void {
     if (!/^[A-Za-z0-9-]{1,64}$/.test(taskId)) {
       sendText(res, 400, "Invalid task id.");
@@ -208,20 +301,20 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return sendJson(res, 200, {
             project: config.project,
             hubUrl: hubUrl(config),
-            agents: config.agents.map((a) => ({
-              name: a.name,
-              adapter: a.adapter,
-              spawnable: a.spawnable !== false,
-            })),
+            agents: config.agents.map(describeAgent),
             tasks: store.listTasks(),
             context: store.listContext(),
           });
         case "GET /api/events":
           return handleEvents(req, res);
+        case "GET /api/models":
+          return handleModels(res);
         case "POST /api/delegate":
           return handleDelegate(req, res);
         case "POST /api/context":
           return handleContext(req, res);
+        case "POST /api/config/agent":
+          return handleConfigAgent(req, res);
         default:
           if (req.method === "GET" && path.startsWith("/api/logs/")) {
             return handleLogs(res, decodeURIComponent(path.slice("/api/logs/".length)));
