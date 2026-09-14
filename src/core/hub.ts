@@ -56,6 +56,8 @@ export function buildHub(
         context,
         depth: (parent?.depth ?? 0) + 1,
         parentId: parent_task_id,
+        // Work handed out inside a conversation stays in its folder.
+        cwd: parent?.cwd,
       });
       store.addMessage({ taskId: task.id, from, to, kind: "agent", text: prompt, meta: { delegation: true, title } });
       const outcome = await dispatcher.dispatch(task);

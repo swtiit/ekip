@@ -17,7 +17,7 @@ export const claudeAdapter: Adapter = {
   description: "Anthropic Claude Code (headless `claude -p`)",
 
   async spawn(req: SpawnRequest): Promise<SpawnResult> {
-    const logFile = join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`);
+    const logFile = req.logFile ?? join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`);
 
     // Pre-approve the bridge's own MCP tools so the headless run can claim
     // tasks and post results without stalling on permission prompts. Broader

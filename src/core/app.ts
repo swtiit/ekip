@@ -71,12 +71,14 @@ export function appHtml(): string {
           <div class="composer">
             <textarea id="text" rows="1" data-tp="ph" placeholder="Ask the crew…"></textarea>
             <div class="row">
+              <button class="target folder-chip" id="folder" aria-haspopup="listbox"></button>
               <button class="target" id="target" aria-haspopup="listbox"></button>
               <span class="hint" id="dock-hint"></span>
               <span class="sp"></span>
               <button class="send" id="send" aria-label="Send" disabled><svg class="ico" viewBox="0 0 24 24"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
             </div>
             <div class="popover" id="agent-pop" hidden></div>
+            <div class="popover folder-pop" id="folder-pop" hidden></div>
           </div>
         </div>
       </section>
@@ -94,6 +96,7 @@ export function appHtml(): string {
     <div class="board">
       <div class="board-top">
         <label class="search"><svg class="ico sm" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="field" id="board-search" data-tp="filter" placeholder="Filter"></label>
+        <select class="field folder-filter" id="board-folder"></select>
         <div class="filters" id="agent-filters"></div>
         <span class="sp"></span>
         <button class="btn quiet" id="bb-toggle"><svg class="ico sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span data-t="blackboard">Blackboard</span></button>
@@ -175,6 +178,17 @@ export function appHtml(): string {
     </div>
     <div class="mf"><button type="button" class="btn quiet" id="m-cancel" data-t="cancel">Cancel</button><button type="submit" class="btn primary" data-t="send">Send</button></div>
   </form>
+</div>
+
+<div class="modal browse" id="browse" role="dialog" aria-modal="true">
+  <div class="mh"><span data-t="pickFolder">Choose a folder</span></div>
+  <div class="browse-bar">
+    <button class="btn quiet sm icon" id="browse-up" title="up"><svg class="ico sm" viewBox="0 0 24 24"><path d="M12 19V5M5.5 11.5 12 5l6.5 6.5"/></svg></button>
+    <button class="btn quiet sm icon" id="browse-home" title="home"><svg class="ico sm" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></button>
+    <input class="field mono" id="browse-path" spellcheck="false">
+  </div>
+  <div class="browse-list" id="browse-list"></div>
+  <div class="mf"><span class="browse-here" id="browse-here"></span><button type="button" class="btn quiet" id="browse-cancel" data-t="cancel">Cancel</button><button type="button" class="btn primary" id="browse-pick" data-t="useFolder">Use this folder</button></div>
 </div>
 
 <div class="modal palette" id="palette" role="dialog" aria-modal="true">

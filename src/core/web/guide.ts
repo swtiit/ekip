@@ -164,8 +164,8 @@ function doc(lang: Lang): string {
   const vi = lang === "vi";
   const sec = (id: string, title: string, body: string) => `<section class="gsec" id="g-${id}-${lang}"><h2>${title}</h2>${body}</section>`;
   const toc: Array<[string, string]> = vi
-    ? [["how", "Cách ekip hoạt động"], ["life", "Vòng đời một việc"], ["handoff", "Khi agent giao việc cho nhau"], ["crew", "Ê-kíp của bạn"], ["pipeline", "Quy trình mẫu"], ["screens", "Dùng các trang"], ["start", "Bắt đầu dự án mới"], ["trouble", "Khi có gì đó sai"]]
-    : [["how", "How ekip works"], ["life", "The life of a task"], ["handoff", "When agents hand work to each other"], ["crew", "Your crew"], ["pipeline", "A sample pipeline"], ["screens", "Using the screens"], ["start", "Start a new project"], ["trouble", "When something goes wrong"]];
+    ? [["how", "Cách ekip hoạt động"], ["folders", "Làm việc theo folder"], ["life", "Vòng đời một việc"], ["handoff", "Khi agent giao việc cho nhau"], ["crew", "Ê-kíp của bạn"], ["pipeline", "Quy trình mẫu"], ["screens", "Dùng các trang"], ["start", "Bắt đầu dự án mới"], ["trouble", "Khi có gì đó sai"]]
+    : [["how", "How ekip works"], ["folders", "Working by folder"], ["life", "The life of a task"], ["handoff", "When agents hand work to each other"], ["crew", "Your crew"], ["pipeline", "A sample pipeline"], ["screens", "Using the screens"], ["start", "Start a new project"], ["trouble", "When something goes wrong"]];
 
   const body = vi
     ? [
@@ -176,6 +176,14 @@ function doc(lang: Lang): string {
 <li><b>Hub</b> chạy trong thư mục dự án (<code>ekip serve</code>), mỗi dự án một hub.</li>
 <li><b>Hàng đợi việc</b> giữ từng việc và trạng thái của nó; <b>bảng đen</b> giữ những thứ cần truyền qua nhiều lượt chạy như kế hoạch hay kết luận review.</li>
 <li><b>Canh gác</b> phát hiện agent chết im (hết quota, thiếu quyền, sai tên model) và báo lỗi kèm lý do trong vài giây.</li>
+</ul>`),
+        sec("folders", "Làm việc theo folder", `
+<p>Mỗi hội thoại gắn với một folder dự án. Agent chạy ngay trong folder đó, nên tự đọc <code>CLAUDE.md</code>, <code>AGENTS.md</code> và cấu hình riêng của dự án.</p>
+<ul class="facts">
+<li><b>Chọn folder trước khi gửi.</b> Ở hội thoại mới, bấm nút folder cạnh người nhận: chọn folder gần đây, hoặc <b>Chọn folder khác…</b> để duyệt thư mục trên máy. Folder có <code>.git</code>, <code>package.json</code>… được đánh dấu "dự án".</li>
+<li><b>Hội thoại giữ nguyên folder.</b> Trả lời tiếp, hay việc agent giao cho nhau bên trong, đều làm trong folder đó.</li>
+<li><b>Sidebar gom theo folder.</b> Folder có việc đang chạy nổi lên đầu; nút <kbd>+</kbd> trên mỗi nhóm mở hội thoại mới ngay trong folder đó; bấm tên nhóm để thu gọn.</li>
+<li><b>Ê-kíp, log và lịch sử vẫn ở hub</b> — không rải file vào dự án. Bảng việc lọc được theo folder.</li>
 </ul>`),
         sec("life", "Vòng đời một việc", `
 <p>Mỗi việc đi qua các trạng thái dưới đây. Màu trong sơ đồ trùng với nhãn bạn thấy trên Trò chuyện và Bảng việc.</p>
@@ -241,6 +249,14 @@ ${crewSlot()}`),
 <li><b>The hub</b> runs inside your project folder (<code>ekip serve</code>) — one hub per project.</li>
 <li><b>The task queue</b> keeps each task and its state; <b>the blackboard</b> keeps what must outlive a single run, such as plans and review verdicts.</li>
 <li><b>The watchdog</b> notices agents that die quietly (quota, permissions, a stale model name) and fails the task with the reason within seconds.</li>
+</ul>`),
+        sec("folders", "Working by folder", `
+<p>Every conversation belongs to a project folder. Agents run inside it, so they pick up that project's <code>CLAUDE.md</code>, <code>AGENTS.md</code> and settings on their own.</p>
+<ul class="facts">
+<li><b>Pick the folder before you send.</b> In a new conversation, press the folder button next to the recipient: choose a recent folder, or <b>Choose another folder…</b> to browse your disk. Folders with <code>.git</code>, <code>package.json</code>… are marked as projects.</li>
+<li><b>A conversation keeps its folder.</b> Replies, and work agents hand to each other inside it, all happen there.</li>
+<li><b>The sidebar groups by folder.</b> Folders with running work rise to the top; the <kbd>+</kbd> on a group starts a conversation right in that folder; click a group's name to fold it.</li>
+<li><b>The crew, logs and history stay with the hub</b> — nothing is sprinkled into your projects. Board can filter by folder.</li>
 </ul>`),
         sec("life", "The life of a task", `
 <p>Every task moves through these states. The colours match the labels on Chat and Board.</p>

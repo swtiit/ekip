@@ -186,6 +186,36 @@ try {
   const langOff = await (await post("/api/config/hub", { language: "" })).json();
   t("language can be cleared", langOff.language === null && !("language" in JSON.parse(readFileSync(join(TMP, "ekip.config.json"), "utf8"))));
 
+  // ---- folders: a conversation works in the folder it was started in ----
+  var folderProbe;
+  {
+    const WS = join(TMP, "ws-alpha");
+    mkdirSync(WS, { recursive: true });
+    writeFileSync(join(WS, "package.json"), "{}");
+    const started = await (await post("/api/delegate", { to: "echoer", prompt: "in a folder", title: "folder-probe", cwd: WS })).json();
+    t("delegate accepts a folder", started.task?.cwd === WS, JSON.stringify(started.task?.cwd));
+    await until(async () => existsSync(join(WS, "prompt.txt")));
+    t("the worker runs inside the chosen folder", existsSync(join(WS, "prompt.txt")));
+    t("its log stays with the hub, not in the folder", existsSync(join(TMP, ".ekip", "logs", `echoer-${started.task.id}.log`)) && !existsSync(join(WS, ".ekip")));
+    const reply = await (await post("/api/delegate", { to: "mock", prompt: "follow-up", title: "folder-reply", parent_task_id: started.task.id, cwd: "/tmp" })).json();
+    t("a reply keeps its conversation's folder", reply.task?.cwd === WS);
+    folderProbe = { id: started.task.id, ws: WS };
+    t("unknown folder → 400", (await post("/api/delegate", { to: "mock", prompt: "x", cwd: join(TMP, "nope-nope") })).status === 400);
+    t("relative folder → 400", (await post("/api/delegate", { to: "mock", prompt: "x", cwd: "relative/path" })).status === 400);
+    const homeTask = await (await post("/api/delegate", { to: "modeled", prompt: "stays home", title: "folder-home" })).json();
+    const threads2 = (await api("/api/threads")).threads;
+    t("threads carry their folder", threads2.find((x) => x.id === started.task.id)?.cwd === WS && threads2.find((x) => x.id === homeTask.task.id)?.cwd === TMP);
+    const folders = await api("/api/folders");
+    t("folders list the hub's home first", folders.folders[0]?.path === TMP && folders.folders[0]?.home === true);
+    t("folders remember the chosen one", folders.folders.some((f) => f.path === WS && f.tasks >= 1));
+    t("adding a missing folder → 400", (await post("/api/folders", { path: join(TMP, "missing") })).status === 400);
+    const browsed = await api("/api/browse?path=" + encodeURIComponent(TMP));
+    t("browse lists sub-folders and spots projects", browsed.path === TMP && browsed.dirs.some((d) => d.name === "ws-alpha" && d.project === true) && !browsed.dirs.some((d) => d.name.startsWith(".")));
+    t("browse refuses a non-folder", (await fetch(BASE + "/api/browse?path=" + encodeURIComponent(join(WS, "package.json")))).status === 400);
+    await post("/api/folders", { path: WS, remove: true });
+    t("a folder can be forgotten", !(await api("/api/folders")).folders.some((f) => f.path === WS && f.tasks === 0));
+  }
+
   // labels & jobs: the meaning of a member, separate from its address
   const echoState = (await api("/api/state")).agents.find((a) => a.name === "echoer");
   t("state exposes label and job", echoState?.label === "Người nhắc lại" && /prompt/.test(echoState?.description ?? ""));
@@ -297,6 +327,10 @@ try {
     return w.task?.status === "done" ? w.task : undefined;
   });
   t("bridge_wait returns done task", mcpDone?.result === "mock done: mcp-mock");
+  if (folderProbe) {
+    const viaMcp = await tool("bridge_delegate", { from: "echoer", to: "mock", title: "folder-child", prompt: "x", parent_task_id: folderProbe.id });
+    t("work handed out over MCP inherits the folder", (await taskById(viaMcp.task_id))?.cwd === folderProbe.ws);
+  }
 
   const manual1 = await tool("bridge_delegate", { from: "e2e", to: "manual", title: "manual-1", prompt: "x" });
   t("non-spawnable reason", manual1.dispatch.spawned === false && /not spawnable/.test(manual1.dispatch.reason));

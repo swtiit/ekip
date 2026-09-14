@@ -39,7 +39,7 @@ export const antigravityAdapter: Adapter = {
   description: "Google Antigravity (headless `agy -p`)",
 
   async spawn(req: SpawnRequest): Promise<SpawnResult> {
-    const logFile = join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`);
+    const logFile = req.logFile ?? join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`);
 
     // --add-dir registers the project as a workspace directory: without it a
     // headless run in an untrusted folder ignores cwd and writes files into

@@ -5,7 +5,7 @@ import { getAdapter } from "../adapters/index.js";
 import type { WorkerEvent, WorkerExit } from "../adapters/index.js";
 import type { AgentConfig, BridgeConfig } from "./config.js";
 import { DEFAULT_MAX_CONCURRENT, hubUrl, resolveRoleFile } from "./config.js";
-import { spawnLogHint } from "./logs.js";
+import { spawnLogHint, spawnLogPath } from "./logs.js";
 import { recordSeenModel } from "./models.js";
 import type { Store } from "./store.js";
 
@@ -208,7 +208,10 @@ export class Dispatcher {
     const result = await adapter.spawn({
       agentName: agent.name,
       prompt: this.buildBootstrap(task, this.rolePrompt(agent)),
-      cwd: agent.cwd ?? this.config.projectRoot,
+      // The conversation's folder wins: that is where the person asked for
+      // the work to happen. Logs stay with the hub either way.
+      cwd: task.cwd ?? agent.cwd ?? this.config.projectRoot,
+      logFile: spawnLogPath(this.config.projectRoot, agent.name, task.id),
       taskId: task.id,
       hubUrl: hubUrl(this.config),
       depth: task.depth,

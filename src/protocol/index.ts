@@ -42,6 +42,11 @@ export interface Task {
   artifacts?: Artifact[];
   /** delegation chain depth, used as a loop guard */
   depth: number;
+  /**
+   * Absolute folder the work happens in. A conversation picks one; everything
+   * handed out inside it inherits it. Absent means the hub's own project root.
+   */
+  cwd?: string;
   parentId?: string;
   createdAt: string;
   updatedAt: string;
@@ -104,6 +109,8 @@ export interface BridgeState {
   tasks: Task[];
   context: ContextEntry[];
   messages?: Message[];
+  /** folders people have chosen to work in, most recent first */
+  folders?: string[];
 }
 
 export const PROTOCOL_VERSION = "0.5.0";

@@ -26,6 +26,8 @@ export class Store extends EventEmitter {
   private context = new Map<string, ContextEntry>();
   /** conversation lines, keyed by thread (root task) id, in arrival order */
   private messages = new Map<string, Message[]>();
+  /** folders chosen for conversations, most recent first */
+  private folders: string[] = [];
 
   constructor(private readonly filePath?: string) {
     super();
@@ -42,6 +44,7 @@ export class Store extends EventEmitter {
       for (const t of data.tasks ?? []) this.tasks.set(t.id, t);
       for (const c of data.context ?? []) this.context.set(c.key, c);
       for (const m of data.messages ?? []) this.threadMessages(m.threadId).push(m);
+      this.folders = Array.isArray(data.folders) ? data.folders.filter((f) => typeof f === "string") : [];
     } catch {
       // Corrupt or partial state file — start clean rather than crash.
     }
@@ -53,6 +56,7 @@ export class Store extends EventEmitter {
       tasks: [...this.tasks.values()],
       context: [...this.context.values()],
       messages: [...this.messages.values()].flat(),
+      folders: this.folders,
     };
     try {
       mkdirSync(dirname(this.filePath), { recursive: true });
@@ -70,6 +74,7 @@ export class Store extends EventEmitter {
     context?: Record<string, unknown>;
     depth: number;
     parentId?: string;
+    cwd?: string;
   }): Task {
     const now = new Date().toISOString();
     const task: Task = {
@@ -83,6 +88,23 @@ export class Store extends EventEmitter {
     this.persist();
     this.emit("change", { kind: "task", id: task.id });
     return task;
+  }
+
+  /** Remember a folder as recently used (moves it to the front). */
+  touchFolder(path: string): void {
+    this.folders = [path, ...this.folders.filter((f) => f !== path)].slice(0, 30);
+    this.persist();
+    this.emit("change", { kind: "folders" });
+  }
+
+  forgetFolder(path: string): void {
+    this.folders = this.folders.filter((f) => f !== path);
+    this.persist();
+    this.emit("change", { kind: "folders" });
+  }
+
+  listFolders(): string[] {
+    return [...this.folders];
   }
 
   getTask(id: string): Task | undefined {

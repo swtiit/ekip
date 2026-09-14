@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { join } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, resolve as resolvePath } from "node:path";
+import { statSync } from "node:fs";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { BridgeConfig } from "./config.js";
@@ -163,7 +165,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   }
 
   async function handleDelegate(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const { to, prompt, title, from, parent_task_id } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    const body = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    const { to, prompt, title, from, parent_task_id } = body;
     if (typeof to !== "string" || !to || typeof prompt !== "string" || !prompt) {
       sendJson(res, 400, { error: "`to` and `prompt` are required" });
       return;
@@ -180,6 +183,17 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       return;
     }
     const sender = typeof from === "string" && from ? from : "human";
+    // A reply stays in its conversation's folder; a new conversation may pick one.
+    let cwd: string | undefined = parent?.cwd;
+    if (!parent && typeof body.cwd === "string" && body.cwd.trim()) {
+      const checked = checkFolder(body.cwd);
+      if (typeof checked !== "string") {
+        sendJson(res, 400, { error: checked.error });
+        return;
+      }
+      cwd = checked === config.projectRoot ? undefined : checked;
+      store.touchFolder(checked);
+    }
     const task = store.createTask({
       from: sender,
       to,
@@ -187,6 +201,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       prompt,
       depth: (parent?.depth ?? 0) + 1,
       parentId: parent?.id,
+      cwd,
     });
     store.addMessage({ taskId: task.id, from: sender, to, kind: "human", text: prompt });
     const outcome = await dispatcher.dispatch(task);
@@ -348,12 +363,116 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     args: a.args ?? [],
   });
 
+  /** An absolute, existing directory — or the reason it is not one. */
+  function checkFolder(raw: string): string | { error: string } {
+    const expanded = raw.trim().replace(/^~(?=$|\/)/, homedir());
+    if (!isAbsolute(expanded)) return { error: `folder must be an absolute path: ${raw}` };
+    const path = resolvePath(expanded);
+    try {
+      if (!statSync(path).isDirectory()) return { error: `not a folder: ${path}` };
+    } catch {
+      return { error: `folder does not exist: ${path}` };
+    }
+    return path;
+  }
+
+  /** Folders to offer: the hub's own project, then recent picks, then any seen on tasks. */
+  function handleFolders(res: ServerResponse): void {
+    const stats = new Map<string, { tasks: number; lastAt: string }>();
+    for (const t of store.listTasks()) {
+      if (t.parentId && store.getTask(t.parentId)) continue;
+      const f = t.cwd ?? config.projectRoot;
+      const cur = stats.get(f) ?? { tasks: 0, lastAt: "" };
+      cur.tasks++;
+      if (t.updatedAt > cur.lastAt) cur.lastAt = t.updatedAt;
+      stats.set(f, cur);
+    }
+    const order = [config.projectRoot, ...store.listFolders(), ...stats.keys()];
+    const seen = new Set<string>();
+    const folders = order
+      .filter((f) => (seen.has(f) ? false : (seen.add(f), true)))
+      .map((path) => {
+        let exists = true;
+        try {
+          exists = statSync(path).isDirectory();
+        } catch {
+          exists = false;
+        }
+        return { path, name: basename(path) || path, home: path === config.projectRoot, exists, ...(stats.get(path) ?? { tasks: 0, lastAt: null }) };
+      });
+    sendJson(res, 200, { home: config.projectRoot, folders });
+  }
+
+  async function handleAddFolder(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const { path, remove } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    if (typeof path !== "string" || !path) {
+      sendJson(res, 400, { error: "`path` is required" });
+      return;
+    }
+    if (remove === true) {
+      store.forgetFolder(path);
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+    const checked = checkFolder(path);
+    if (typeof checked !== "string") {
+      sendJson(res, 400, { error: checked.error });
+      return;
+    }
+    store.touchFolder(checked);
+    sendJson(res, 200, { path: checked, name: basename(checked) });
+  }
+
+  /**
+   * Directory listing for the folder picker: sub-folders only, no file
+   * contents. A browser page cannot learn absolute paths from a native
+   * picker, so the hub browses on its behalf.
+   */
+  function handleBrowse(res: ServerResponse, raw: string | null): void {
+    const checked = checkFolder(raw && raw.trim() ? raw : homedir());
+    if (typeof checked !== "string") {
+      sendJson(res, 400, { error: checked.error });
+      return;
+    }
+    let entries: string[] = [];
+    try {
+      entries = readdirSync(checked);
+    } catch {
+      sendJson(res, 403, { error: `cannot read ${checked}` });
+      return;
+    }
+    const markers = [".git", "package.json", "ekip.config.json", "pyproject.toml", "go.mod", "Cargo.toml", "CLAUDE.md", "AGENTS.md"];
+    const dirs = entries
+      .filter((name) => !name.startsWith(".") && name !== "node_modules")
+      .map((name) => join(checked, name))
+      .filter((p) => {
+        try {
+          return statSync(p).isDirectory();
+        } catch {
+          return false;
+        }
+      })
+      .map((p) => ({ name: basename(p), path: p, project: markers.some((m) => existsSync(join(p, m))) }))
+      .sort((a, b) => Number(b.project) - Number(a.project) || a.name.localeCompare(b.name))
+      .slice(0, 400);
+    const parent = dirname(checked);
+    sendJson(res, 200, {
+      path: checked,
+      name: basename(checked) || checked,
+      parent: parent === checked ? null : parent,
+      home: homedir(),
+      project: markers.some((m) => existsSync(join(checked, m))),
+      dirs,
+    });
+  }
+
   function handleThreads(res: ServerResponse): void {
     sendJson(res, 200, {
       threads: store.listThreads().map(({ task, messages, lastAt }) => ({
         id: task.id,
         title: task.title,
         status: task.status,
+        cwd: task.cwd ?? config.projectRoot,
         from: task.from,
         to: task.to,
         createdAt: task.createdAt,
@@ -420,6 +539,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return sendJson(res, 200, {
             project: config.project,
             hubUrl: hubUrl(config),
+            projectRoot: config.projectRoot,
             language: config.language ?? null,
             agents: config.agents.map(describeAgent),
             tasks: store.listTasks(),
@@ -446,6 +566,12 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return handleContext(req, res);
         case "POST /api/cancel":
           return handleCancel(req, res);
+        case "GET /api/folders":
+          return handleFolders(res);
+        case "POST /api/folders":
+          return handleAddFolder(req, res);
+        case "GET /api/browse":
+          return handleBrowse(res, new URL(req.url ?? "/", "http://x").searchParams.get("path"));
         case "POST /api/config/agent":
           return handleConfigAgent(req, res);
         default:

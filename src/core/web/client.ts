@@ -20,6 +20,9 @@ function base(p){ var s = String(p || '').split('?')[0].replace(/\/+$/, ''); ret
 function hashHue(name){ var h = 0; for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0; return (h % 12) * 30 + 8; }
 
 var ICONS = {
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  folderPlus:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/>',
+  home:'<path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   chat:'<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
   board:'<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/>',
   settings:'<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
@@ -60,6 +63,7 @@ function icon(name, cls){ return '<svg class="ico' + (cls ? ' ' + cls : '') + '"
 /* ================= language ================= */
 var DICT = {
   en: {
+    folder:'Folder', newIn:'New conversation in this folder', noChatsHere:'No conversations here yet', workIn:'Work in', workingIn:'Working in', browseOther:'Choose another folder…', browseOtherS:'Browse your disk', pickFolder:'Choose a folder to work in', useFolder:'Use this folder', projectBadge:'project', noSubfolders:'No sub-folders here', folderSet:'Now working in {f}', folderLocked:'a conversation keeps its folder', allFolders:'All folders', startIn:'Start in',
     chat:'Chat', board:'Board', guide:'Guide', noJob:'No job description yet — add one in Settings.', guideLink:'New here? Read the guide', settings:'Settings', search:'Search chats, agents, actions', newChat:'New conversation', filter:'Filter conversations',
     live:'Running', today:'Today', earlier:'Earlier', working:'working', queued:'queued', idle:'idle', done:'done', failed:'failed', cancelled:'stopped', pending:'queued', claimed:'working',
     stop:'Stop', message:'Message', crew:'Crew', helloT:'Put your crew to work', helloS:'Pick who gets it and say what you need. You will see what each agent says, the tools it runs, who it hands work to, and what it costs.',
@@ -91,6 +95,7 @@ var DICT = {
     t_write:'wrote {f}', t_edit:'edited {f}', t_read:'read {f}', t_run:'ran {c}', t_search:'searched {q}', t_tools:'loaded its tools', t_todo:'updated its checklist', blackboardW:'the blackboard'
   },
   vi: {
+    folder:'Folder', newIn:'Hội thoại mới trong folder này', noChatsHere:'Chưa có hội thoại nào ở đây', workIn:'Làm việc trong', workingIn:'Làm việc trong', browseOther:'Chọn folder khác…', browseOtherS:'Duyệt thư mục trên máy', pickFolder:'Chọn folder để làm việc', useFolder:'Dùng folder này', projectBadge:'dự án', noSubfolders:'Không có thư mục con', folderSet:'Đã chuyển sang {f}', folderLocked:'hội thoại giữ nguyên folder của nó', allFolders:'Tất cả folder', startIn:'Bắt đầu trong',
     chat:'Trò chuyện', board:'Bảng việc', guide:'Hướng dẫn', noJob:'Chưa có mô tả việc — thêm trong Cài đặt.', guideLink:'Lần đầu dùng? Xem hướng dẫn', settings:'Cài đặt', search:'Tìm hội thoại, agent, thao tác', newChat:'Hội thoại mới', filter:'Lọc hội thoại',
     live:'Đang chạy', today:'Hôm nay', earlier:'Trước đó', working:'đang làm', queued:'đang chờ', idle:'rảnh', done:'xong', failed:'lỗi', cancelled:'đã dừng', pending:'đang chờ', claimed:'đang làm',
     stop:'Dừng', message:'Nhắn', crew:'Ê-kíp', helloT:'Giao việc cho ê-kíp', helloS:'Chọn người nhận rồi nói bạn cần gì. Bạn sẽ thấy từng agent nói gì, chạy công cụ nào, giao việc cho ai, và tốn bao nhiêu.',
@@ -192,7 +197,7 @@ function avatar(name, opts){
 }
 
 /* ================= state ================= */
-var S = { state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
+var S = { folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
   view:'chat', filter:'', boardFilter:'', boardAgent:'', target:null, selectedTask:null,
   openGroups:{}, openSteps:{}, sig:{} };
 function agentByName(n){ return S.state ? S.state.agents.filter(function(a){ return a.name === n; })[0] : null; }
@@ -228,6 +233,7 @@ function refresh(){
   if (busy) { again = true; return; }
   busy = true;
   var jobs = [getJSON('/api/state').then(function(s){ if (s) S.state = s; })];
+  if (S.view === 'chat' || S.view === 'board') jobs.push(getJSON('/api/folders').then(function(d){ if (d) { S.folders = d.folders; S.home = d.home; } }));
   if (S.view === 'chat') {
     jobs.push(getJSON('/api/threads').then(function(d){ if (d) S.threads = d.threads; }));
     if (S.current) {
@@ -250,6 +256,8 @@ function render(){
   var lang = pickLang(S.state.language);
   if (lang !== LANG) { LANG = lang; S.sig = {}; applyStaticText(); }
   document.title = 'ekip · ' + S.state.project;
+  if (!S.home) S.home = S.state.projectRoot;
+  if (!S.folder) S.folder = store('ekip.folder') || S.home;
   $('proj').textContent = S.state.project;
   var working = S.state.tasks.filter(function(t){ return t.status === 'claimed' || (t.status === 'pending' && t.pid); }).length;
   var chip = $('live-chip');
@@ -271,38 +279,59 @@ function applyStaticText(){
 }
 
 /* ================= chat: sidebar ================= */
+function folderName(path){ var f = S.folders.filter(function(x){ return x.path === path; })[0]; return f ? f.name : base(path); }
+function shortPath(path){
+  var home = (S.state && S.state.home) || '';
+  var p = String(path || '');
+  var m = /^\/(Users|home)\/[^\/]+/.exec(p);
+  return m ? '~' + p.slice(m[0].length) : p;
+}
 function renderSide(){
   var q = fold(S.filter);
-  var list = S.threads.filter(function(t){ return !q || fold(t.title + ' ' + t.to + ' ' + dn(t.to)).indexOf(q) >= 0; });
-  var sig = JSON.stringify([S.current, q, LANG, list.map(function(t){ return [t.id, t.status, t.messages, t.lastAt.slice(0, 16)]; })]);
+  var list = S.threads.filter(function(t){ return !q || fold(t.title + ' ' + t.to + ' ' + dn(t.to) + ' ' + base(t.cwd)).indexOf(q) >= 0; });
+  var sig = JSON.stringify([S.current, q, LANG, S.collapsed, S.folder, list.map(function(t){ return [t.id, t.status, t.messages, t.lastAt.slice(0, 16), t.cwd]; })]);
   if (sig === S.sig.side) return;
   S.sig.side = sig;
-  var startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-  var groups = [[T('live'), []], [T('today'), []], [T('earlier'), []]];
+  var groups = {}, order = [];
   list.forEach(function(t){
-    if (!isDone(t.status)) groups[0][1].push(t);
-    else if (Date.parse(t.lastAt) >= startOfDay.getTime()) groups[1][1].push(t);
-    else groups[2][1].push(t);
+    var k = t.cwd || S.home || '';
+    if (!groups[k]) { groups[k] = { path: k, items: [], live: 0, lastAt: '' }; order.push(k); }
+    var g = groups[k];
+    g.items.push(t);
+    if (!isDone(t.status)) g.live++;
+    if (t.lastAt > g.lastAt) g.lastAt = t.lastAt;
   });
-  var html = '';
-  groups.forEach(function(g){
-    if (!g[1].length) return;
-    html += '<div class="group-label">' + esc(g[0]) + '</div>';
-    g[1].forEach(function(t){
-      var st = isDone(t.status) ? (t.status === 'done' ? '' : '<span class="state ' + t.status + '">' + esc(T(t.status)) + ' ·</span>') : '<span class="state working">' + esc(T('working')) + ' ·</span>';
-      html += '<div class="th' + (t.id === S.current ? ' sel' : '') + '" data-id="' + t.id + '">' +
-        avatar(t.to, { live: !isDone(t.status) }) +
-        '<div class="body"><div class="t">' + esc(t.title) + '</div><div class="m">' + st + '<span>' + esc(dn(t.to)) + '</span></div></div>' +
-        '<span class="when">' + esc(ago(t.lastAt).replace(' ' + T('ago'), '')) + '</span></div>';
-    });
-  });
+  // The folder you are about to start in shows up even before it has a conversation.
+  if (!q && S.folder && !groups[S.folder]) { groups[S.folder] = { path: S.folder, items: [], live: 0, lastAt: '' }; order.push(S.folder); }
+  order.sort(function(a, b){ return (groups[b].live - groups[a].live) || groups[b].lastAt.localeCompare(groups[a].lastAt); });
+  var html = order.map(function(k){
+    var g = groups[k];
+    var open = !S.collapsed[k] || !!q;
+    g.items.sort(function(a, b){ return (isDone(a.status) - isDone(b.status)) || b.lastAt.localeCompare(a.lastAt); });
+    return '<div class="fgroup' + (open ? ' open' : '') + '"><div class="fhead" data-toggle-folder="' + esc(k) + '" title="' + esc(k) + '">' +
+      icon('chev', 'sm chev') + icon('folder', 'sm') + '<span class="fname">' + esc(folderName(k)) + '</span>' +
+      (g.live ? '<span class="flive">' + g.live + '</span>' : '<span class="fcount">' + g.items.length + '</span>') +
+      '<button class="btn ghost sm icon fadd" data-new-in="' + esc(k) + '" title="' + esc(T('newIn')) + '">' + icon('plus', 'sm') + '</button></div>' +
+      '<div class="fitems">' + (g.items.length ? g.items.map(function(t){
+        var st = isDone(t.status) ? (t.status === 'done' ? '' : '<span class="state ' + t.status + '">' + esc(T(t.status)) + ' ·</span>') : '<span class="state working">' + esc(T('working')) + ' ·</span>';
+        return '<div class="th' + (t.id === S.current ? ' sel' : '') + '" data-id="' + t.id + '">' +
+          avatar(t.to, { live: !isDone(t.status) }) +
+          '<div class="body"><div class="t">' + esc(t.title) + '</div><div class="m">' + st + '<span>' + esc(dn(t.to)) + '</span></div></div>' +
+          '<span class="when">' + esc(ago(t.lastAt).replace(' ' + T('ago'), '')) + '</span></div>';
+      }).join('') : '<div class="fempty">' + esc(T('noChatsHere')) + '</div>') + '</div></div>';
+  }).join('');
   $('threads').innerHTML = html || '<div class="group-label" style="text-transform:none;letter-spacing:0">' + esc(q ? T('noResults') : T('none')) + '</div>';
 }
 $('threads').addEventListener('click', function(e){
+  var add = e.target.closest('[data-new-in]');
+  if (add) { e.stopPropagation(); setFolder(add.getAttribute('data-new-in')); go('/chat'); setTimeout(function(){ $('text').focus(); }, 40); return; }
+  var tog = e.target.closest('[data-toggle-folder]');
+  if (tog) { var k = tog.getAttribute('data-toggle-folder'); S.collapsed[k] = !S.collapsed[k]; store('ekip.collapsed', JSON.stringify(S.collapsed)); S.sig.side = ''; renderSide(); return; }
   var el = e.target.closest('.th'); if (!el) return;
   go('/chat/' + el.getAttribute('data-id'));
 });
 $('filter').addEventListener('input', function(e){ S.filter = e.target.value.trim().toLowerCase(); renderSide(); });
+try { S.collapsed = JSON.parse(store('ekip.collapsed') || '{}') || {}; } catch (err) { S.collapsed = {}; }
 $('new-chat').addEventListener('click', function(){ go('/chat'); setTimeout(function(){ $('text').focus(); }, 30); });
 
 /* ================= chat: stage ================= */
@@ -349,7 +378,8 @@ function samey(a, b){
 
 function renderStage(){
   var th = S.thread;
-  var sig = JSON.stringify([S.current, S.notFound, LANG, th ? [th.messages.length, th.tasks.map(function(t){ return [t.status, t.usage && t.usage.costUsd, !!t.pid]; })] : null, S.state.agents.length]);
+  paintFolderChip();
+  var sig = JSON.stringify([S.current, S.notFound, LANG, S.folder, S.folders.length, th ? [th.messages.length, th.tasks.map(function(t){ return [t.status, t.usage && t.usage.costUsd, !!t.pid]; })] : null, S.state.agents.length]);
   var top = $('stage-top'), log = $('transcript');
   if (sig === S.sig.stage) { updateTicks(); return; }
   S.sig.stage = sig;
@@ -363,7 +393,9 @@ function renderStage(){
     } else {
       var spawnable = S.state.agents.filter(function(a){ return a.spawnable; });
       log.innerHTML = '<div class="hello"><div class="crew-row">' + spawnable.slice(0, 6).map(function(a){ return avatar(a.name, { size:'lg' }); }).join('') + '</div>' +
-        '<h1>' + esc(T('helloT')) + '</h1><p>' + esc(T('helloS')) + ' <a href="/guide" data-go-guide="1">' + esc(T('guideLink')) + ' →</a></p><div class="starters">' +
+        '<h1>' + esc(T('helloT')) + '</h1><p>' + esc(T('helloS')) + ' <a href="/guide" data-go-guide="1">' + esc(T('guideLink')) + ' →</a></p>' +
+        (currentFolder() ? '<button class="where" id="hello-folder" title="' + esc(currentFolder()) + '">' + icon('folder', 'sm') + '<span>' + esc(T('workingIn')) + '</span><b>' + esc(folderName(currentFolder())) + '</b><span class="path">' + esc(shortPath(currentFolder())) + '</span>' + icon('down', 'sm') + '</button>' : '') +
+        '<div class="starters">' +
         [['s1', 'pencil'], ['s2', 'eye'], ['s3', 'sparkle'], ['s4', 'handoff']].map(function(s){
           return '<div class="starter" data-starter="' + s[0] + '"><div class="k">' + icon(s[1], 'sm') + esc(T(s[0] + 'k')) + '</div><div class="v">' + esc(T(s[0] + 'v')) + '</div></div>';
         }).join('') + '</div></div>';
@@ -380,6 +412,7 @@ function renderStage(){
   var cost = 0, tk = 0;
   th.tasks.forEach(function(t){ if (t.usage) { cost += t.usage.costUsd || 0; tk += (t.usage.inputTokens || 0) + (t.usage.outputTokens || 0); } });
   top.innerHTML = '<span class="title">' + esc(root.title) + '</span>' +
+    '<span class="chip folder-tag" title="' + esc(root.cwd || S.home || '') + '">' + icon('folder', 'sm') + esc(folderName(root.cwd || S.home || '')) + '</span>' +
     '<span class="facts">' + (live.length ? '<span class="pill working">' + esc(live.length === 1 ? dn(live[0].to) + ' ' + T('working') : T('nWorking', { n: live.length })) + '</span>' : '<span class="pill ' + root.status + '">' + esc(T(root.status)) + '</span>') +
     '<span class="num">' + th.tasks.length + ' task</span>' + (tk ? '<span class="dotsep">·</span><span class="num">' + toks(tk) + ' ' + esc(T('tokens')) + '</span>' : '') +
     (cost ? '<span class="dotsep">·</span><span class="num">' + money(cost) + '</span>' : '') + '</span><span class="sp"></span>' +
@@ -479,7 +512,7 @@ function renderStage(){
     while (pending.length) body += placeChild(pending[0].title);
     if (liveT) {
       var what = t.status === 'claimed' ? T('isWorking') : t.pid ? T('starting') : t.dispatchedAt ? T('lost') : T('waitingSlot');
-      body += '<div class="working">' + avatar(t.to, { size:'sm', live:true }) + '<span class="shimmer"><b>' + esc(dn(t.to)) + '</b> ' + esc(what) + '…</span>' +
+      body += '<div class="working-row">' + avatar(t.to, { size:'sm', live:true }) + '<span class="shimmer"><b>' + esc(dn(t.to)) + '</b> ' + esc(what) + '…</span>' +
         '<span class="since" data-since="' + esc(t.dispatchedAt || t.createdAt) + '">' + elapsed(t.dispatchedAt || t.createdAt) + '</span></div>';
     }
 
@@ -521,6 +554,7 @@ document.addEventListener('click', function(e){
   if (cp) { var node = document.querySelector('[data-text="' + cp.getAttribute('data-copy') + '"]'); copyText(node ? node.innerText : ''); return; }
   var art = e.target.closest('[data-art]');
   if (art) { var parts = art.getAttribute('data-art').split(':'); openArtifact(parts[0], +parts[1]); return; }
+  if (e.target.closest('#hello-folder')) { e.stopPropagation(); hidePopover(); showFolderPopover(); return; }
   var gl = e.target.closest('[data-go-guide]');
   if (gl) { e.preventDefault(); go('/guide'); return; }
   var starter = e.target.closest('[data-starter]');
@@ -544,6 +578,79 @@ function openArtifact(taskId, idx){
   if (a.kind === 'url' && /^https?:/.test(a.value)) { window.open(a.value, '_blank', 'noopener'); return; }
   S.selectedTask = taskId; S.drawerArtifact = idx; openDrawer();
 }
+
+/* ================= folders ================= */
+function setFolder(path){
+  S.folder = path || S.home || null;
+  if (S.folder) store('ekip.folder', S.folder);
+  paintFolderChip();
+}
+function currentFolder(){
+  if (S.thread && !S.notFound) { var map = {}; S.thread.tasks.forEach(function(t){ map[t.id] = t; }); var r = map[S.thread.thread]; return (r && r.cwd) || S.home; }
+  return S.folder || S.home;
+}
+function paintFolderChip(){
+  var inThread = !!(S.thread && !S.notFound);
+  var f = currentFolder();
+  var chip = $('folder');
+  if (!f) { chip.hidden = true; return; }
+  chip.hidden = false;
+  chip.disabled = inThread;
+  chip.title = f + (inThread ? ' · ' + T('folderLocked') : '');
+  chip.innerHTML = icon('folder', 'sm') + '<b>' + esc(folderName(f)) + '</b>' + (inThread ? '' : icon('down', 'sm'));
+}
+function showFolderPopover(){
+  var el = $('folder-pop');
+  var items = S.folders.filter(function(f){ return f.exists; });
+  el.innerHTML = '<div class="ttl">' + esc(T('workIn')) + '</div>' + items.map(function(f){
+    return '<div class="opt' + (f.path === currentFolder() ? ' hi' : '') + '" data-folder="' + esc(f.path) + '">' + icon(f.home ? 'home' : 'folder') +
+      '<span class="who"><b>' + esc(f.name) + '</b><span>' + esc(shortPath(f.path)) + '</span></span><span class="sub">' + (f.tasks ? f.tasks + ' ' + esc(T('chats').toLowerCase()) : '') + '</span></div>';
+  }).join('') + '<div class="opt" data-browse="1">' + icon('folderPlus') + '<span class="who"><b>' + esc(T('browseOther')) + '</b><span>' + esc(T('browseOtherS')) + '</span></span></div>';
+  el.hidden = false; el.style.left = '8px'; el.style.bottom = 'calc(100% + 8px)';
+}
+function hideFolderPopover(){ $('folder-pop').hidden = true; }
+$('folder').addEventListener('click', function(e){ e.stopPropagation(); if ($('folder-pop').hidden) { hidePopover(); showFolderPopover(); } else hideFolderPopover(); });
+$('folder-pop').addEventListener('click', function(e){
+  var f = e.target.closest('[data-folder]');
+  if (f) { setFolder(f.getAttribute('data-folder')); hideFolderPopover(); S.sig.side = ''; renderSide(); S.sig.stage = ''; renderStage(); $('text').focus(); return; }
+  if (e.target.closest('[data-browse]')) { hideFolderPopover(); openBrowse(currentFolder()); }
+});
+document.addEventListener('click', function(e){ if (!$('folder-pop').hidden && !e.target.closest('#folder-pop') && !e.target.closest('#folder')) hideFolderPopover(); });
+
+function openBrowse(start){
+  $('scrim').classList.add('on'); $('browse').classList.add('on');
+  browse(start);
+}
+function closeBrowse(){ $('browse').classList.remove('on'); if (!$('drawer').classList.contains('on') && !$('palette').classList.contains('on') && !$('modal').classList.contains('on')) $('scrim').classList.remove('on'); }
+function browse(path){
+  $('browse-list').innerHTML = '<div class="bempty">…</div>';
+  getJSON('/api/browse' + (path ? '?path=' + encodeURIComponent(path) : '')).then(function(d){
+    if (!d || d.error) { $('browse-list').innerHTML = '<div class="bempty err">' + esc((d && d.error) || T('offline')) + '</div>'; return; }
+    S.browsePath = d.path; S.browseParent = d.parent; S.browseHome = d.home;
+    $('browse-path').value = d.path;
+    $('browse-up').disabled = !d.parent;
+    $('browse-here').innerHTML = icon('folder', 'sm') + '<b>' + esc(d.name) + '</b>' + (d.project ? '<span class="pbadge">' + esc(T('projectBadge')) + '</span>' : '');
+    $('browse-list').innerHTML = d.dirs.length ? d.dirs.map(function(x){
+      return '<div class="bitem" data-dir="' + esc(x.path) + '">' + icon('folder', 'sm') + '<span>' + esc(x.name) + '</span>' + (x.project ? '<span class="pbadge">' + esc(T('projectBadge')) + '</span>' : '') + icon('chev', 'sm') + '</div>';
+    }).join('') : '<div class="bempty">' + esc(T('noSubfolders')) + '</div>';
+  });
+}
+$('browse-list').addEventListener('click', function(e){ var d = e.target.closest('[data-dir]'); if (d) browse(d.getAttribute('data-dir')); });
+$('browse-up').addEventListener('click', function(){ if (S.browseParent) browse(S.browseParent); });
+$('browse-home').addEventListener('click', function(){ browse(S.browseHome || ''); });
+$('browse-path').addEventListener('keydown', function(e){ if (isEnter(e)) { e.preventDefault(); browse($('browse-path').value); } });
+$('browse-cancel').addEventListener('click', closeBrowse);
+$('browse-pick').addEventListener('click', function(){
+  var path = S.browsePath; if (!path) return;
+  post('/api/folders', { path: path }).then(function(d){
+    if (d.error) { toast(d.error, true); return; }
+    closeBrowse(); setFolder(d.path);
+    getJSON('/api/folders').then(function(f){ if (f) { S.folders = f.folders; S.home = f.home; } paintFolderChip(); S.sig.side = ''; renderSide(); S.sig.stage = ''; renderStage(); });
+    toast(T('folderSet', { f: d.name }));
+    if (S.view !== 'chat' || S.current) go('/chat');
+    setTimeout(function(){ $('text').focus(); }, 60);
+  });
+});
 
 /* ================= chat: composer ================= */
 function defaultTarget(){
@@ -603,6 +710,7 @@ function send(){
   if (!text || !S.target) return;
   var body = { to: S.target, prompt: text, from: 'human' };
   if (S.current && !S.notFound) body.parent_task_id = S.current;
+  else if (currentFolder()) body.cwd = currentFolder();
   $('send').disabled = true;
   post('/api/delegate', body).then(function(d){
     if (d.error) { $('dock-hint').textContent = d.error; $('dock-hint').className = 'hint err'; $('send').disabled = false; return; }
@@ -671,15 +779,26 @@ function laneOf(t){
 }
 function renderBoard(){
   var st = S.state;
-  var q = S.boardFilter, who = S.boardAgent;
-  var sig = JSON.stringify([LANG, q, who, S.selectedTask, st.agents.map(function(a){ return a.name; }), st.tasks.map(function(t){ return [t.id, t.status, !!t.pid, t.usage && t.usage.costUsd]; }), st.context.length]);
+  var q = S.boardFilter, who = S.boardAgent, where = S.boardFolder || '';
+  var map0 = tasksById();
+  var folderOf = function(t){ var r = rootOf(t, map0); return (r && r.cwd) || S.home || ''; };
+  var used = {}; st.tasks.forEach(function(t){ used[folderOf(t)] = true; });
+  var folderKeys = Object.keys(used);
+  var fsel = $('board-folder');
+  fsel.hidden = folderKeys.length < 2;
+  var fsig = JSON.stringify([LANG, folderKeys, where]);
+  if (fsel.getAttribute('data-sig') !== fsig) {
+    fsel.setAttribute('data-sig', fsig);
+    fsel.innerHTML = '<option value="">' + esc(T('allFolders')) + '</option>' + folderKeys.map(function(k){ return '<option value="' + esc(k) + '"' + (k === where ? ' selected' : '') + '>' + esc(folderName(k)) + '</option>'; }).join('');
+  }
+  var sig = JSON.stringify([LANG, q, who, where, S.selectedTask, st.agents.map(function(a){ return a.name; }), st.tasks.map(function(t){ return [t.id, t.status, !!t.pid, t.usage && t.usage.costUsd]; }), st.context.length]);
   if (sig === S.sig.board) { updateTicks(); return; }
   S.sig.board = sig;
   $('agent-filters').innerHTML = st.agents.map(function(a){
     return '<button class="filter' + (who === a.name ? ' on' : '') + '" data-filter="' + esc(a.name) + '">' + avatar(a.name, { size:'sm', live: liveWorkForAgent(a.name).length > 0 }) + esc(dn(a.name)) + '</button>';
   }).join('');
   var tasks = st.tasks.filter(function(t){
-    return (!who || t.to === who) && (!q || fold(t.title + ' ' + t.prompt + ' ' + t.to + ' ' + dn(t.to)).indexOf(fold(q)) >= 0);
+    return (!who || t.to === who) && (!where || folderOf(t) === where) && (!q || fold(t.title + ' ' + t.prompt + ' ' + t.to + ' ' + dn(t.to)).indexOf(fold(q)) >= 0);
   }).sort(function(a, b){ return b.updatedAt.localeCompare(a.updatedAt); });
   var lanes = [[T('laneQ'), 'var(--warn)', []], [T('laneW'), 'var(--tally)', []], [T('laneD'), 'var(--ok)', []], [T('laneF'), 'var(--bad)', []]];
   tasks.forEach(function(t){ lanes[laneOf(t)][2].push(t); });
@@ -690,6 +809,7 @@ function renderBoard(){
         var live = !isDone(t.status), u = t.usage || {};
         return '<div class="card' + (S.selectedTask === t.id ? ' sel' : '') + '" data-task="' + t.id + '"><div class="ct">' + esc(t.title) + '</div><div class="cm">' + avatar(t.to, { size:'sm', live: live && li === 1 }) +
           '<span class="route">' + esc(dn(t.from)) + ' → ' + esc(dn(t.to)) + '</span><span class="sp"></span>' +
+          (folderKeys.length > 1 ? '<span class="ftag" title="' + esc(folderOf(t)) + '">' + icon('folder', 'sm') + esc(folderName(folderOf(t))) + '</span>' : '') +
           (u.costUsd ? '<span class="num">' + money(u.costUsd) + '</span>' : '') +
           (live ? '<span class="num" data-since="' + esc(t.dispatchedAt || t.createdAt) + '">' + elapsed(t.dispatchedAt || t.createdAt) + '</span>' : '<span>' + esc(ago(t.updatedAt).replace(' ' + T('ago'), '')) + '</span>') + '</div>' +
           (t.status === 'failed' && t.result ? '<div class="reason">' + esc(t.result) + '</div>' : '') + '</div>';
@@ -705,6 +825,7 @@ $('agent-filters').addEventListener('click', function(e){
   var f = e.target.closest('[data-filter]'); if (!f) return;
   var n = f.getAttribute('data-filter'); S.boardAgent = S.boardAgent === n ? '' : n; renderBoard();
 });
+$('board-folder').addEventListener('change', function(e){ S.boardFolder = e.target.value; renderBoard(); });
 $('board-search').addEventListener('input', function(e){ S.boardFilter = e.target.value.trim().toLowerCase(); renderBoard(); });
 $('lanes').addEventListener('click', function(e){
   var c = e.target.closest('[data-task]'); if (!c) return;
@@ -773,6 +894,7 @@ function renderDrawer(){
     '<div class="fact"><div class="l">' + esc(T('duration')) + '</div><div class="v">' + (live ? '<span data-since="' + esc(t.dispatchedAt || t.createdAt) + '">' + elapsed(t.dispatchedAt || t.createdAt) + '</span>' : u.durationMs ? dur(u.durationMs) : elapsed(t.createdAt, t.updatedAt)) + '</div></div>' +
     '<div class="fact"><div class="l">' + esc(T('cost')) + '</div><div class="v">' + (u.costUsd ? money(u.costUsd) : '—') + '</div></div>' +
     '<div class="fact"><div class="l">' + esc(T('modelUsed')) + '</div><div class="v" title="' + esc(u.model || '') + '">' + esc(shortModel(u.model) || (agentByName(t.to) || {}).model || '—') + '</div></div>' +
+    '<div class="fact wide"><div class="l">' + esc(T('folder')) + '</div><div class="v mono" title="' + esc((rootOf(t, map) || t).cwd || S.home || '') + '">' + esc(shortPath((rootOf(t, map) || t).cwd || S.home || '')) + '</div></div>' +
     '<div class="fact"><div class="l">' + esc(T('usage')) + '</div><div class="v">' + ((u.inputTokens || u.outputTokens) ? toks((u.inputTokens || 0) + (u.outputTokens || 0)) : '—') + '</div></div></div>';
   html += '<div class="dl">' + esc(T('prompt')) + '</div><div class="dbox">' + md(t.prompt) + '</div>';
   if (t.result) html += '<div class="dl">' + esc(T('result')) + '</div><div class="dbox">' + md(t.result) + '</div>';
@@ -795,7 +917,7 @@ $('drawer').addEventListener('click', function(e){
   var c = e.target.closest('[data-copy-id]');
   if (c) { copyText(c.getAttribute('data-copy-id')); }
 });
-$('scrim').addEventListener('click', function(){ closeDrawer(); closeModal(); closePalette(); });
+$('scrim').addEventListener('click', function(){ closeDrawer(); closeModal(); closePalette(); closeBrowse(); });
 
 /* ================= new task modal ================= */
 function openModal(){
@@ -944,6 +1066,10 @@ function buildPalette(q){
   (S.state ? S.state.agents : []).forEach(function(a){
     items.push({ g:T('msgTo'), avatar:a.name, label:dn(a.name), sub:'@' + a.name + (a.description ? ' · ' + a.description : ''), run:function(){ go('/chat'); setTarget(a.name); setTimeout(function(){ $('text').focus(); }, 40); } });
   });
+  S.folders.filter(function(f){ return f.exists; }).forEach(function(f){
+    items.push({ g:T('startIn'), icon:f.home ? 'home' : 'folder', label:f.name, sub:shortPath(f.path), run:function(){ setFolder(f.path); go('/chat'); setTimeout(function(){ $('text').focus(); }, 40); } });
+  });
+  items.push({ g:T('startIn'), icon:'folderPlus', label:T('browseOther'), run:function(){ openBrowse(currentFolder()); } });
   S.threads.slice(0, 40).forEach(function(t){
     items.push({ g:T('chats'), avatar:t.to, label:t.title, sub:ago(t.lastAt), run:function(){ go('/chat/' + t.id); } });
   });
@@ -972,6 +1098,7 @@ $('pal-results').addEventListener('click', function(e){ var o = e.target.closest
 $('open-palette').addEventListener('click', openPalette);
 document.addEventListener('keydown', function(e){
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if ($('palette').classList.contains('on')) closePalette(); else openPalette(); return; }
+  if (e.key === 'Escape' && $('browse').classList.contains('on')) { closeBrowse(); return; }
   if (e.key === 'Escape') { if ($('palette').classList.contains('on')) closePalette(); else if ($('modal').classList.contains('on')) closeModal(); else if ($('drawer').classList.contains('on')) closeDrawer(); }
 });
 

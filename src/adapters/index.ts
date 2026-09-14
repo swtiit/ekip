@@ -24,6 +24,11 @@ export interface SpawnRequest {
   extraArgs?: string[];
   /** executable from config, used by the generic "command" adapter */
   command?: string;
+  /**
+   * Where the spawn log goes. The hub keeps logs in its own project, not in
+   * whatever folder the work runs in, so adapters should use this when set.
+   */
+  logFile?: string;
   /** called once when the spawned process ends (or fails to start) */
   onExit?: (exit: WorkerExit) => void;
   /** called as the worker speaks / acts, when the adapter can decode its output */

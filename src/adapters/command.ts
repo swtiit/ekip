@@ -27,7 +27,7 @@ export const commandAdapter: Adapter = {
       };
     }
 
-    const logFile = join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`);
+    const logFile = req.logFile ?? join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`);
 
     const substitute = (arg: string): string =>
       arg
