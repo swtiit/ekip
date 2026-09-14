@@ -7,6 +7,8 @@ import type { BridgeConfig } from "./config.js";
 import { globalDir } from "./config.js";
 import type { Dispatcher } from "./dispatcher.js";
 import type { Store } from "./store.js";
+import type { TaskBudget } from "../protocol/index.js";
+import { budgetUsage, checkBudget, describeBreach } from "./budget.js";
 
 /**
  * Flows: multi-stage pipelines the hub runs itself.
@@ -51,6 +53,8 @@ export interface Flow {
   label?: string;
   description?: string;
   steps: FlowStep[];
+  /** spending cap for one run of this flow; unset fields use the hub's budget */
+  budget?: TaskBudget;
   /** where it was loaded from */
   source?: "project" | "machine" | "built-in";
 }
@@ -141,21 +145,30 @@ export interface GateVerdict {
   detail: string;
 }
 
-export function checkGate(gate: FlowGate | undefined, result: string): GateVerdict {
+export function checkGate(gate: FlowGate | undefined, result: string, language?: string): GateVerdict {
   if (!gate) return { passed: true, detail: "" };
+  const vi = langKey(language) === "vi";
   const text = (result ?? "").trim();
   if (gate.pattern) {
     const m = new RegExp(gate.pattern, "i").exec(text);
     const value = m && m[1] !== undefined ? Number(m[1]) : NaN;
-    if (Number.isNaN(value)) return { passed: false, detail: `no score found (expected /${gate.pattern}/)` };
-    if (gate.min !== undefined && value < gate.min) return { passed: false, detail: `score ${value} < ${gate.min}` };
-    return { passed: true, detail: `score ${value}${gate.min !== undefined ? ` ≥ ${gate.min}` : ""}` };
+    if (Number.isNaN(value)) {
+      return { passed: false, detail: vi ? `không thấy điểm (cần /${gate.pattern}/)` : `no score found (expected /${gate.pattern}/)` };
+    }
+    const label = vi ? "điểm" : "score";
+    if (gate.min !== undefined && value < gate.min) return { passed: false, detail: `${label} ${value} < ${gate.min}` };
+    return { passed: true, detail: `${label} ${value}${gate.min !== undefined ? ` ≥ ${gate.min}` : ""}` };
   }
   if (gate.startsWith?.length) {
     const head = text.toUpperCase();
     const hit = gate.startsWith.find((w) => head.startsWith(w.toUpperCase()));
     const first = text.split(/\s+/)[0] ?? "";
-    return hit ? { passed: true, detail: `starts with ${hit}` } : { passed: false, detail: `starts with "${first.slice(0, 24)}", expected ${gate.startsWith.join(" or ")}` };
+    const or = vi ? " hoặc " : " or ";
+    if (hit) return { passed: true, detail: vi ? `mở đầu bằng ${hit}` : `starts with ${hit}` };
+    return {
+      passed: false,
+      detail: vi ? `mở đầu bằng "${first.slice(0, 24)}", cần ${gate.startsWith.join(or)}` : `starts with "${first.slice(0, 24)}", expected ${gate.startsWith.join(or)}`,
+    };
   }
   return { passed: true, detail: "" };
 }
@@ -178,8 +191,8 @@ export class FlowRunner {
   /** The run summary is read by the human, so it follows the hub's language. */
   private words() {
     return langKey(this.config.language) === "vi"
-      ? { allPassed: "mọi chặng đã đạt", stoppedAt: "dừng ở", round: "vòng", after: "sau", rounds: "vòng", noResult: "không có kết quả" }
-      : { allPassed: "all stages passed", stoppedAt: "stopped at", round: "round", after: "after", rounds: "rounds", noResult: "no result" };
+      ? { allPassed: "mọi chặng đã đạt", stoppedAt: "dừng ở", round: "vòng", after: "sau", rounds: "vòng", noResult: "không có kết quả", spent: "Tiêu hao", runs: "lượt chạy", lastGood: "Kết quả gần nhất" }
+      : { allPassed: "all stages passed", stoppedAt: "stopped at", round: "round", after: "after", rounds: "rounds", noResult: "no result", spent: "Spent", runs: "runs", lastGood: "Latest result" };
   }
 
   start(flow: Flow, input: string, opts: { cwd?: string; from?: string } = {}): Task {
@@ -190,6 +203,7 @@ export class FlowRunner {
       prompt: input,
       depth: 0,
       cwd: opts.cwd,
+      budget: flow.budget,
     });
     this.store.updateTask(root.id, { status: "claimed" });
     this.store.addMessage({ taskId: root.id, from: opts.from ?? "human", to: `flow:${flow.name}`, kind: "human", text: input });
@@ -249,6 +263,15 @@ export class FlowRunner {
     while (index < flow.steps.length) {
       if (!root() || isTerminal(root()!.status)) return; // stopped from outside
       const step = flow.steps[index];
+      const breach = checkBudget(this.config, this.store, rootId);
+      if (breach) {
+        const why = describeBreach(breach, this.config.language);
+        say(why, { budget: breach, budgetRoot: rootId });
+        log.push(`■ ${step.title ?? step.id} (${step.agent}) — ${why}`);
+        const latest = Object.values(results).pop();
+        this.finish(rootId, "failed", why, log, latest ? `${w.lastGood}:\n${latest}` : undefined);
+        return;
+      }
       const round = (rounds[step.id] ?? 0) + 1;
       const vars: Record<string, string> = { input, run: runKey, round: String(round), feedback };
       for (const [id, value] of Object.entries(results)) vars[`prev.${id}`] = value;
@@ -281,7 +304,7 @@ export class FlowRunner {
         return;
       }
       results[step.id] = done.result ?? "";
-      const verdict = checkGate(step.gate, done.result ?? "");
+      const verdict = checkGate(step.gate, done.result ?? "", this.config.language);
       if (verdict.passed) {
         log.push(`✓ ${step.title ?? step.id} (${step.agent})${verdict.detail ? ` — ${verdict.detail}` : ""}${round > 1 ? `, ${w.round} ${round}` : ""}`);
         if (step.gate) say(`gate passed: ${step.title ?? step.id} — ${verdict.detail}`, { gate: "pass", step: step.id, stepTitle: step.title ?? step.id, detail: verdict.detail });
@@ -313,7 +336,11 @@ export class FlowRunner {
   private finish(rootId: string, status: "done" | "failed", headline: string, log: string[], last?: string): void {
     const current = this.store.getTask(rootId);
     if (!current || isTerminal(current.status)) return;
-    const result = [headline, "", ...log, ...(last ? ["", last] : [])].join("\n");
+    const w = this.words();
+    const used = budgetUsage(this.store, rootId);
+    const secs = Math.round(used.minutes * 60);
+    const spent = `${w.spent}: ${used.runs} ${w.runs} · ${secs >= 60 ? `${Math.floor(secs / 60)}m${String(secs % 60).padStart(2, "0")}s` : `${secs}s`}`;
+    const result = [headline, "", ...log, spent, ...(last ? ["", last] : [])].join("\n");
     this.store.updateTask(rootId, { status, result });
     this.store.addMessage({ taskId: rootId, from: current.to, to: current.from, kind: "agent", text: result, meta: { result: status } });
   }

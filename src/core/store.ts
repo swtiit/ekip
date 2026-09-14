@@ -75,6 +75,7 @@ export class Store extends EventEmitter {
     depth: number;
     parentId?: string;
     cwd?: string;
+    budget?: Task["budget"];
   }): Task {
     const now = new Date().toISOString();
     const task: Task = {

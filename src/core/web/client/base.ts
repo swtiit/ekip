@@ -75,6 +75,7 @@ function icon(name, cls){ return '<svg class="ico' + (cls ? ' ' + cls : '') + '"
 /* ================= language ================= */
 var DICT = {
   en: {
+    runsN:'{n} runs', bRunsU:'runs', bMinU:'min', budgetTitle:'Budget for this request: the hub stops it when a limit is reached', budget:'Budget per request', budgetS:'Each message you send, flow you run, or top-level delegation may spend at most this much. When a limit is reached the hub starts nothing more for it; a time limit also stops work in flight. 0 = no limit.', bRuns:'Worker runs', bTokens:'Output tokens', bMinutes:'Minutes', noLimit:'No limit',
     flows:'Flows', flowCantRun:'can’t run here', gatePass:'Gate passed: {s} — {d}', gateRetry:'Not yet: {s} — {d}. Back to {g} (round {r}/{n})', gateStop:'Stopped at {s} — {d}. No rounds left.',
     tokenTitle:'This hub needs a token', tokenBody:'Enter the token set as EKIP_TOKEN (or "token" in ekip.config.json) where the hub runs. This browser remembers it.', signIn:'Sign in', tokenWrong:'That token is not right',
     billing:'How Claude is billed', runTime:'run time today', runTimeTitle:'Total time agents spent running today.', turnsL:'Turns',
@@ -125,6 +126,7 @@ var DICT = {
     t_write:'wrote {f}', t_edit:'edited {f}', t_read:'read {f}', t_run:'ran {c}', t_search:'searched {q}', t_tools:'loaded its tools', t_todo:'updated its checklist', blackboardW:'the blackboard'
   },
   vi: {
+    runsN:'{n} lượt chạy', bRunsU:'lượt', bMinU:'phút', budgetTitle:'Ngân sách của yêu cầu này: hub dừng khi chạm giới hạn', budget:'Ngân sách mỗi yêu cầu', budgetS:'Mỗi tin bạn gửi, mỗi lần chạy quy trình hay mỗi việc giao trực tiếp chỉ được tiêu tối đa chừng này. Chạm giới hạn thì hub không bật thêm lượt nào; giới hạn thời gian còn dừng cả việc đang chạy. 0 = không giới hạn.', bRuns:'Lượt chạy', bTokens:'Token ra', bMinutes:'Phút', noLimit:'Không giới hạn',
     flows:'Quy trình', flowCantRun:'không chạy được ở đây', gatePass:'Qua cổng: {s} — {d}', gateRetry:'Chưa đạt: {s} — {d}. Quay lại {g} (vòng {r}/{n})', gateStop:'Dừng ở {s} — {d}. Đã hết số vòng.',
     tokenTitle:'Hub này cần token', tokenBody:'Nhập token đã đặt ở EKIP_TOKEN (hoặc "token" trong ekip.config.json) nơi chạy hub. Trình duyệt sẽ nhớ.', signIn:'Đăng nhập', tokenWrong:'Token không đúng',
     billing:'Cách Claude tính phí', runTime:'thời gian chạy hôm nay', runTimeTitle:'Tổng thời gian các agent chạy trong hôm nay.', turnsL:'Số lượt model',

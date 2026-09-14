@@ -31,6 +31,7 @@ import { claudeBilling } from "./billing.js";
 import { Store } from "./store.js";
 import { appHtml } from "./app.js";
 import { Watchdog } from "./watchdog.js";
+import { BUDGET_DEFAULTS, budgetReport, parseBudget, startsRequest } from "./budget.js";
 
 export interface RunningHub {
   store: Store;
@@ -113,6 +114,13 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   const pruneTimer = setInterval(prune, 3_600_000);
   pruneTimer.unref();
 
+  // Budgets measured in minutes run out mid-flight; check them on the watchdog's beat.
+  const budgetTimer = setInterval(
+    () => dispatcher.enforceTimeBudgets(),
+    ({ ...WATCHDOG_DEFAULTS, ...config.watchdog }).sweepIntervalSeconds * 1000,
+  );
+  budgetTimer.unref();
+
   const transports: Record<string, StreamableHTTPServerTransport> = {};
   const sseClients = new Set<ServerResponse>();
 
@@ -194,6 +202,11 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       return;
     }
     const sender = typeof from === "string" && from ? from : "human";
+    const budget = parseBudget(body.budget);
+    if (typeof budget === "string") {
+      sendJson(res, 400, { error: budget });
+      return;
+    }
     // A reply stays in its conversation's folder; a new conversation may pick one.
     let cwd: string | undefined = parent?.cwd;
     if (!parent && typeof body.cwd === "string" && body.cwd.trim()) {
@@ -213,6 +226,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       depth: (parent?.depth ?? 0) + 1,
       parentId: parent?.id,
       cwd,
+      budget,
     });
     store.addMessage({ taskId: task.id, from: sender, to, kind: "human", text: prompt });
     const outcome = await dispatcher.dispatch(task);
@@ -345,6 +359,24 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   /** Hub-wide settings the UI can change: language for now. */
   async function handleConfigHub(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    if ("budget" in body) {
+      const budget = parseBudget(body.budget);
+      if (typeof budget === "string") {
+        sendJson(res, 400, { error: budget });
+        return;
+      }
+      config.budget = budget && Object.keys(budget).length ? { ...config.budget, ...budget } : undefined;
+      try {
+        const path = join(config.projectRoot, CONFIG_FILENAME);
+        const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+        if (config.budget) raw.budget = config.budget;
+        else delete raw.budget;
+        writeFileSync(path, JSON.stringify(raw, null, 2) + "\n");
+      } catch {
+        // In-memory setting still applies; a missing file shouldn't 500.
+      }
+      store.emit("change", { kind: "config", hub: true });
+    }
     if ("language" in body) {
       if (typeof body.language !== "string") {
         sendJson(res, 400, { error: "`language` must be a string (empty to unset)" });
@@ -367,7 +399,16 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       }
       store.emit("change", { kind: "config", hub: true });
     }
-    sendJson(res, 200, { language: config.language ?? null });
+    sendJson(res, 200, { language: config.language ?? null, budget: hubBudget() });
+  }
+
+  /** The budget a request gets when it doesn't bring its own. */
+  function hubBudget() {
+    const pick = (key: "runs" | "outputTokens" | "minutes") => {
+      const v = config.budget?.[key] ?? BUDGET_DEFAULTS[key];
+      return typeof v === "number" && v > 0 ? v : 0;
+    };
+    return { runs: pick("runs"), outputTokens: pick("outputTokens"), minutes: pick("minutes") };
   }
 
   const describeAgent = (a: BridgeConfig["agents"][number]) => ({
@@ -416,6 +457,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
         description: f.description ?? "",
         source: f.source,
         steps: f.steps.map((s) => ({ id: s.id, agent: s.agent, title: s.title ?? s.id, gate: s.gate ?? null, onFail: s.onFail ?? null })),
+        budget: f.budget ?? null,
         problems: validateFlow(f, config),
       })),
     });
@@ -577,7 +619,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     }
     const threadId = store.threadOf(taskId);
     const family = store.listTasks().filter((t) => store.threadOf(t.id) === threadId);
-    sendJson(res, 200, { thread: threadId, tasks: family, messages: store.listMessages(threadId) });
+    const budgets = family.filter(startsRequest).map((t) => budgetReport(config, store, t.id)).filter(Boolean);
+    sendJson(res, 200, { thread: threadId, tasks: family, messages: store.listMessages(threadId), budgets });
   }
 
   function handleLogs(res: ServerResponse, taskId: string): void {
@@ -680,6 +723,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
             maxConcurrent: config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT,
             maxConcurrentTotal: config.maxConcurrentTotal ?? DEFAULT_MAX_CONCURRENT_TOTAL,
             folderGuard: config.folderGuard !== false,
+            budget: hubBudget(),
             maxDepth: config.maxDepth ?? 6,
             watchdog: { ...WATCHDOG_DEFAULTS, ...config.watchdog },
             retention: { days: retentionDays },
@@ -746,6 +790,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           new Promise<void>((done) => {
             watchdog.stop();
             clearInterval(pruneTimer);
+            clearInterval(budgetTimer);
             for (const res of sseClients) res.end();
             sseClients.clear();
             httpServer.close(() => done());

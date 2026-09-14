@@ -1,4 +1,4 @@
-# ekip protocol (v0.5.0)
+# ekip protocol (v0.6.0)
 
 Vendor-neutral contract for coordinating multiple coding agents over MCP. No
 part of it names a specific agent or project — Claude Code and Antigravity are
@@ -71,6 +71,27 @@ depth exceeded, adapter failed to launch — fails the task immediately with
 and optionally per agent within a folder; `maxConcurrentTotal` caps them
 across all folders (default 8). A delegation past a cap is accepted but
 **queued** (`dispatch.queued: true`); it launches, FIFO, when a slot frees.
+
+## Budgets
+
+A **request** is a task a person made (`from: "human"`), a flow root, or a
+task with no parent. Every task below it spends from its budget, except a
+nested request (a person's follow-up starts its own). The budget counts
+worker **runs** launched, **output tokens** reported, and **minutes** since the
+request was made; limits come from the request's `budget`, then the hub's
+`budget`, then the defaults (20 runs, no token cap, 120 minutes), and `0`
+means no limit.
+
+- Before launching a worker the dispatcher counts runs already launched and
+  queued in the request; at a limit the task fails with
+  `dispatch refused: budget …` and a `system` message with `meta.budget =
+  { kind, used, limit }`.
+- A flow checks its budget before each stage and stops with the latest
+  stage result.
+- On the watchdog's beat, a live request past its minutes is cancelled —
+  its running workers are killed — with the same `meta.budget` message.
+- `GET /api/thread/:taskId` returns `budgets`: `{ root, used, limit, live }`
+  for each request in the conversation.
 
 ## Folders
 

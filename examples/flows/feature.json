@@ -8,6 +8,10 @@
     "en": "Plan → critique (score ≥ 90, up to 3 rounds) → code → review (up to 3 rounds) → final audit (SHIP). The hub checks each gate and loops back itself; it stops for good when the rounds run out.",
     "vi": "Lên kế hoạch → phản biện (≥ 90 điểm, tối đa 3 vòng) → code → review (tối đa 3 vòng) → kiểm định cuối (SHIP). Hub tự chấm cổng và quay vòng; dừng hẳn khi hết số vòng."
   },
+  "budget": {
+    "runs": 13,
+    "minutes": 90
+  },
   "steps": [
     {
       "id": "plan",

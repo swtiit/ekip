@@ -12,6 +12,9 @@ import { startServer, registerAdapter, launchDetached, bridgeEnv, parseClaudeStr
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TMP = mkdtempSync(join(tmpdir(), "ekip-e2e-"));
+// Keep machine defaults (~/.ekip) out of the suite, in both directions.
+const HOME_DIR = join(TMP, "machine-home");
+process.env.EKIP_HOME = HOME_DIR;
 // Ask the OS for a free port so a stale hub (or a concurrent suite) can
 // never EADDRINUSE-crash the run — this once broke `npm publish`.
 const PORT = await new Promise((res) => {
@@ -786,7 +789,7 @@ try {
   const { resolveRoleFile } = await import("../dist/core/index.js");
   const rolePath = resolveRoleFile(FRESH, "anywhere/gr.md");
   t("role file falls back to global", rolePath && readFileSync(rolePath, "utf8") === "GLOBAL ROLE");
-  delete process.env.EKIP_HOME;
+  process.env.EKIP_HOME = HOME_DIR;
   t("project agents still win over global", (await api("/api/state")).agents.some((a) => a.name === "mock"));
 
   // ---- flows: the hub runs the pipeline and enforces the gates ----
@@ -851,6 +854,54 @@ try {
   await sleep(1200);
   const fcStages = (await api("/api/state")).tasks.filter((x) => x.parentId === fc.task.id);
   t("flows: cancel stops the flow", (await taskById(fc.task.id))?.status === "cancelled" && fcStages.length <= 1, `${(await taskById(fc.task.id))?.status} ${fcStages.map((x) => x.to + ":" + x.status).join(",")}`);
+
+  // ---- budgets: one request may only spend so much ----
+  const limits0 = await api("/api/limits");
+  t("budget: defaults exposed", limits0.budget && limits0.budget.runs === 20 && limits0.budget.outputTokens === 0 && limits0.budget.minutes === 120);
+  t("budget: bad value refused", (await post("/api/config/hub", { budget: { runs: -1 } })).status === 400);
+  t("budget: bad delegate budget refused", (await post("/api/delegate", { to: "sink", prompt: "x", budget: { minutes: "soon" } })).status === 400);
+
+  const bRoot = await (await post("/api/delegate", { to: "sink", prompt: "one run only", title: "budget-runs", budget: { runs: 1 } })).json();
+  await until(async () => (await taskById(bRoot.task.id))?.dispatchedAt);
+  const bChild = await (await post("/api/delegate", { to: "sink", from: "sink", prompt: "a second run", parent_task_id: bRoot.task.id })).json();
+  t("budget: run cap refuses the next run in the request", bChild.task.status === "failed" && /budget/.test(bChild.task.result ?? ""), bChild.task.result);
+  const bThread = await api(`/api/thread/${bRoot.task.id}`);
+  t("budget: refusal is a budget notice", bThread.messages.some((m) => m.taskId === bChild.task.id && m.meta?.budget?.kind === "runs"));
+  const bReport = (bThread.budgets || []).find((b) => b.root === bRoot.task.id);
+  t("budget: thread reports used/limit", bReport && bReport.used.runs === 1 && bReport.limit.runs === 1 && bReport.limit.minutes === 120, JSON.stringify(bReport));
+  const bFollow = await (await post("/api/delegate", { to: "sink", prompt: "follow-up", parent_task_id: bRoot.task.id })).json();
+  t("budget: a person's follow-up gets a fresh budget", bFollow.task.status !== "failed" && (bFollow.dispatch?.spawned || bFollow.dispatch?.queued));
+
+  const tRoot = await (await post("/api/delegate", { to: "talker", prompt: "spend tokens", title: "budget-tokens", budget: { outputTokens: 40 } })).json();
+  await until(async () => (await taskById(tRoot.task.id))?.usage?.outputTokens, 10000);
+  const tChild = await (await post("/api/delegate", { to: "sink", from: "talker", prompt: "more", parent_task_id: tRoot.task.id })).json();
+  t("budget: token cap stops the next run", tChild.task.status === "failed" && /40 output tokens/.test(tChild.task.result ?? ""), tChild.task.result);
+  t("budget: seen models survive a restart (saved to disk)", existsSync(join(HOME_DIR, "seen-models.json")) && readFileSync(join(HOME_DIR, "seen-models.json"), "utf8").includes("claude-mock-seen-1"));
+
+  const mRoot = await (await post("/api/delegate", { to: "sleeper", prompt: "take forever", title: "budget-minutes", budget: { minutes: 0.01 } })).json();
+  const mDone = await until(async () => {
+    const x = await taskById(mRoot.task.id);
+    return x && x.status !== "pending" && x.status !== "claimed" ? x : undefined;
+  }, 8000);
+  t("budget: time cap stops work in flight", mDone?.status === "cancelled" && /minutes/.test(mDone?.result ?? ""), mDone?.result);
+  t("budget: time-stopped worker is gone", mDone && !(await api("/api/state")).workers?.running?.some((w) => w.taskId === mRoot.task.id));
+
+  writeFileSync(join(TMP, ".ekip", "flows", "thrifty.json"), JSON.stringify({
+    name: "thrifty", budget: { runs: 1 },
+    steps: [{ id: "one", agent: "mock", title: "One", prompt: "one" }, { id: "two", agent: "mock", title: "Two", prompt: "two" }],
+  }));
+  const fb = await (await post("/api/flows/run", { flow: "thrifty", input: "cheap" })).json();
+  const fbDone = await until(async () => {
+    const x = await taskById(fb.task.id);
+    return x && x.status !== "claimed" ? x : undefined;
+  }, 10000);
+  t("budget: flow stops before a stage it can't afford", fbDone?.status === "failed" && /budget/.test(fbDone?.result ?? "") && /Latest result/.test(fbDone?.result ?? ""), fbDone?.result);
+  t("budget: flow ran only what it could afford", (await api("/api/state")).tasks.filter((x) => x.parentId === fb.task.id).length === 1);
+  t("budget: flow result says what it spent", /Spent: 1 runs/.test(fbDone?.result ?? ""));
+
+  const setB = await (await post("/api/config/hub", { budget: { runs: 7, minutes: 0 } })).json();
+  t("budget: hub budget saved", setB.budget?.runs === 7 && setB.budget?.minutes === 0 && JSON.parse(readFileSync(join(TMP, "ekip.config.json"), "utf8")).budget?.runs === 7);
+  await post("/api/config/hub", { budget: { runs: 20, minutes: 120 } });
 
   t("cli flow lists flows", /graded/.test(strip(await cli("flow"))) && /nobody-here/.test(strip(await cli("flow"))));
 } finally {

@@ -196,6 +196,23 @@ luôn thắng chuẩn máy theo từng field.
   hết là token output; phần đọc cache (rẻ, 0.1×) tách riêng để khỏi thổi phồng.
 - Antigravity không báo token — chỉ có thời gian chạy.
 
+### Ngân sách mỗi yêu cầu
+
+Với gói thuê bao, thứ cần giữ là hạn mức của gói. **Cài đặt → Ngân sách mỗi
+yêu cầu** đặt trần cho mỗi tin bạn gửi (kèm mọi việc agent giao tiếp từ nó)
+và mỗi lần chạy quy trình:
+
+- **Lượt chạy** (mặc định 20), **token ra** (mặc định không giới hạn),
+  **phút** (mặc định 120). Đặt 0 là không giới hạn.
+- Chạm trần thì hub không bật thêm lượt nào, ghi "hết ngân sách của yêu cầu
+  này" vào hội thoại; hết giờ thì dừng luôn việc đang chạy. Quy trình dừng
+  trước chặng không đủ ngân sách và trả kết quả gần nhất.
+- Token chỉ biết sau khi lượt chạy báo về, nên trần token chặn từ lượt kế.
+- Tin nhắn tiếp theo của bạn trong cùng hội thoại có ngân sách mới.
+- Đầu hội thoại hiện `đã dùng/giới hạn`, chuyển cam khi quá 80%. Quy trình
+  có sẵn mang ngân sách riêng: `code-review` 4 lượt/45 phút, `feature` 13
+  lượt/90 phút.
+
 ## 10. Bảo mật
 
 - Hub nghe ở `127.0.0.1` và **từ chối** request đổi trạng thái từ trang web

@@ -25,6 +25,11 @@ function renderSettings(){
   $('lang-select').innerHTML = langs.map(function(o){
     return '<option value="' + esc(o[0]) + '"' + (o[0] === lang ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
   }).join('') + '<option value="__other">' + esc(T('other')) + '</option>';
+  var bud = (l && l.budget) || { runs: 20, outputTokens: 0, minutes: 120 };
+  [['budget-runs', 'runs', [5, 10, 20, 40, 80, 0], String], ['budget-tokens', 'outputTokens', [10000, 30000, 60000, 120000, 300000, 0], toks], ['budget-minutes', 'minutes', [15, 30, 60, 120, 240, 0], String]].forEach(function(x){
+    var cur = bud[x[1]] || 0, opts = x[2].indexOf(cur) < 0 ? x[2].concat([cur]) : x[2];
+    $(x[0]).innerHTML = opts.map(function(n){ return '<option value="' + n + '"' + (n === cur ? ' selected' : '') + '>' + esc(n ? x[3](n) : T('noLimit')) + '</option>'; }).join('');
+  });
   $('roles-explain').innerHTML = '<div class="explain-grid">' + [
     ['users', T('exRole'), T('exRoleS')],
     ['at', T('exId'), T('exIdS')],
@@ -128,6 +133,15 @@ $('lang-select').addEventListener('change', function(e){
     return;
   }
   saveLang(v);
+});
+document.querySelectorAll('[data-budget]').forEach(function(sel){
+  sel.addEventListener('change', function(){
+    var patch = {}; patch[sel.getAttribute('data-budget')] = Number(sel.value);
+    post('/api/config/hub', { budget: patch }).then(function(d){
+      if (d.error) { toast(d.error, true); return; }
+      toast(T('saved')); S.sig = {}; refresh();
+    });
+  });
 });
 $('billing-panel').addEventListener('click', function(e){
   if (!e.target.closest('#toggle-money')) return;

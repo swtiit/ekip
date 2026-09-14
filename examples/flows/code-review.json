@@ -8,6 +8,10 @@
     "en": "The Claude coder builds and runs the tests → the reviewer checks; if it isn't approved, back to the coder to fix exactly the findings, up to 2 rounds. For changes that matter but need no plan.",
     "vi": "Lập trình · Claude làm và tự chạy test → Review kiểm lại; chưa đạt thì quay lại sửa đúng các lỗi được nêu, tối đa 2 vòng. Dùng cho thay đổi quan trọng không cần lên kế hoạch."
   },
+  "budget": {
+    "runs": 4,
+    "minutes": 45
+  },
   "steps": [
     {
       "id": "code",

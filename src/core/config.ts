@@ -93,6 +93,12 @@ export interface BridgeConfig {
    * access outside it.
    */
   folderGuard?: boolean;
+  /**
+   * Spending cap per request — a message you send, a flow run, or a top-level
+   * delegation — counted in worker runs, output tokens and minutes. Defaults:
+   * 20 runs, no token cap, 120 minutes; 0 turns a limit off.
+   */
+  budget?: import("../protocol/index.js").TaskBudget;
   watchdog?: WatchdogConfig;
   retention?: RetentionConfig;
 }

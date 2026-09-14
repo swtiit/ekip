@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-219_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-234_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -222,6 +222,7 @@ splitting, while `code-review` is the cheaper way to make review mandatory.
   "maxDepth": 6,
   "maxConcurrent": 4,
   "watchdog": { "pendingTtlSeconds": 600, "claimedTtlSeconds": 3600 },
+  "budget": { "runs": 20, "outputTokens": 0, "minutes": 120 },
   "retention": { "days": 14 }
 }
 ```
@@ -261,6 +262,16 @@ splitting, while `code-review` is the cheaper way to make review mandatory.
   blocks any file, search or shell access outside it — field-tested: without
   it, a headless `claude -p` read and wrote a sibling project freely.
   Antigravity has no such hook, so Gemini runs get the instruction only.
+- **`budget`** caps what one *request* may spend — a message you send (with
+  everything agents hand out from it), a flow run, or a top-level delegation —
+  in worker **runs**, **output tokens** and **minutes** (defaults: 20 runs, no
+  token cap, 120 minutes; `0` turns a limit off). On a subscription these are
+  what drain your plan. At a limit the hub refuses the next run with the reason
+  in the conversation; running out of minutes also stops work in flight.
+  Tokens are known only once a run reports, so a token cap stops the *next*
+  run. A person's follow-up starts a fresh budget. A flow file may carry its
+  own `budget`, and `POST /api/delegate` accepts one per request. Settings
+  edits the hub default; the conversation header shows used/limit.
 - **`retention.days`** drops finished tasks and their spawn logs after that
   many days (default 14; `0` keeps everything).
 - **`language`** (e.g. `"Vietnamese"`) tells every spawned agent to write its
@@ -346,14 +357,14 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 219 end-to-end cases, no LLMs involved
+npm test   # 234 end-to-end cases, no LLMs involved
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```
 
 Boots a real hub on a scratch port and exercises the HTTP API, all 11 MCP
 tools, the conversation layer (stream-json decoding via a mock `claude`,
 threads, `bridge_say`), the dispatcher, permission/claim edge cases, folders and the
-folder guard, access control and tokens, flows (gate retry, round caps, cancel), fail-fast on worker
+folder guard, access control and tokens, flows (gate retry, round caps, cancel), budgets (runs, tokens, time), fail-fast on worker
 exit, watchdog reaping (and worker kill), cancellation with process-tree
 kill and cascade, `maxConcurrent` queueing, retention pruning, loop-guard,
 concurrency (parallel claims), crash-safety (missing binaries), and the CLI

@@ -1,6 +1,6 @@
 {
   "name": "@swtiit/ekip",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Assemble an ekip (ê-kíp — a tight-knit working crew) of coding agents: Claude Code, Antigravity, and any headless CLI delegate tasks and share context over MCP.",
   "type": "module",
   "bin": {

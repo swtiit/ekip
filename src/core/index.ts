@@ -28,3 +28,5 @@ export {
 export type { Adapter, SpawnRequest, SpawnResult, WorkerEvent, WorkerExit } from "../adapters/index.js";
 export { launchDetached, bridgeEnv } from "../adapters/spawn.js";
 export { parseClaudeStreamLine } from "../adapters/claude.js";
+export { BUDGET_DEFAULTS, budgetReport, budgetRoot, budgetUsage, checkBudget, describeBreach, parseBudget } from "./budget.js";
+export type { BudgetBreach, BudgetReport, BudgetUsage } from "./budget.js";

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -48,16 +48,48 @@ const CLAUDE_ALIASES: ModelOption[] = [
   { value: "haiku", label: "haiku", description: "alias — fastest, cheapest", source: "builtin" },
 ];
 
-/** Models the hub watched a spawned run actually use, newest first. */
+/**
+ * Models the hub watched a spawned run actually use, oldest first. Kept in
+ * `~/.ekip/seen-models.json` so the list survives a hub restart — a model
+ * that ran on this machine works on this machine, whichever project it was.
+ */
 const seenModels = new Map<string, string>();
+let seenLoaded = false;
+const SEEN_MAX = 30;
+
+function seenFile(): string {
+  return join(process.env.EKIP_HOME ?? join(homedir(), ".ekip"), "seen-models.json");
+}
+
+function loadSeen(): void {
+  if (seenLoaded) return;
+  seenLoaded = true;
+  try {
+    const rows = JSON.parse(readFileSync(seenFile(), "utf8")) as Array<{ model?: string; at?: string }>;
+    for (const r of rows) if (typeof r?.model === "string") seenModels.set(r.model, r.at ?? "");
+  } catch {
+    // no file yet, or a broken one: start fresh
+  }
+}
 
 export function recordSeenModel(model: string): void {
   if (!model || model === "<synthetic>") return;
+  loadSeen();
+  const known = seenModels.has(model);
   seenModels.delete(model);
   seenModels.set(model, new Date().toISOString());
+  while (seenModels.size > SEEN_MAX) seenModels.delete(seenModels.keys().next().value!);
+  if (known) return; // order changed, nothing new worth a write
+  try {
+    mkdirSync(join(seenFile(), ".."), { recursive: true });
+    writeFileSync(seenFile(), JSON.stringify([...seenModels].map(([m, at]) => ({ model: m, at })), null, 2) + "\n");
+  } catch {
+    // the in-memory list still works for this run
+  }
 }
 
 export function listSeenModels(): string[] {
+  loadSeen();
   return [...seenModels.keys()].reverse();
 }
 

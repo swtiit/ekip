@@ -26,6 +26,19 @@ export interface Artifact {
   value: string;
 }
 
+/**
+ * Spending cap for one request (see the hub's budget rules). A field left out
+ * falls back to the hub's setting; 0 turns that limit off.
+ */
+export interface TaskBudget {
+  /** worker runs launched for the request */
+  runs?: number;
+  /** output tokens reported by those runs */
+  outputTokens?: number;
+  /** wall-clock minutes since the request was made */
+  minutes?: number;
+}
+
 export interface Task {
   id: string;
   /** agent name that created the task */
@@ -58,6 +71,8 @@ export interface Task {
   exitCode?: number | null;
   /** what the run cost, when the adapter can tell (Claude's stream-json result) */
   usage?: TaskUsage;
+  /** a spending cap set when the request was made (flows carry their own) */
+  budget?: TaskBudget;
 }
 
 export interface TaskUsage {
@@ -130,7 +145,7 @@ export interface BridgeState {
   folders?: string[];
 }
 
-export const PROTOCOL_VERSION = "0.5.0";
+export const PROTOCOL_VERSION = "0.6.0";
 
 /** Maximum delegation depth before the dispatcher refuses to spawn again. */
 export const DEFAULT_MAX_DEPTH = 6;

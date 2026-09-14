@@ -3,7 +3,7 @@
 // behaves like mock-agent (claims its task over MCP and posts a result).
 const line = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 line({ type: "system", subtype: "init", session_id: "fake", tools: ["Bash"] });
-line({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Let me look at the task first." }] } });
+line({ type: "assistant", message: { role: "assistant", model: "claude-mock-seen-1", content: [{ type: "text", text: "Let me look at the task first." }] } });
 line({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Bash", input: { command: "echo probe-ok", description: "probe" } }] } });
 line({ type: "user", message: { role: "user", content: [{ type: "tool_result", content: "probe-ok" }] } });
 line({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Read", input: { file_path: "/etc/hosts" } }] } });

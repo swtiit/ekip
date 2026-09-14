@@ -234,9 +234,10 @@ ${crewSlot()}`),
 <ul class="facts">
 <li><b>Chi phí (≈ $)</b> là giá API niêm yết của Anthropic cho đúng số token lượt đó dùng — đối chiếu tay theo bảng giá khớp đến phần triệu đô. Nếu bạn đăng nhập bằng <b>gói Claude</b>, đây là <b>giá trị tham chiếu</b>: bạn không bị tính tiền theo token, lượt chạy trừ vào hạn mức của gói.</li>
 <li><b>Token ra</b> là phần model thật sự viết. <b>Token vào</b> phần lớn là <b>đọc lại từ cache</b> (hướng dẫn hệ thống, công cụ, ngữ cảnh) — rất nhiều về số lượng nhưng chỉ tốn 1/10 giá. Bấm một thẻ trong Bảng việc để xem thanh phân bổ.</li>
-<li>Mỗi lượt chạy mới phải <b>ghi cache</b> phần khởi đầu, nên việc nhỏ vẫn có giá sàn: khoảng 0,05–0,10 đô với Sonnet, 0,3–0,6 đô với Opus.</li>
+<li>Mỗi lượt chạy mới phải <b>ghi cache</b> phần khởi đầu, nên việc nhỏ vẫn có giá sàn: đo thực tế khoảng 0,10–0,28 đô với Sonnet, 0,04–0,11 đô với Haiku, trên 0,5 đô với Opus.</li>
 <li>Số liệu đến <b>chậm khoảng hai phút</b> sau khi việc xong ("đang chờ số liệu…"), vì tiến trình Claude còn chạy nốt bước kết thúc.</li>
 <li><b>Không có số liệu</b> cho Gemini (Antigravity không báo token) và cho lượt bị dừng hoặc lỗi giữa chừng; tổng của hội thoại ghi rõ bao nhiêu lượt bị thiếu.</li>
+<li><b>Ngân sách mỗi yêu cầu</b> (Cài đặt): mỗi tin bạn gửi — cùng mọi việc agent giao tiếp từ nó — mỗi lần chạy quy trình, được tối đa bao nhiêu <b>lượt chạy</b>, <b>token ra</b> và <b>phút</b> (mặc định 20 lượt, 120 phút). Chạm giới hạn thì hub không bật thêm lượt nào và ghi lý do vào hội thoại; hết giờ thì dừng cả việc đang chạy. Token chỉ biết sau khi lượt chạy báo về, nên giới hạn token chặn từ lượt kế tiếp. Tin nhắn tiếp theo của bạn trong cùng hội thoại có ngân sách mới. Đầu hội thoại hiện <b>đã dùng/giới hạn</b>, chuyển màu cam khi quá 80%.</li>
 </ul>`),
         sec("start", "Bắt đầu dự án mới", `
 <ol class="steps">
@@ -324,9 +325,10 @@ ${crewSlot()}`),
 <ul class="facts">
 <li><b>Cost (≈ $)</b> is Anthropic's API list price for exactly the tokens that run used — checked by hand against the price list to the micro-dollar. If you sign in with a <b>Claude subscription</b>, it is a <b>reference value</b>: you are not billed per token; runs count against your plan's usage limits.</li>
 <li><b>Tokens out</b> is what the model actually wrote. <b>Input</b> is mostly <b>read back from cache</b> (system instructions, tools, context) — large in count but a tenth of the price. Click a card in Board for the breakdown bar.</li>
-<li>Every new run has to <b>write its opening context to cache</b>, so even tiny tasks have a floor: roughly $0.05–0.10 on Sonnet, $0.30–0.60 on Opus.</li>
+<li>Every new run has to <b>write its opening context to cache</b>, so even tiny tasks have a floor: measured at roughly $0.10–0.28 on Sonnet, $0.04–0.11 on Haiku, and over $0.50 on Opus.</li>
 <li>Figures arrive <b>about two minutes after</b> the work is done ("tallying…"), because the Claude process finishes its shutdown first.</li>
 <li><b>No data</b> for Gemini (Antigravity reports no usage) or for runs that were stopped or crashed; a conversation's total says how many runs are missing.</li>
+<li><b>Budget per request</b> (Settings): each message you send — with everything agents hand out from it — and each flow run may use at most so many <b>runs</b>, <b>output tokens</b> and <b>minutes</b> (default 20 runs, 120 minutes). At a limit the hub starts nothing more for it and says why in the conversation; running out of time also stops work in flight. Tokens are only known once a run reports, so a token limit stops the next run. Your next message in the conversation gets a fresh budget. The conversation header shows <b>used/limit</b>, turning amber past 80%.</li>
 </ul>`),
         sec("start", "Start a new project", `
 <ol class="steps">

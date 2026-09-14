@@ -10,6 +10,7 @@ import { hubToken } from "./access.js";
 import { spawnLogHint, spawnLogPath } from "./logs.js";
 import { recordSeenModel } from "./models.js";
 import type { Store } from "./store.js";
+import { budgetLimit, budgetRoot, budgetScope, budgetUsage, checkBudget, describeBreach } from "./budget.js";
 
 export interface DispatchOutcome {
   spawned: boolean;
@@ -147,9 +148,9 @@ export class Dispatcher {
   }
 
   /** Reject outright: the task can never run, so say so on the task itself. */
-  private refuse(task: Task, reason: string): DispatchOutcome {
+  private refuse(task: Task, reason: string, meta?: Record<string, unknown>): DispatchOutcome {
     this.store.updateTask(task.id, { status: "failed", result: `dispatch refused: ${reason}` });
-    this.store.addMessage({ taskId: task.id, from: "hub", kind: "system", text: `dispatch refused: ${reason}` });
+    this.store.addMessage({ taskId: task.id, from: "hub", kind: "system", text: `dispatch refused: ${reason}`, meta });
     return { spawned: false, reason };
   }
 
@@ -215,6 +216,13 @@ export class Dispatcher {
     const maxDepth = this.config.maxDepth ?? DEFAULT_MAX_DEPTH;
     if (task.depth > maxDepth) {
       return this.refuse(task, `max delegation depth ${maxDepth} exceeded (loop guard)`);
+    }
+
+    const root = budgetRoot(this.store, task.id);
+    if (root) {
+      const queuedInScope = this.queue.filter((q) => budgetRoot(this.store, q.id)?.id === root.id).length;
+      const breach = checkBudget(this.config, this.store, root.id, queuedInScope);
+      if (breach) return this.refuse(task, describeBreach(breach, this.config.language), { budget: breach, budgetRoot: root.id });
     }
 
     const agent = this.config.agents.find((a) => a.name === task.to);
@@ -353,6 +361,35 @@ export class Dispatcher {
     killTree(worker.pid);
     void this.drain();
     return true;
+  }
+
+  /**
+   * Time is the one budget that runs out while work is in flight: stop every
+   * live request that has gone past its minutes. Called on the watchdog's beat.
+   */
+  enforceTimeBudgets(): string[] {
+    const stopped: string[] = [];
+    const roots = new Set<string>();
+    for (const t of this.store.listTasks()) {
+      if (isTerminal(t.status)) continue;
+      const root = budgetRoot(this.store, t.id);
+      if (root) roots.add(root.id);
+    }
+    for (const id of roots) {
+      const root = this.store.getTask(id)!;
+      const limit = budgetLimit(this.config, root);
+      if (!limit.minutes) continue;
+      const used = budgetUsage(this.store, id);
+      if (used.minutes < limit.minutes) continue;
+      const breach = { kind: "minutes" as const, used: Math.round(used.minutes * 10) / 10, limit: limit.minutes };
+      const reason = describeBreach(breach, this.config.language);
+      this.store.addMessage({ taskId: id, from: "hub", kind: "system", text: reason, meta: { budget: breach, budgetRoot: id } });
+      // Stop what spends from this budget only — a follow-up request below it has its own.
+      for (const t of budgetScope(this.store, id).reverse()) {
+        if (!isTerminal(t.status)) stopped.push(...this.cancel(t.id, "hub", reason));
+      }
+    }
+    return stopped;
   }
 
   /** Snapshot for the API: who holds a slot, who is waiting, who is just winding down. */

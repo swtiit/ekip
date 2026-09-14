@@ -145,15 +145,16 @@ function renderStage(){
   th.tasks.forEach(function(t){ if (t.parentId && map[t.parentId]) (kids[t.parentId] = kids[t.parentId] || []).push(t); });
   var root = map[th.thread] || th.tasks[0];
   var live = th.tasks.filter(function(t){ return !isDone(t.status); });
-  var cost = 0, tk = 0, missing = 0;
+  var cost = 0, tk = 0, missing = 0, runs = 0;
   th.tasks.forEach(function(t){
+    if (t.dispatchedAt) runs++;
     if (t.usage && typeof t.usage.costUsd === 'number') { cost += t.usage.costUsd; tk += outTok(t.usage); }
-    else if (isDone(t.status) && !awaitingTally(t.id)) missing++;
+    else if (t.dispatchedAt && isDone(t.status) && !awaitingTally(t.id)) missing++;
   });
   top.innerHTML = '<span class="title">' + esc(root.title) + '</span>' +
     '<span class="chip folder-tag" title="' + esc(root.cwd || S.home || '') + '">' + icon('folder', 'sm') + esc(folderName(root.cwd || S.home || '')) + '</span>' +
     '<span class="facts">' + (live.length ? '<span class="pill working">' + esc(live.length === 1 ? dn(live[0].to) + ' ' + T('working') : T('nWorking', { n: live.length })) + '</span>' : '<span class="pill ' + root.status + '">' + esc(T(root.status)) + '</span>') +
-    '<span class="num">' + th.tasks.length + ' task</span>' + (tk ? '<span class="dotsep">·</span><span class="num" title="' + esc(T('outTokTitle')) + '">' + toks(tk) + ' ' + esc(T('tokOut')) + '</span>' : '') +
+    '<span class="num">' + esc(T('runsN', { n: runs })) + '</span>' + budgetPill(th.budgets) + (tk ? '<span class="dotsep">·</span><span class="num" title="' + esc(T('outTokTitle')) + '">' + toks(tk) + ' ' + esc(T('tokOut')) + '</span>' : '') +
     (cost && showMoney() ? '<span class="dotsep">·</span><span class="num cost" title="' + esc(costTitle()) + '">≈ ' + money(cost) + '</span>' : '') +
     (missing ? '<span class="dotsep">·</span><span class="num nodata" title="' + esc(T('missingTitle')) + '">' + esc(T('missingN', { n: missing })) + '</span>' : '') + '</span><span class="sp"></span>' +
     (live.length ? '<button class="btn danger sm" data-stop="' + root.id + '">' + icon('stop', 'sm') + esc(T('stop')) + '</button>' : '') +
@@ -239,11 +240,15 @@ function renderStage(){
         if (/^\S+ started: /.test(m.text)) return;
         if (m.meta && m.meta.gate) {
           var g = m.meta.gate, gi = g === 'pass' ? 'check' : g === 'retry' ? 'refresh' : 'stop';
-          var gd = gateDetail(m.meta.detail);
+          var gd = m.meta.detail;
           var gt = g === 'pass' ? T('gatePass', { s: m.meta.stepTitle, d: gd })
             : g === 'retry' ? T('gateRetry', { s: m.meta.stepTitle, d: gd, g: m.meta.goto, r: m.meta.round, n: m.meta.max })
             : T('gateStop', { s: m.meta.stepTitle, d: gd });
           body += '<div class="notice gate ' + g + '">' + icon(gi, 'sm') + '<span>' + esc(gt) + '</span></div>';
+          return;
+        }
+        if (m.meta && m.meta.budget) {
+          body += '<div class="notice bad budget">' + icon('alert', 'sm') + '<span>' + esc(String(m.text).replace(/^dispatch refused: /, '')) + '</span></div>';
           return;
         }
         if (m.meta && m.meta.flow && m.meta.steps) {
@@ -510,14 +515,21 @@ function showAgentPopover(query, mode){
   el.hidden = false;
   el.style.left = '8px'; el.style.bottom = 'calc(100% + 8px)';
 }
-/* The hub words gate verdicts in English; say them in the hub's language. */
-function gateDetail(d){
-  d = String(d || '');
-  if (LANG !== 'vi') return d;
-  return d.replace(/^no score found \(expected (.*)\)$/, 'không thấy điểm (cần $1)')
-    .replace(/^score /, 'điểm ')
-    .replace(/^starts with "(.*)", expected (.*)$/, function(_, a, b){ return 'mở đầu bằng "' + a + '", cần ' + b.replace(/ or /g, ' hoặc '); })
-    .replace(/^starts with /, 'mở đầu bằng ');
+/* The budget of the request that is still running, as "used/limit" for each limit that is on. */
+function budgetPill(budgets){
+  var b = (budgets || []).filter(function(x){ return x.live; }).pop();
+  if (!b) return '';
+  var parts = [], hot = false;
+  function add(used, limit, fmt, unit){
+    if (!limit) return;
+    if (used / limit >= 0.8) hot = true;
+    parts.push(fmt(used) + '/' + fmt(limit) + ' ' + unit);
+  }
+  add(b.used.runs, b.limit.runs, String, T('bRunsU'));
+  add(b.used.outputTokens, b.limit.outputTokens, toks, T('tokOut'));
+  add(Math.floor(b.used.minutes), b.limit.minutes, String, T('bMinU'));
+  if (!parts.length) return '';
+  return '<span class="dotsep">·</span><span class="pill budget' + (hot ? ' hot' : '') + '" title="' + esc(T('budgetTitle')) + '">' + icon('clock', 'sm') + esc(parts.join(' · ')) + '</span>';
 }
 /* Flows are started, not replied to: offer them only for a new conversation. */
 function flowOptions(q){

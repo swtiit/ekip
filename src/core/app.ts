@@ -143,6 +143,18 @@ export function appHtml(): string {
       </div>
 
       <div class="section">
+        <div class="section-hd"><h2 data-t="budget">Budget per request</h2></div>
+        <div class="panel pad">
+          <div class="budget-row">
+            <div class="bfield"><label for="budget-runs" data-t="bRuns">Worker runs</label><select class="field" id="budget-runs" data-budget="runs"></select></div>
+            <div class="bfield"><label for="budget-tokens" data-t="bTokens">Output tokens</label><select class="field" id="budget-tokens" data-budget="outputTokens"></select></div>
+            <div class="bfield"><label for="budget-minutes" data-t="bMinutes">Minutes</label><select class="field" id="budget-minutes" data-budget="minutes"></select></div>
+          </div>
+          <p class="muted budget-note" data-t="budgetS"></p>
+        </div>
+      </div>
+
+      <div class="section">
         <div class="section-hd"><h2 data-t="roster">Members</h2></div>
         <div class="panel pad explain" id="roles-explain"></div>
         <div class="roster" id="roster"></div>
