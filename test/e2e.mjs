@@ -129,6 +129,24 @@ async function mcp(method, params) {
   }
   return text ? JSON.parse(text) : undefined;
 }
+async function openSession() {
+  let sid;
+  let seq = 1000;
+  const call = async (method, params) => {
+    const res = await fetch(`${BASE}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...(sid ? { "mcp-session-id": sid } : {}) },
+      body: JSON.stringify({ jsonrpc: "2.0", id: seq++, method, params }),
+    });
+    sid = res.headers.get("mcp-session-id") ?? sid;
+    const text = await res.text();
+    const data = text.split("\n").filter((l) => l.startsWith("data:"));
+    return data.length ? JSON.parse(data[data.length - 1].slice(5).trim()) : text ? JSON.parse(text) : undefined;
+  };
+  await call("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "scoped", version: "0" } });
+  await fetch(`${BASE}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-session-id": sid }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
+  return async (name, args) => JSON.parse((await call("tools/call", { name, arguments: args })).result.content[0].text);
+}
 const tool = async (name, args) => {
   const msg = await mcp("tools/call", { name, arguments: args });
   return JSON.parse(msg.result.content[0].text);
@@ -181,6 +199,7 @@ try {
     t("worker prompt carries the language instruction", /Write in Vietnamese/.test(promptSeen), promptSeen.slice(0, 120));
     t("worker prompt still carries the task", /lang-probe|p$/m.test(promptSeen));
     t("worker is told its own name and job", /You are the agent "echoer" \(Người nhắc lại\)/.test(promptSeen) && /Your part in the crew: Ghi lại đúng prompt/.test(promptSeen));
+    t("worker is told its folder and to stay in it", promptSeen.includes(`Working folder: ${TMP}`) && /Stay inside it/.test(promptSeen));
     t("worker is told who else is on the crew", /Your crew/.test(promptSeen) && /- mock: command agent/.test(promptSeen) && !/- echoer/.test(promptSeen));
   }
   const langOff = await (await post("/api/config/hub", { language: "" })).json();
@@ -456,6 +475,7 @@ try {
     kinds.join(" | "));
   const toolMsg = th.messages.find((m) => m.kind === "tool");
   t("tool line summarizes the command", /^Bash\s+echo probe-ok/.test(toolMsg?.text ?? "") && toolMsg.meta.input.command === "echo probe-ok", toolMsg?.text);
+  t("an out-of-folder tool call is flagged in the thread", th.messages.some((m) => m.kind === "system" && m.meta?.guard && m.meta.path === "/etc/hosts"));
   t("non-json stdout lines are ignored", !th.messages.some((m) => /hook chatter/.test(m.text)));
   t("stdout still lands in the log", (await (await fetch(`${BASE}/api/logs/${conv.task.id}`)).text()).includes("hook chatter"));
 
@@ -518,6 +538,62 @@ try {
     const forced = await (await post("/api/threads/delete", { id: busy.task.id, stop: true })).json();
     await sleep(400);
     t("stop + delete kills the worker and removes it", forced.deleted === 1 && !isAlive(busyPid) && !(await taskById(busy.task.id)));
+  }
+
+  // ---- folder guard: decisions and the Claude hook ----
+  {
+    const { checkToolCall } = await import("../dist/guard/scope.js");
+    const A = join(TMP, "guard-a"), B = join(TMP, "guard-b");
+    mkdirSync(A, { recursive: true }); mkdirSync(B, { recursive: true });
+    const v = (tool, input) => checkToolCall(A, A, tool, input).ok;
+    t("guard allows files inside the folder", v("Write", { file_path: join(A, "x.txt") }) && v("Edit", { file_path: "src/y.ts" }) && v("Bash", { command: "node x.js && npm test" }));
+    t("guard blocks another folder", !v("Read", { file_path: join(B, "secret.txt") }) && !v("Write", { file_path: join(B, "x") }) && !v("Grep", { pattern: "a", path: B }));
+    t("guard blocks escapes and home", !v("Read", { file_path: "../guard-b/s.txt" }) && !v("Bash", { command: "cd ../guard-b && ls" }) && !v("Bash", { command: "cat ~/.ssh/id_rsa" }));
+    t("guard leaves system tools alone", v("Bash", { command: "/usr/bin/env node -v > /dev/null" }));
+    const hook = (input) => new Promise((resolveHook) => {
+      const child = execFile(process.execPath, [join(REPO, "dist/guard/scope-hook.js")], { env: { ...process.env, EKIP_SCOPE: A } }, (err, _out, errOut) => resolveHook({ code: err ? err.code : 0, errOut }));
+      child.stdin.end(JSON.stringify(input));
+    });
+    const blocked = await hook({ tool_name: "Write", tool_input: { file_path: join(B, "HACK.txt") }, cwd: A });
+    t("hook exits 2 with a reason for the model", blocked.code === 2 && /outside this conversation's folder/.test(blocked.errOut));
+    t("hook lets inside work through", (await hook({ tool_name: "Write", tool_input: { file_path: join(A, "ok.txt") }, cwd: A })).code === 0);
+  }
+
+  // ---- one blackboard per folder ----
+  {
+    const FA = join(TMP, "bb-a"), FB = join(TMP, "bb-b");
+    mkdirSync(FA, { recursive: true }); mkdirSync(FB, { recursive: true });
+    const ta = (await (await post("/api/delegate", { to: "modeled", prompt: "a", title: "bb-a", cwd: FA })).json()).task;
+    const tb = (await (await post("/api/delegate", { to: "modeled", prompt: "b", title: "bb-b", cwd: FB })).json()).task;
+    const runA = await openSession(), runB = await openSession();
+    await runA("bridge_claim", { as: "modeled", task_id: ta.id });
+    await runB("bridge_claim", { as: "modeled", task_id: tb.id });
+    await runA("bridge_context_set", { key: "plan.v1", value: "plan for A", by: "modeled" });
+    t("another folder's run does not see the key", (await runB("bridge_context_get", { key: "plan.v1" })).entry === null);
+    await runB("bridge_context_set", { key: "plan.v1", value: "plan for B", by: "modeled" });
+    t("same key, separate values per folder", (await runA("bridge_context_get", { key: "plan.v1" })).entry?.value === "plan for A" && (await runB("bridge_context_get", { key: "plan.v1" })).entry?.value === "plan for B");
+    t("listing is per folder too", (await runA("bridge_context_get", {})).context.every((c) => c.folder === FA));
+    t("an explicit task_id picks that folder", (await tool("bridge_context_get", { key: "plan.v1", task_id: tb.id })).entry?.value === "plan for B");
+    const both = (await api("/api/state")).context.filter((c) => c.key === "plan.v1");
+    t("the app sees every folder's entries, labelled", both.length === 2 && both.some((c) => c.folder === FA) && both.some((c) => c.folder === FB));
+    await post("/api/context", { key: "note", value: "from the app", by: "human", folder: FA });
+    t("the app writes into a chosen folder", (await runA("bridge_context_get", { key: "note" })).entry?.value === "from the app" && (await runB("bridge_context_get", { key: "note" })).entry === null);
+    t("home entries stay unscoped", (await api("/api/state")).context.some((c) => c.key === "e2e.obj" && !c.folder));
+  }
+
+  // ---- parallel slots are per folder ----
+  {
+    const SA = join(TMP, "slot-a"), SB = join(TMP, "slot-b");
+    mkdirSync(SA, { recursive: true }); mkdirSync(SB, { recursive: true });
+    const a1 = await (await post("/api/delegate", { to: "serial", prompt: "p", title: "slot-a1", cwd: SA })).json();
+    const b1 = await (await post("/api/delegate", { to: "serial", prompt: "p", title: "slot-b1", cwd: SB })).json();
+    const a2 = await (await post("/api/delegate", { to: "serial", prompt: "p", title: "slot-a2", cwd: SA })).json();
+    t("a busy folder doesn't queue another folder's work", a1.dispatch.spawned === true && b1.dispatch.spawned === true, JSON.stringify([a1.dispatch, b1.dispatch]));
+    t("the cap still applies within a folder", a2.dispatch.queued === true, JSON.stringify(a2.dispatch));
+    t("workers report their folder", (await api("/api/state")).workers.running.some((w) => w.folder === SB));
+    await until(async () => (await taskById(a2.task.id))?.dispatchedAt, 8000);
+    const limits2 = await api("/api/limits");
+    t("limits show per-folder and total caps", typeof limits2.maxConcurrentTotal === "number" && limits2.folderGuard === true);
   }
 
   // ---- maxConcurrent: per-agent cap queues the overflow ----

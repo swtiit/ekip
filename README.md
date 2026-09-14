@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-164_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-183_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -199,10 +199,18 @@ The examples ship a field-tested crew and flow:
   hub has seen running here.
 - `spawnable: false` registers an agent that polls (`bridge_claim`) instead
   of being auto-launched — e.g. a session you drive interactively.
-- **`maxConcurrent`** caps how many workers run at once, hub-wide (default
-  4) and per agent (`"maxConcurrent": 1` on an agent entry). Delegations past
-  the cap queue and launch FIFO as slots free — so a runaway conductor can't
-  fork ten Opus runs into your quota.
+- **`maxConcurrent`** caps how many workers run at once **per folder**
+  (default 4) and per agent within a folder (`"maxConcurrent": 1` on an agent
+  entry); **`maxConcurrentTotal`** is the ceiling across all folders (default
+  8). Delegations past a cap queue and launch FIFO as slots free — so a
+  runaway conductor can't fork ten Opus runs into your quota, and a busy
+  project doesn't stall another.
+- **Folders.** Each conversation works in the folder it was started in, and
+  each folder has its own blackboard. **`folderGuard`** (default `true`) tells
+  every run its folder and, for Claude runs, adds a PreToolUse hook that
+  blocks any file, search or shell access outside it — field-tested: without
+  it, a headless `claude -p` read and wrote a sibling project freely.
+  Antigravity has no such hook, so Gemini runs get the instruction only.
 - **`retention.days`** drops finished tasks and their spawn logs after that
   many days (default 14; `0` keeps everything).
 - **`language`** (e.g. `"Vietnamese"`) tells every spawned agent to write its

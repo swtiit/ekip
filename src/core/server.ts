@@ -11,6 +11,7 @@ import type { BridgeConfig } from "./config.js";
 import {
   CONFIG_FILENAME,
   DEFAULT_MAX_CONCURRENT,
+  DEFAULT_MAX_CONCURRENT_TOTAL,
   RETENTION_DEFAULTS,
   WATCHDOG_DEFAULTS,
   getAgentFlag,
@@ -229,13 +230,22 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   }
 
   async function handleContext(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const { key, value, by } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    const { key, value, by, folder } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
     if (typeof key !== "string" || !key) {
       sendJson(res, 400, { error: "`key` is required" });
       return;
     }
+    let scope: string | undefined;
+    if (typeof folder === "string" && folder && folder !== config.projectRoot) {
+      const checked = checkFolder(folder);
+      if (typeof checked !== "string") {
+        sendJson(res, 400, { error: checked.error });
+        return;
+      }
+      scope = checked === config.projectRoot ? undefined : checked;
+    }
     sendJson(res, 200, {
-      entry: store.setContext(key, value, typeof by === "string" && by ? by : "human"),
+      entry: store.setContext(key, value, typeof by === "string" && by ? by : "human", scope),
     });
   }
 
@@ -570,7 +580,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
             language: config.language ?? null,
             agents: config.agents.map(describeAgent),
             tasks: store.listTasks(),
-            context: store.listContext(),
+            context: store.listContext("*"),
             workers: dispatcher.status(),
           });
         case "GET /api/events":
@@ -585,6 +595,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return sendJson(res, 200, {
             language: config.language ?? null,
             maxConcurrent: config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT,
+            maxConcurrentTotal: config.maxConcurrentTotal ?? DEFAULT_MAX_CONCURRENT_TOTAL,
+            folderGuard: config.folderGuard !== false,
             maxDepth: config.maxDepth ?? 6,
             watchdog: { ...WATCHDOG_DEFAULTS, ...config.watchdog },
             retention: { days: retentionDays },

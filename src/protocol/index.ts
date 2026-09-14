@@ -109,6 +109,12 @@ export interface Message {
 
 export interface ContextEntry {
   key: string;
+  /**
+   * Folder this entry belongs to. Each conversation's folder has its own
+   * blackboard, so the same key in two projects never collides. Absent means
+   * the hub's own project folder.
+   */
+  folder?: string;
   value: unknown;
   /** agent name that last wrote this key */
   updatedBy: string;

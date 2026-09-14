@@ -29,6 +29,8 @@ export interface SpawnRequest {
    * whatever folder the work runs in, so adapters should use this when set.
    */
   logFile?: string;
+  /** folder the run must stay inside; adapters that can enforce it should */
+  scope?: string;
   /** called once when the spawned process ends (or fails to start) */
   onExit?: (exit: WorkerExit) => void;
   /** called as the worker speaks / acts, when the adapter can decode its output */

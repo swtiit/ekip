@@ -105,11 +105,12 @@ export function appHtml(): string {
       <div class="board-body" id="board-body">
         <div class="lanes" id="lanes"></div>
         <aside class="bb">
-          <div class="hd"><svg class="ico sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><b data-t="blackboard">Blackboard</b><span class="chip" id="bb-count"></span></div>
+          <div class="hd"><svg class="ico sm" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><b data-t="blackboard">Blackboard</b><span class="chip" id="bb-count"></span><span class="bb-scope" id="bb-scope"></span></div>
           <div class="items" id="bb-items"></div>
           <form id="bb-form">
             <input class="field" id="bb-key" data-tp="key" placeholder="key" required>
             <textarea class="field" id="bb-value" rows="3" data-tp="value" placeholder="value" required></textarea>
+            <div class="bb-form-folder" id="bb-form-folder"></div>
             <button class="btn quiet" type="submit" data-t="setKey">Set key</button>
           </form>
         </aside>
@@ -178,6 +179,15 @@ export function appHtml(): string {
     </div>
     <div class="mf"><button type="button" class="btn quiet" id="m-cancel" data-t="cancel">Cancel</button><button type="submit" class="btn primary" data-t="send">Send</button></div>
   </form>
+</div>
+
+<div class="modal dialog" id="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-title">
+  <div class="dlg-body">
+    <div class="dlg-icon" id="dlg-icon"></div>
+    <div class="dlg-text"><div class="dlg-title" id="dlg-title"></div><div class="dlg-msg" id="dlg-msg"></div>
+      <input class="field" id="dlg-input" hidden></div>
+  </div>
+  <div class="mf"><button type="button" class="btn quiet" id="dlg-cancel"></button><button type="button" class="btn primary" id="dlg-ok"></button></div>
 </div>
 
 <div class="modal browse" id="browse" role="dialog" aria-modal="true">

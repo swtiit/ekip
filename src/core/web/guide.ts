@@ -183,6 +183,9 @@ function doc(lang: Lang): string {
 <li><b>Chọn folder trước khi gửi.</b> Ở hội thoại mới, bấm nút folder cạnh người nhận: chọn folder gần đây, hoặc <b>Chọn folder khác…</b> để duyệt thư mục trên máy. Folder có <code>.git</code>, <code>package.json</code>… được đánh dấu "dự án".</li>
 <li><b>Hội thoại giữ nguyên folder.</b> Trả lời tiếp, hay việc agent giao cho nhau bên trong, đều làm trong folder đó.</li>
 <li><b>Sidebar gom theo folder.</b> Folder có việc đang chạy nổi lên đầu; nút <kbd>+</kbd> trên mỗi nhóm mở hội thoại mới ngay trong folder đó; bấm tên nhóm để thu gọn.</li>
+<li><b>Agent chỉ làm trong folder đó.</b> Mỗi lượt chạy được dặn rõ folder làm việc. Với Claude, ekip gắn thêm một hàng rào: mọi lần đọc, ghi, tìm file hay chạy lệnh chạm tới folder khác đều bị chặn và báo lại cho agent, transcript hiện dòng cảnh báo. Với Gemini, Antigravity không có cơ chế chặn tương tự nên chỉ dựa vào lời dặn.</li>
+<li><b>Mỗi folder một bảng đen riêng.</b> Khoá <code>plan.v1</code> ở dự án A và dự án B là hai giá trị khác nhau, không lẫn vào nhau. Bảng việc hiển thị bảng đen của folder đang lọc.</li>
+<li><b>Giới hạn song song tính theo từng folder</b>, nên một dự án bận không bắt dự án khác phải xếp hàng; vẫn có một trần chung cho cả hub để giữ quota.</li>
 <li><b>Ê-kíp, log và lịch sử vẫn ở hub</b> — không rải file vào dự án. Bảng việc lọc được theo folder.</li>
 </ul>`),
         sec("life", "Vòng đời một việc", `
@@ -265,6 +268,9 @@ ${crewSlot()}`),
 <li><b>Pick the folder before you send.</b> In a new conversation, press the folder button next to the recipient: choose a recent folder, or <b>Choose another folder…</b> to browse your disk. Folders with <code>.git</code>, <code>package.json</code>… are marked as projects.</li>
 <li><b>A conversation keeps its folder.</b> Replies, and work agents hand to each other inside it, all happen there.</li>
 <li><b>The sidebar groups by folder.</b> Folders with running work rise to the top; the <kbd>+</kbd> on a group starts a conversation right in that folder; click a group's name to fold it.</li>
+<li><b>Agents stay inside that folder.</b> Every run is told its working folder. For Claude, ekip adds a guard: any read, write, search or command that reaches another folder is blocked and explained to the agent, and the transcript shows a warning. Antigravity has no equivalent hook, so Gemini runs rely on the instruction alone.</li>
+<li><b>Each folder has its own blackboard.</b> <code>plan.v1</code> in project A and in project B are different values that never mix. Board shows the blackboard of the folder you filter by.</li>
+<li><b>Parallel limits count per folder</b>, so a busy project doesn't make another one wait; a ceiling across the whole hub still guards your quota.</li>
 <li><b>The crew, logs and history stay with the hub</b> — nothing is sprinkled into your projects. Board can filter by folder.</li>
 </ul>`),
         sec("life", "The life of a task", `

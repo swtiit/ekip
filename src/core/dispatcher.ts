@@ -4,7 +4,8 @@ import { DEFAULT_MAX_DEPTH, isTerminal } from "../protocol/index.js";
 import { getAdapter } from "../adapters/index.js";
 import type { WorkerEvent, WorkerExit } from "../adapters/index.js";
 import type { AgentConfig, BridgeConfig } from "./config.js";
-import { DEFAULT_MAX_CONCURRENT, hubUrl, resolveRoleFile } from "./config.js";
+import { DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_CONCURRENT_TOTAL, hubUrl, resolveRoleFile } from "./config.js";
+import { checkToolCall } from "../guard/scope.js";
 import { spawnLogHint, spawnLogPath } from "./logs.js";
 import { recordSeenModel } from "./models.js";
 import type { Store } from "./store.js";
@@ -21,6 +22,8 @@ interface RunningWorker {
   taskId: string;
   agent: string;
   pid: number;
+  /** folder the worker runs in */
+  folder: string;
 }
 
 /** How long after a worker exits we wait for an in-flight post_result before failing the task. */
@@ -93,6 +96,15 @@ export class Dispatcher {
     ];
   }
 
+  /** The folder a task works in (its own, or the hub's project). */
+  folderOf(task: Task): string {
+    return task.cwd ?? this.config.projectRoot;
+  }
+
+  private guardOn(): boolean {
+    return this.config.folderGuard !== false;
+  }
+
   private buildBootstrap(task: Task, role?: string): string {
     const header = role
       ? [`[Standing role instructions for "${task.to}"]`, role, "", "---", ""]
@@ -109,6 +121,12 @@ export class Dispatcher {
       `3. When finished, call \`bridge_post_result\` with { task_id: "${task.id}", status: "done", result: "<summary>" }. Use status "failed" if you could not complete it.`,
       `You may read/write shared context with \`bridge_context_get\` / \`bridge_context_set\`, and delegate sub-tasks with \`bridge_delegate\`.`,
       ...this.crewLines(task.to),
+      ...(this.guardOn()
+        ? [
+            `Working folder: ${this.folderOf(task)}`,
+            `Stay inside it. Read, search, create and change files only under this folder, and run commands from it. Do not look into or modify any other folder. If the task truly needs something outside it, stop and explain that in bridge_post_result instead.`,
+          ]
+        : []),
       ...(this.config.language
         ? [
             `Write in ${this.config.language}: everything you say, every bridge_say note, and your bridge_post_result summary. Code, file names, commands and identifiers stay as they are.`,
@@ -143,6 +161,20 @@ export class Dispatcher {
         text: summarizeToolInput(event.name, event.input),
         meta: { tool: event.name, input: event.input },
       });
+      const task = this.store.getTask(taskId);
+      if (task && this.guardOn()) {
+        const folder = this.folderOf(task);
+        const verdict = checkToolCall(folder, folder, event.name, event.input);
+        if (!verdict.ok) {
+          this.store.addMessage({
+            taskId,
+            from: "hub",
+            kind: "system",
+            text: `blocked outside the folder: ${event.name} → ${verdict.path}`,
+            meta: { guard: true, path: verdict.path, folder },
+          });
+        }
+      }
     } else if (event.kind === "model") {
       recordSeenModel(event.model);
       const task = this.store.getTask(taskId);
@@ -155,16 +187,24 @@ export class Dispatcher {
     }
   }
 
-  private runningFor(agent: string): number {
-    let n = 0;
-    for (const w of this.running.values()) if (w.agent === agent) n++;
-    return n;
-  }
-
-  private hasSlot(agent: AgentConfig): boolean {
-    const hubCap = this.config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
-    if (this.running.size >= hubCap) return false;
-    if (agent.maxConcurrent !== undefined && this.runningFor(agent.name) >= agent.maxConcurrent) return false;
+  /**
+   * Slots are counted per folder, so a busy project doesn't queue another
+   * one's work; a ceiling across all folders still guards the quota. A
+   * member's own cap also applies per folder.
+   */
+  private hasSlot(agent: AgentConfig, task: Task): boolean {
+    const total = this.config.maxConcurrentTotal ?? DEFAULT_MAX_CONCURRENT_TOTAL;
+    if (this.running.size >= total) return false;
+    const folder = this.folderOf(task);
+    let inFolder = 0;
+    let agentInFolder = 0;
+    for (const w of this.running.values()) {
+      if (w.folder !== folder) continue;
+      inFolder++;
+      if (w.agent === agent.name) agentInFolder++;
+    }
+    if (inFolder >= (this.config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT)) return false;
+    if (agent.maxConcurrent !== undefined && agentInFolder >= agent.maxConcurrent) return false;
     return true;
   }
 
@@ -186,7 +226,7 @@ export class Dispatcher {
       return this.refuse(task, `no adapter "${agent.adapter}" registered for agent "${task.to}"`);
     }
 
-    if (!this.hasSlot(agent)) {
+    if (!this.hasSlot(agent, task)) {
       this.queue.push(task);
       this.store.addMessage({
         taskId: task.id,
@@ -217,6 +257,7 @@ export class Dispatcher {
       depth: task.depth,
       extraArgs: agent.args,
       command: agent.command,
+      scope: this.guardOn() ? this.folderOf(task) : undefined,
       onExit: (exit) => this.onWorkerExit(task.id, agent.name, exit),
       onEvent: (event) => this.onWorkerEvent(task.id, agent.name, event),
     });
@@ -225,7 +266,7 @@ export class Dispatcher {
       return this.refuse(task, result.detail ?? "adapter did not launch the worker");
     }
     if (result.pid !== undefined) {
-      this.running.set(task.id, { taskId: task.id, agent: agent.name, pid: result.pid });
+      this.running.set(task.id, { taskId: task.id, agent: agent.name, pid: result.pid, folder: this.folderOf(task) });
     }
     this.store.updateTask(task.id, { dispatchedAt: new Date().toISOString(), pid: result.pid }, { touch: false });
     return { spawned: true, detail: result.detail };
@@ -286,7 +327,7 @@ export class Dispatcher {
         continue;
       }
       const agent = this.config.agents.find((a) => a.name === task.to);
-      if (!agent || !this.hasSlot(agent)) {
+      if (!agent || !this.hasSlot(agent, current)) {
         i++;
         continue;
       }

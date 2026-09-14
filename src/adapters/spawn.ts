@@ -86,6 +86,7 @@ export function bridgeEnv(req: {
   agentName: string;
   taskId: string;
   depth: number;
+  scope?: string;
 }): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -93,5 +94,6 @@ export function bridgeEnv(req: {
     EKIP_AGENT: req.agentName,
     EKIP_TASK: req.taskId,
     EKIP_DEPTH: String(req.depth),
+    ...(req.scope ? { EKIP_SCOPE: req.scope } : {}),
   };
 }

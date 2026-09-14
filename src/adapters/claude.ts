@@ -1,4 +1,9 @@
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { GUARDED_TOOLS } from "../guard/scope.js";
+
+/** The PreToolUse hook that keeps a run inside its folder (see guard/scope-hook.ts). */
+const SCOPE_HOOK = fileURLToPath(new URL("../guard/scope-hook.js", import.meta.url));
 import type { Adapter, SpawnRequest, SpawnResult, WorkerEvent } from "./index.js";
 import { bridgeEnv, launchDetached } from "./spawn.js";
 
@@ -44,6 +49,24 @@ export const claudeAdapter: Adapter = {
       "--output-format",
       "stream-json",
       "--verbose",
+      // Folder confinement. Nothing in the CLI keeps a run inside its working
+      // directory (field-tested: it read and wrote a sibling project), so a
+      // hook checks every file and shell tool call against EKIP_SCOPE.
+      ...(req.scope
+        ? [
+            "--settings",
+            JSON.stringify({
+              hooks: {
+                PreToolUse: [
+                  {
+                    matcher: GUARDED_TOOLS.join("|"),
+                    hooks: [{ type: "command", command: `"${process.execPath}" "${SCOPE_HOOK}"` }],
+                  },
+                ],
+              },
+            }),
+          ]
+        : []),
       ...(req.extraArgs ?? []),
     ];
     return launchDetached({

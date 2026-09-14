@@ -20,6 +20,33 @@ export function buildHub(
   store: Store,
   dispatcher: Dispatcher,
 ): McpServer {
+  /**
+   * One MCP session serves one agent run, so the folder of the task it claims
+   * (or delegates from) tells us which folder's blackboard it should see.
+   */
+  let sessionFolder: string | undefined;
+  let sessionKnown = false;
+  const folderKeyOf = (taskId?: string): string | undefined => {
+    const t = taskId ? store.getTask(taskId) : undefined;
+    return t?.cwd && t.cwd !== config.projectRoot ? t.cwd : undefined;
+  };
+  const remember = (taskId?: string) => {
+    if (!taskId || !store.getTask(taskId)) return;
+    sessionFolder = folderKeyOf(taskId);
+    sessionKnown = true;
+  };
+  /** A `task_id` argument wins; otherwise the session's own task; otherwise the agent's single running task. */
+  const scopeFor = (taskId?: string, agent?: string): string | undefined => {
+    if (taskId && store.getTask(taskId)) return folderKeyOf(taskId);
+    if (sessionKnown) return sessionFolder;
+    if (agent) {
+      const mine = store.listTasks({ to: agent, status: "claimed" });
+      const folders = new Set(mine.map((t) => folderKeyOf(t.id) ?? ""));
+      if (folders.size === 1) return [...folders][0] || undefined;
+    }
+    return undefined;
+  };
+
   const server = new McpServer({
     name: "ekip",
     version: PROTOCOL_VERSION,
@@ -59,6 +86,7 @@ export function buildHub(
         // Work handed out inside a conversation stays in its folder.
         cwd: parent?.cwd,
       });
+      if (parent_task_id) remember(parent_task_id);
       store.addMessage({ taskId: task.id, from, to, kind: "agent", text: prompt, meta: { delegation: true, title } });
       const outcome = await dispatcher.dispatch(task);
       return jsonText({ task_id: task.id, status: task.status, dispatch: outcome });
@@ -96,6 +124,7 @@ export function buildHub(
       }
       if (!task) return jsonText({ task: null });
       store.updateTask(task.id, { status: "claimed" });
+      remember(task.id);
       store.addMessage({ taskId: task.id, from: as, kind: "system", text: `${as} started: ${task.title}` });
       return jsonText({ task: store.getTask(task.id) });
     },
@@ -256,26 +285,31 @@ export function buildHub(
     "bridge_context_set",
     {
       title: "Write shared context",
-      description: "Store a value on the shared blackboard both agents can read.",
+      description: "Store a value on the blackboard of the folder you are working in. Other runs in the same folder can read it; other folders cannot.",
       inputSchema: {
         key: z.string(),
         value: z.unknown(),
         by: z.string().describe("your own agent name"),
+        task_id: z.string().optional().describe("the task you are working on — picks its folder's blackboard"),
       },
     },
-    async ({ key, value, by }) => jsonText({ entry: store.setContext(key, value, by) }),
+    async ({ key, value, by, task_id }) => jsonText({ entry: store.setContext(key, value, by, scopeFor(task_id, by)) }),
   );
 
   server.registerTool(
     "bridge_context_get",
     {
       title: "Read shared context",
-      description: "Read one key, or omit `key` to list all shared context.",
-      inputSchema: { key: z.string().optional() },
+      description: "Read one key from the blackboard of the folder you are working in, or omit `key` to list that blackboard.",
+      inputSchema: {
+        key: z.string().optional(),
+        task_id: z.string().optional().describe("the task you are working on — picks its folder's blackboard"),
+      },
     },
-    async ({ key }) => {
-      if (key) return jsonText({ entry: store.getContext(key) ?? null });
-      return jsonText({ context: store.listContext() });
+    async ({ key, task_id }) => {
+      const folder = scopeFor(task_id);
+      if (key) return jsonText({ entry: store.getContext(key, folder) ?? null });
+      return jsonText({ context: store.listContext(folder) });
     },
   );
 
@@ -289,7 +323,7 @@ export function buildHub(
         {
           uri: "bridge://context",
           mimeType: "application/json",
-          text: JSON.stringify(store.listContext(), null, 2),
+          text: JSON.stringify(store.listContext(scopeFor()), null, 2),
         },
       ],
     }),

@@ -42,7 +42,7 @@ export class Store extends EventEmitter {
     try {
       const data = JSON.parse(readFileSync(path, "utf8")) as BridgeState;
       for (const t of data.tasks ?? []) this.tasks.set(t.id, t);
-      for (const c of data.context ?? []) this.context.set(c.key, c);
+      for (const c of data.context ?? []) this.context.set(Store.ctxKey(c.folder, c.key), c);
       for (const m of data.messages ?? []) this.threadMessages(m.threadId).push(m);
       this.folders = Array.isArray(data.folders) ? data.folders.filter((f) => typeof f === "string") : [];
     } catch {
@@ -233,25 +233,36 @@ export class Store extends EventEmitter {
     return removed;
   }
 
-  setContext(key: string, value: unknown, updatedBy: string): ContextEntry {
+  private static ctxKey(folder: string | undefined, key: string): string {
+    return `${folder ?? ""}\u0000${key}`;
+  }
+
+  /**
+   * Write a blackboard entry. `folder` scopes it (undefined = the hub's own
+   * project), so conversations in different projects never see each other's keys.
+   */
+  setContext(key: string, value: unknown, updatedBy: string, folder?: string): ContextEntry {
     const entry: ContextEntry = {
+      ...(folder ? { folder } : {}),
       key,
       value,
       updatedBy,
       updatedAt: new Date().toISOString(),
     };
-    this.context.set(key, entry);
+    this.context.set(Store.ctxKey(folder, key), entry);
     this.persist();
     this.emit("change", { kind: "context", key });
     return entry;
   }
 
-  getContext(key: string): ContextEntry | undefined {
-    return this.context.get(key);
+  getContext(key: string, folder?: string): ContextEntry | undefined {
+    return this.context.get(Store.ctxKey(folder, key));
   }
 
-  listContext(): ContextEntry[] {
-    return [...this.context.values()];
+  /** Entries of one folder's blackboard; pass `"*"` for every folder. */
+  listContext(folder?: string): ContextEntry[] {
+    const all = [...this.context.values()];
+    return folder === "*" ? all : all.filter((c) => (c.folder ?? undefined) === folder);
   }
 }
 

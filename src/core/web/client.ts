@@ -64,6 +64,10 @@ function icon(name, cls){ return '<svg class="ico' + (cls ? ' ' + cls : '') + '"
 /* ================= language ================= */
 var DICT = {
   en: {
+    ok:'OK', save:'Save', delete:'Delete', deleteTitle:'Delete this conversation?', deleteBody:'Its {n} task(s), transcript and logs will be removed for good. This cannot be undone.', stopAndDelete:'Stop and delete', stopTitle:'Stop this work?',
+    showMore:'Show {n} more', showLess:'Show less', allFolders:'All folders', bbWritesTo:'Writes to the {f} blackboard',
+    lWorkersTotal:'workers across all folders', lGuard:'keep agents inside their folder', on:'On', off:'Off',
+    guardBlocked:'Blocked — outside this conversation’s folder:',
     tokOut:'tokens out', tokOutL:'Tokens written', tokRead:'read from cache', tokWrite:'written to cache', tokFresh:'fresh input', costRef:'at API prices',
     outTokTitle:'Tokens the model wrote. Input — mostly cache reads — is broken down per task in Board.',
     tokBarTitle:'Where this run’s tokens went. Cache reads cost a tenth of fresh input; cache writes cost more than fresh input.',
@@ -91,7 +95,7 @@ var DICT = {
     exId:'@id — the address', exIdS:'What agents write to hand each other work. Keep it short; changing it breaks old hand-offs.',
     exJob:'Name and job — the meaning', exJobS:'Shown to you here, and told to every agent so each one knows whom to ask for what.',
     exBrief:'Role brief — the standing orders', exBriefS:'A markdown file loaded at the start of every run: rules, checklists, what “done” means.', model:'Model', effort:'Effort', parallel:'Parallel', auto:'Auto-launch', hubLimit:'hub limit', adapterDef:'adapter default', custom:'Type another id…',
-    limits:'Hub limits', limitsS:'Edit these in ekip.config.json.', lWorkers:'workers at once', lDepth:'delegation depth', lWait:'max wait to be picked up', lKeep:'days finished tasks are kept',
+    limits:'Hub limits', limitsS:'Edit these in ekip.config.json.', lWorkers:'workers at once per folder', lDepth:'delegation depth', lWait:'max wait to be picked up', lKeep:'days finished tasks are kept',
     sources:'Where model lists come from', connect:'Connect another agent', connectS:'Point any MCP-speaking agent at this endpoint.', copied:'Copied', saved:'Saved · applies from the next task', stopped:'Stopped',
     confirmStop:'Stop this and everything handed out from it?', online:'live', offline:'offline', nobody:'All quiet', nWorking:'{n} working', delegated:'Sent to {a}',
     goTo:'Go to', chats:'Conversations', msgTo:'Message', actions:'Actions', theme:'Toggle light / dark', toggleCrew:'Show / hide crew panel', nav:'navigate', openK:'open', closeK:'close', noResults:'No results',
@@ -104,6 +108,10 @@ var DICT = {
     t_write:'wrote {f}', t_edit:'edited {f}', t_read:'read {f}', t_run:'ran {c}', t_search:'searched {q}', t_tools:'loaded its tools', t_todo:'updated its checklist', blackboardW:'the blackboard'
   },
   vi: {
+    ok:'Đồng ý', save:'Lưu', delete:'Xoá', deleteTitle:'Xoá hội thoại này?', deleteBody:'{n} việc, toàn bộ transcript và log sẽ bị xoá hẳn. Không thể hoàn tác.', stopAndDelete:'Dừng và xoá', stopTitle:'Dừng việc này?',
+    showMore:'Xem thêm {n} hội thoại', showLess:'Thu gọn', allFolders:'Tất cả folder', bbWritesTo:'Ghi vào bảng đen của {f}',
+    lWorkersTotal:'worker cùng lúc trên mọi folder', lGuard:'giữ agent trong folder của nó', on:'Bật', off:'Tắt',
+    guardBlocked:'Đã chặn — nằm ngoài folder của hội thoại:',
     tokOut:'token ra', tokOutL:'Token model viết', tokRead:'đọc từ cache', tokWrite:'ghi vào cache', tokFresh:'đầu vào mới', costRef:'theo giá API',
     outTokTitle:'Số token model viết ra. Token đầu vào — phần lớn là đọc cache — xem chi tiết từng việc trong Bảng việc.',
     tokBarTitle:'Token của lượt chạy này đi đâu. Đọc cache chỉ tốn 1/10 giá đầu vào; ghi cache tốn hơn giá đầu vào.',
@@ -131,7 +139,7 @@ var DICT = {
     exId:'@id — địa chỉ', exIdS:'Tên agent dùng để giao việc cho nhau. Nên ngắn gọn; đổi id sẽ làm lệch các lần bàn giao cũ.',
     exJob:'Tên và việc — ý nghĩa', exJobS:'Hiện cho bạn đọc ở đây, và được báo cho mọi agent để biết nên nhờ ai làm gì.',
     exBrief:'Chỉ dẫn vai — quy tắc thường trực', exBriefS:'File markdown nạp vào đầu mỗi lần chạy: quy tắc, checklist, thế nào là xong việc.', model:'Model', effort:'Suy nghĩ', parallel:'Song song', auto:'Tự khởi chạy', hubLimit:'theo hub', adapterDef:'mặc định adapter', custom:'Nhập id khác…',
-    limits:'Giới hạn hub', limitsS:'Sửa trong ekip.config.json.', lWorkers:'worker cùng lúc', lDepth:'tầng giao việc', lWait:'chờ nhận việc tối đa', lKeep:'ngày lưu task đã xong',
+    limits:'Giới hạn hub', limitsS:'Sửa trong ekip.config.json.', lWorkers:'worker cùng lúc mỗi folder', lDepth:'tầng giao việc', lWait:'chờ nhận việc tối đa', lKeep:'ngày lưu task đã xong',
     sources:'Danh sách model lấy từ đâu', connect:'Kết nối agent khác', connectS:'Trỏ agent biết MCP vào địa chỉ này.', copied:'Đã sao chép', saved:'Đã lưu · áp dụng từ task sau', stopped:'Đã dừng',
     confirmStop:'Dừng việc này và mọi việc đã giao tiếp từ nó?', online:'trực tuyến', offline:'mất kết nối', nobody:'Không ai đang làm', nWorking:'{n} đang làm', delegated:'Đã gửi cho {a}',
     goTo:'Đi tới', chats:'Hội thoại', msgTo:'Nhắn cho', actions:'Thao tác', theme:'Đổi sáng / tối', toggleCrew:'Ẩn / hiện ê-kíp', nav:'di chuyển', openK:'mở', closeK:'đóng', noResults:'Không có kết quả',
@@ -231,7 +239,8 @@ function avatar(name, opts){
 }
 
 /* ================= state ================= */
-var S = { billing:null, folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
+var SIDEBAR_LIMIT = 10;
+var S = { expandedFolders:{}, billing:null, folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
   view:'chat', filter:'', boardFilter:'', boardAgent:'', target:null, selectedTask:null,
   openGroups:{}, openSteps:{}, sig:{} };
 function agentByName(n){ return S.state ? S.state.agents.filter(function(a){ return a.name === n; })[0] : null; }
@@ -324,7 +333,7 @@ function shortPath(path){
 function renderSide(){
   var q = fold(S.filter);
   var list = S.threads.filter(function(t){ return !q || fold(t.title + ' ' + t.to + ' ' + dn(t.to) + ' ' + base(t.cwd)).indexOf(q) >= 0; });
-  var sig = JSON.stringify([S.current, q, LANG, S.collapsed, S.folder, list.map(function(t){ return [t.id, t.status, t.messages, t.lastAt.slice(0, 16), t.cwd]; })]);
+  var sig = JSON.stringify([S.current, q, LANG, S.collapsed, S.expandedFolders, S.folder, list.map(function(t){ return [t.id, t.status, t.messages, t.lastAt.slice(0, 16), t.cwd]; })]);
   if (sig === S.sig.side) return;
   S.sig.side = sig;
   var groups = {}, order = [];
@@ -343,24 +352,30 @@ function renderSide(){
     var g = groups[k];
     var open = !S.collapsed[k] || !!q;
     g.items.sort(function(a, b){ return (isDone(a.status) - isDone(b.status)) || b.lastAt.localeCompare(a.lastAt); });
+    var selIdx = g.items.findIndex(function(t){ return t.id === S.current; });
+    if (selIdx >= SIDEBAR_LIMIT && !S.expandedFolders[k]) { var sel = g.items.splice(selIdx, 1)[0]; g.items.splice(SIDEBAR_LIMIT - 1, 0, sel); }
     return '<div class="fgroup' + (open ? ' open' : '') + '"><div class="fhead" data-toggle-folder="' + esc(k) + '" title="' + esc(k) + '">' +
       icon('chev', 'sm chev') + icon('folder', 'sm') + '<span class="fname">' + esc(folderName(k)) + '</span>' +
       (g.live ? '<span class="flive">' + g.live + '</span>' : '<span class="fcount">' + g.items.length + '</span>') +
       '<button class="btn ghost sm icon fadd" data-new-in="' + esc(k) + '" title="' + esc(T('newIn')) + '">' + icon('plus', 'sm') + '</button></div>' +
-      '<div class="fitems">' + (g.items.length ? g.items.map(function(t){
+      '<div class="fitems">' + (g.items.length ? g.items.slice(0, (S.expandedFolders[k] || q) ? g.items.length : SIDEBAR_LIMIT).map(function(t){
         var st = isDone(t.status) ? (t.status === 'done' ? '' : '<span class="state ' + t.status + '">' + esc(T(t.status)) + ' ·</span>') : '<span class="state working">' + esc(T('working')) + ' ·</span>';
         return '<div class="th' + (t.id === S.current ? ' sel' : '') + '" data-id="' + t.id + '">' +
           avatar(t.to, { live: !isDone(t.status) }) +
           '<div class="body"><div class="t">' + esc(t.title) + '</div><div class="m">' + st + '<span>' + esc(dn(t.to)) + '</span></div></div>' +
           '<span class="when">' + esc(ago(t.lastAt).replace(' ' + T('ago'), '')) + '</span>' +
           '<button class="btn ghost sm icon th-del" data-del="' + t.id + '" title="' + esc(T('deleteChat')) + '">' + icon('trash', 'sm') + '</button></div>';
-      }).join('') : '<div class="fempty">' + esc(T('noChatsHere')) + '</div>') + '</div></div>';
+      }).join('') + (!q && g.items.length > SIDEBAR_LIMIT
+        ? '<button class="more" data-more="' + esc(k) + '">' + (S.expandedFolders[k] ? icon('chev', 'sm up') + esc(T('showLess')) : icon('down', 'sm') + esc(T('showMore', { n: g.items.length - SIDEBAR_LIMIT }))) + '</button>'
+        : '') : '<div class="fempty">' + esc(T('noChatsHere')) + '</div>') + '</div></div>';
   }).join('');
   $('threads').innerHTML = html || '<div class="group-label" style="text-transform:none;letter-spacing:0">' + esc(q ? T('noResults') : T('none')) + '</div>';
 }
 $('threads').addEventListener('click', function(e){
   var del = e.target.closest('[data-del]');
   if (del) { e.stopPropagation(); deleteThread(del.getAttribute('data-del')); return; }
+  var more = e.target.closest('[data-more]');
+  if (more) { var mk = more.getAttribute('data-more'); S.expandedFolders[mk] = !S.expandedFolders[mk]; S.sig.side = ''; renderSide(); return; }
   var add = e.target.closest('[data-new-in]');
   if (add) { e.stopPropagation(); setFolder(add.getAttribute('data-new-in')); go('/chat'); setTimeout(function(){ $('text').focus(); }, 40); return; }
   var tog = e.target.closest('[data-toggle-folder]');
@@ -532,7 +547,11 @@ function renderStage(){
       flush(false);
       if (m.kind === 'system') {
         if (/^\S+ started: /.test(m.text)) return;
-        var bad = /fail|refused|exited|error|cancel/i.test(m.text);
+        var bad = /fail|refused|exited|error|cancel|blocked/i.test(m.text);
+        if (m.meta && m.meta.guard) {
+          body += '<div class="notice guard">' + icon('alert', 'sm') + '<span>' + esc(T('guardBlocked')) + ' <code>' + esc(shortPath(m.meta.path)) + '</code></span></div>';
+          return;
+        }
         body += '<div class="notice' + (bad ? ' bad' : /queued/i.test(m.text) ? ' warn' : '') + '">' + icon(bad ? 'alert' : 'clock', 'sm') + '<span>' + esc(m.text) + '</span></div>';
         return;
       }
@@ -609,6 +628,46 @@ document.addEventListener('click', function(e){
   if (starter) { var ta = $('text'); ta.value = T(starter.getAttribute('data-starter') + 'v'); autosize(); ta.focus(); return; }
   if (e.target.closest('#crew-toggle')) { toggleCrew(); return; }
 });
+/* In-app dialog in place of the browser's confirm()/prompt(): same look as the
+   rest of the app, keyboard-friendly (Enter confirms, Esc cancels), and it
+   can say what is at stake. Resolves true/false, or the typed text / null. */
+var dlg = null;
+function dialog(opts){
+  return new Promise(function(resolve){
+    if (dlg) dlg.finish(opts.input ? null : false);
+    var box = $('dialog'), input = $('dlg-input');
+    $('dlg-title').textContent = opts.title || '';
+    $('dlg-msg').innerHTML = opts.html || esc(opts.message || '');
+    $('dlg-icon').innerHTML = icon(opts.danger ? 'trash' : opts.icon || (opts.input ? 'pencil' : 'alert'));
+    $('dlg-icon').className = 'dlg-icon' + (opts.danger ? ' danger' : '');
+    $('dlg-ok').textContent = opts.ok || T('ok');
+    $('dlg-ok').className = 'btn ' + (opts.danger ? 'danger-solid' : 'primary');
+    $('dlg-cancel').textContent = opts.cancel || T('cancel');
+    input.hidden = !opts.input;
+    input.value = opts.value || '';
+    input.placeholder = opts.placeholder || '';
+    var prevFocus = document.activeElement;
+    var finish = function(result){
+      if (!dlg) return;
+      dlg = null;
+      box.classList.remove('on');
+      if (!$('drawer').classList.contains('on') && !$('palette').classList.contains('on') && !$('modal').classList.contains('on') && !$('browse').classList.contains('on')) $('scrim').classList.remove('on');
+      document.removeEventListener('keydown', onKey, true);
+      if (prevFocus && prevFocus.focus) try { prevFocus.focus(); } catch (e) {}
+      resolve(result);
+    };
+    var onKey = function(e){
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(opts.input ? null : false); }
+      else if (isEnter(e) && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); finish(opts.input ? (input.value.trim() || null) : true); }
+    };
+    dlg = { finish: finish };
+    $('dlg-ok').onclick = function(){ finish(opts.input ? (input.value.trim() || null) : true); };
+    $('dlg-cancel').onclick = function(){ finish(opts.input ? null : false); };
+    document.addEventListener('keydown', onKey, true);
+    $('scrim').classList.add('on'); box.classList.add('on');
+    setTimeout(function(){ (opts.input ? input : (opts.danger ? $('dlg-cancel') : $('dlg-ok'))).focus(); }, 30);
+  });
+}
 function deleteThread(id){
   var map = tasksById(), t = map[id];
   var th = S.threads.filter(function(x){ return x.id === id; })[0];
@@ -617,19 +676,23 @@ function deleteThread(id){
   var title = (root && root.title) || (th && th.title) || shortId(id);
   var family = (S.state ? S.state.tasks : []).filter(function(x){ return rootOf(x, map) && rootOf(x, map).id === rootId; });
   var running = family.filter(function(x){ return !isDone(x.status); }).length;
-  var msg = T('confirmDelete', { t: title, n: family.length || 1 }) + (running ? '\n\n' + T('confirmDeleteLive', { n: running }) : '');
-  if (!confirm(msg)) return;
-  post('/api/threads/delete', { id: rootId, stop: running > 0 }).then(function(d){
+  dialog({
+    title: T('deleteTitle'), danger: true, ok: running ? T('stopAndDelete') : T('delete'),
+    html: '<p><b>' + esc(title) + '</b></p><p>' + esc(T('deleteBody', { n: family.length || 1 })) + '</p>' +
+      (running ? '<p class="dlg-warn">' + icon('alert', 'sm') + esc(T('confirmDeleteLive', { n: running })) + '</p>' : '')
+  }).then(function(yes){ if (yes) doDelete(); });
+  function doDelete(){ post('/api/threads/delete', { id: rootId, stop: running > 0 }).then(function(d){
     if (d.error) { toast(d.error, true); return; }
     toast(T('deleted'));
     if (S.selectedTask && family.some(function(x){ return x.id === S.selectedTask; })) closeDrawer();
     S.sig = {};
     if (S.current === rootId) go('/chat'); else refresh();
-  });
+  }); }
 }
 function stopTask(id){
-  if (!confirm(T('confirmStop'))) return;
-  post('/api/cancel', { task_id: id, by: 'human' }).then(function(d){ toast(d.error ? d.error : T('stopped'), !!d.error); soon(); });
+  var t = tasksById()[id];
+  dialog({ title: T('stopTitle'), danger: false, icon: 'stop', ok: T('stop'), html: (t ? '<p><b>' + esc(t.title) + '</b></p>' : '') + '<p>' + esc(T('confirmStop')) + '</p>' })
+    .then(function(yes){ if (!yes) return; post('/api/cancel', { task_id: id, by: 'human' }).then(function(d){ toast(d.error ? d.error : T('stopped'), !!d.error); soon(); }); });
 }
 function copyText(s){
   (navigator.clipboard ? navigator.clipboard.writeText(s) : Promise.reject()).then(function(){ toast(T('copied')); }, function(){
@@ -857,7 +920,7 @@ function renderBoard(){
     fsel.setAttribute('data-sig', fsig);
     fsel.innerHTML = '<option value="">' + esc(T('allFolders')) + '</option>' + folderKeys.map(function(k){ return '<option value="' + esc(k) + '"' + (k === where ? ' selected' : '') + '>' + esc(folderName(k)) + '</option>'; }).join('');
   }
-  var sig = JSON.stringify([LANG, q, who, where, S.selectedTask, st.agents.map(function(a){ return a.name; }), st.tasks.map(function(t){ return [t.id, t.status, !!t.pid, t.usage && t.usage.costUsd]; }), st.context.length]);
+  var sig = JSON.stringify([LANG, q, who, where, S.selectedTask, st.agents.map(function(a){ return a.name; }), st.tasks.map(function(t){ return [t.id, t.status, !!t.pid, t.usage && t.usage.costUsd]; }), st.context.map(function(c){ return [c.folder, c.key, c.updatedAt]; })]);
   if (sig === S.sig.board) { updateTicks(); return; }
   S.sig.board = sig;
   $('agent-filters').innerHTML = st.agents.map(function(a){
@@ -881,11 +944,17 @@ function renderBoard(){
           (t.status === 'failed' && t.result ? '<div class="reason">' + esc(t.result) + '</div>' : '') + '</div>';
       }).join('') : '<div class="none">' + esc(T('none')) + '</div>') + '</div></div>';
   }).join('');
-  var ctx = st.context.slice().sort(function(a, b){ return b.updatedAt.localeCompare(a.updatedAt); });
+  // Each folder has its own blackboard: show the filtered folder's, or all of them labelled.
+  var bbFolder = function(c){ return c.folder || S.home || ''; };
+  var ctx = st.context.filter(function(c){ return !where || bbFolder(c) === where; }).sort(function(a, b){ return b.updatedAt.localeCompare(a.updatedAt); });
   $('bb-count').textContent = ctx.length;
+  $('bb-scope').innerHTML = icon('folder', 'sm') + esc(where ? folderName(where) : T('allFolders'));
   $('bb-items').innerHTML = ctx.length ? ctx.map(function(c){
-    return '<div class="kv" data-key="' + esc(c.key) + '"><div class="k">' + esc(c.key) + '<span class="by">' + esc(c.updatedBy) + '</span></div><div class="v">' + esc(typeof c.value === 'string' ? c.value : JSON.stringify(c.value)) + '</div></div>';
+    return '<div class="kv" data-key="' + esc(c.key) + '" data-kfolder="' + esc(bbFolder(c)) + '"><div class="k">' + esc(c.key) + '<span class="by">' + esc(c.updatedBy) + '</span></div>' +
+      (!where ? '<div class="kf">' + icon('folder', 'sm') + esc(folderName(bbFolder(c))) + '</div>' : '') +
+      '<div class="v">' + esc(typeof c.value === 'string' ? c.value : JSON.stringify(c.value)) + '</div></div>';
   }).join('') : '<div class="kv" style="cursor:default"><div class="v">' + esc(T('emptyBB')) + '</div></div>';
+  $('bb-form-folder').textContent = T('bbWritesTo', { f: folderName(where || S.bbTarget || S.home || '') });
 }
 $('agent-filters').addEventListener('click', function(e){
   var f = e.target.closest('[data-filter]'); if (!f) return;
@@ -899,14 +968,16 @@ $('lanes').addEventListener('click', function(e){
 });
 $('bb-items').addEventListener('click', function(e){
   var k = e.target.closest('[data-key]'); if (!k) return;
-  var entry = S.state.context.filter(function(c){ return c.key === k.getAttribute('data-key'); })[0];
+  var kf = k.getAttribute('data-kfolder');
+  var entry = S.state.context.filter(function(c){ return c.key === k.getAttribute('data-key') && (c.folder || S.home || '') === kf; })[0];
+  S.bbTarget = kf; $('bb-form-folder').textContent = T('bbWritesTo', { f: folderName(kf) });
   if (entry) { $('bb-key').value = entry.key; $('bb-value').value = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value, null, 2); $('bb-value').focus(); }
 });
 $('bb-form').addEventListener('submit', function(e){
   e.preventDefault();
   var raw = $('bb-value').value, value;
   try { value = JSON.parse(raw); } catch (err) { value = raw; }
-  post('/api/context', { key: $('bb-key').value, value: value, by: 'human' }).then(function(d){
+  post('/api/context', { key: $('bb-key').value, value: value, by: 'human', folder: S.boardFolder || S.bbTarget || S.home }).then(function(d){
     if (d.error) { toast(d.error, true); return; }
     $('bb-key').value = ''; $('bb-value').value = ''; toast(T('saved').split(' · ')[0]); soon();
   });
@@ -1063,7 +1134,7 @@ function renderSettings(){
   }).join('');
 
   if (l) {
-    $('tiles').innerHTML = [[l.maxConcurrent, T('lWorkers')], [l.maxDepth, T('lDepth')], [Math.round(l.watchdog.pendingTtlSeconds / 60) + (LANG === 'vi' ? ' phút' : ' min'), T('lWait')], [l.retention.days, T('lKeep')]].map(function(x){
+    $('tiles').innerHTML = [[l.maxConcurrent, T('lWorkers')], [l.maxConcurrentTotal, T('lWorkersTotal')], [l.folderGuard ? T('on') : T('off'), T('lGuard')], [l.maxDepth, T('lDepth')], [Math.round(l.watchdog.pendingTtlSeconds / 60) + (LANG === 'vi' ? ' phút' : ' min'), T('lWait')], [l.retention.days, T('lKeep')]].map(function(x){
       return '<div class="panel tile"><div class="n">' + esc(x[0]) + '</div><div class="l">' + esc(x[1]) + '</div></div>';
     }).join('');
   }
@@ -1097,7 +1168,13 @@ $('roster').addEventListener('change', function(e){
   var sel = e.target.closest('select[data-f="model"]'); if (!sel) return;
   var name = sel.closest('[data-agent]').getAttribute('data-agent');
   var v = sel.value;
-  if (v === '__custom') { v = prompt(T('custom')) || ''; if (!v) { S.sig.settings = ''; renderSettings(); return; } }
+  if (v === '__custom') {
+    dialog({ title: T('custom'), input: true, placeholder: 'claude-sonnet-5', ok: T('save') }).then(function(typed){
+      if (!typed) { S.sig.settings = ''; renderSettings(); return; }
+      saveAgent(name, { model: typed });
+    });
+    return;
+  }
   saveAgent(name, { model: v });
 });
 $('roster').addEventListener('click', function(e){
@@ -1108,11 +1185,20 @@ $('roster').addEventListener('click', function(e){
 });
 $('lang-select').addEventListener('change', function(e){
   var v = e.target.value;
-  if (v === '__other') { v = prompt(T('lang')) || ''; if (!v) { S.sig.settings = ''; renderSettings(); return; } }
-  post('/api/config/hub', { language: v }).then(function(d){
-    if (d.error) { toast(d.error, true); return; }
-    toast(T('saved')); S.sig = {}; refresh();
-  });
+  var saveLang = function(lang){
+    post('/api/config/hub', { language: lang }).then(function(d){
+      if (d.error) { toast(d.error, true); return; }
+      toast(T('saved')); S.sig = {}; refresh();
+    });
+  };
+  if (v === '__other') {
+    dialog({ title: T('lang'), input: true, placeholder: 'Français', ok: T('save') }).then(function(typed){
+      if (!typed) { S.sig.settings = ''; renderSettings(); return; }
+      saveLang(typed);
+    });
+    return;
+  }
+  saveLang(v);
 });
 $('copy-endpoint').addEventListener('click', function(){ copyText($('endpoint').textContent); });
 

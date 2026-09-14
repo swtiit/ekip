@@ -58,8 +58,10 @@ export interface RetentionConfig {
   days?: number;
 }
 
-/** Hub-wide cap on simultaneously running workers. */
+/** Cap on simultaneously running workers per folder. */
 export const DEFAULT_MAX_CONCURRENT = 4;
+/** Ceiling across all folders. */
+export const DEFAULT_MAX_CONCURRENT_TOTAL = 8;
 export const RETENTION_DEFAULTS: Required<RetentionConfig> = { days: 14 };
 
 export interface BridgeConfig {
@@ -76,8 +78,16 @@ export interface BridgeConfig {
    * "Vietnamese". Affects what they say and write, not the code they produce.
    */
   language?: string;
-  /** hub-wide cap on simultaneously running workers (default 4); extra tasks queue */
+  /** cap on simultaneously running workers per folder (default 4); extra tasks queue */
   maxConcurrent?: number;
+  /** ceiling across all folders together (default 8) — the quota guard */
+  maxConcurrentTotal?: number;
+  /**
+   * Keep each run inside its conversation's folder (default true): agents are
+   * told the folder, and Claude runs get a hook that blocks file and shell
+   * access outside it.
+   */
+  folderGuard?: boolean;
   watchdog?: WatchdogConfig;
   retention?: RetentionConfig;
 }

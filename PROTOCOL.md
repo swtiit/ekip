@@ -9,7 +9,9 @@ just the first two adapters.
 - **Task** — a unit of work addressed *from* one agent *to* another. It carries
   a `prompt` (the instruction), optional structured `context`, and moves through
   `pending → claimed → done | failed | cancelled`.
-- **Context** — a shared key/value blackboard both agents read and write. Used
+- **Context** — a key/value blackboard agents read and write, one per folder:
+  a run sees the blackboard of the folder its task works in (the task it
+  claimed or delegates from, or an explicit `task_id`). Used
   for hand-off state that isn't a discrete task (plans, decisions, file notes).
 - **Message** — one line of conversation, attached to a task and grouped
   into a **thread** by the root of the delegation tree. Kinds: `human`

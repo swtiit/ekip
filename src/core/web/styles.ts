@@ -432,6 +432,28 @@ main{flex:1;min-height:0;display:flex}
 .modal .mh{padding:16px 18px 4px;font-weight:650;font-size:15px}
 .modal .mb{padding:10px 18px;display:flex;flex-direction:column;gap:10px}
 .modal .mf{padding:10px 18px 16px;display:flex;justify-content:flex-end;gap:8px}
+.dialog{top:22vh;width:min(460px,92vw)}
+.dlg-body{display:flex;gap:14px;padding:20px 20px 8px}
+.dlg-icon{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);flex-shrink:0}
+.dlg-icon.danger{background:var(--bad-soft);color:var(--bad)}
+.dlg-text{min-width:0;flex:1}
+.dlg-title{font-weight:650;font-size:15.5px;letter-spacing:-.01em;margin:6px 0 6px}
+.dlg-msg{font-size:13.5px;color:var(--ink-2);line-height:1.55}
+.dlg-msg p{margin:0 0 6px;overflow-wrap:anywhere}
+.dlg-warn{display:flex;gap:6px;align-items:flex-start;color:var(--warn);font-size:13px}
+.dlg-warn .ico{margin-top:2px}
+.dialog #dlg-input{margin-top:10px}
+.btn.danger-solid{background:var(--bad);color:#fff}
+.btn.danger-solid:hover{filter:brightness(1.07)}
+.more{display:flex;align-items:center;gap:6px;width:calc(100% - 8px);margin:2px 0 8px 4px;padding:6px 10px;border-radius:8px;font-size:12px;color:var(--muted);text-align:left}
+.more:hover{background:var(--hover);color:var(--ink)}
+.more .up{transform:rotate(-90deg)}
+.bb-scope{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--muted);max-width:140px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.kv .kf{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--faint);margin-top:2px}
+.bb-form-folder{font-size:11.5px;color:var(--muted)}
+.notice.guard{background:var(--warn-soft);color:var(--warn)}
+.notice.guard code{font-family:var(--mono);font-size:11.5px;background:none;padding:0;overflow-wrap:anywhere}
+.tiles{grid-template-columns:repeat(3,1fr)!important}
 .browse{top:10vh;width:min(640px,94vw);display:flex;flex-direction:column;max-height:78vh}
 .browse-bar{display:flex;gap:6px;padding:6px 18px 10px}
 .browse-bar .field{height:32px;font-size:12.5px}
