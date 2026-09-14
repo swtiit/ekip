@@ -63,6 +63,7 @@ const config = {
     { name: "sleeper", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 30"] },
     { name: "serial", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 0.7"], maxConcurrent: 1 },
     { name: "talker", adapter: "fakeclaude", spawnable: true },
+    { name: "linger", adapter: "command", spawnable: true, command: process.execPath, args: [join(REPO, "test", "mock-linger.mjs"), "{taskId}"], maxConcurrent: 1 },
   ],
   maxDepth: 3,
   watchdog: { pendingTtlSeconds: 2, claimedTtlSeconds: 3, sweepIntervalSeconds: 1 },
@@ -139,7 +140,7 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 10 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 11 && state0.hubUrl.endsWith("/mcp"));
   t("state exposes workers", Array.isArray(state0.workers?.running) && Array.isArray(state0.workers?.queued));
   t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
 
@@ -351,6 +352,24 @@ try {
   const head = threadsList.threads.find((x) => x.id === conv.task.id);
   t("threads lists roots only", !!head && !threadsList.threads.some((x) => x.id === reply.task.id) && head.messages >= 8, JSON.stringify(head));
   t("parse ignores garbage", parseClaudeStreamLine("{{not json").length === 0 && parseClaudeStreamLine('{"type":"system","subtype":"init"}').length === 0);
+
+  // ---- a finished-but-lingering worker must not hold its slot ----
+  const ling = await Promise.all(
+    [1, 2].map((i) => post("/api/delegate", { to: "linger", prompt: "p", title: `linger-${i}` }).then((r) => r.json())),
+  );
+  t("second linger task queues", ling.filter((d) => d.dispatch.queued).length === 1);
+  const lingT0 = Date.now();
+  const lingDone = await until(async () => {
+    const st = await api("/api/state");
+    const mine = ling.map((d) => st.tasks.find((x) => x.id === d.task.id));
+    return mine.every((x) => x?.status === "done") ? mine : undefined;
+  }, 12000);
+  t("both linger tasks finish", !!lingDone, JSON.stringify(lingDone?.map((x) => x?.status)));
+  // Each mock posts in well under a second; the 5s linger would dominate if
+  // the slot were held until the process exited.
+  t("slot freed at post_result, not at exit", Date.now() - lingT0 < 4500, `${Date.now() - lingT0}ms`);
+  const lingW = (await api("/api/state")).workers;
+  t("lingering workers reported separately", Array.isArray(lingW.lingering) && lingW.lingering.length >= 1, JSON.stringify(lingW));
 
   // ---- maxConcurrent: per-agent cap queues the overflow ----
   const serial = await Promise.all(

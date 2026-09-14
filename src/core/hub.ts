@@ -130,6 +130,9 @@ export function buildHub(
         result,
         artifacts,
       });
+      // The work is reported; free its concurrency slot even though the
+      // process may linger (Claude's session hooks keep it alive for a while).
+      dispatcher.release(task_id);
       store.addMessage({
         taskId: task_id,
         from: existing.to,

@@ -47,7 +47,8 @@ main{display:flex;flex-direction:column;min-height:0}
 .msg .g{font-family:var(--mono);color:var(--muted);text-align:center;line-height:1.5;user-select:none}
 .msg .who{font-size:12px;font-weight:600;margin-bottom:1px;display:flex;gap:8px;align-items:baseline}
 .msg .who .t{font-weight:400;color:var(--muted);font-size:11px}
-.msg .body{white-space:pre-wrap;word-break:break-word}
+.msg > div:last-child{min-width:0}
+.msg .body{white-space:pre-wrap;overflow-wrap:anywhere}
 .msg .body pre{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px 10px;overflow:auto;font-family:var(--mono);font-size:12.5px;margin:6px 0}
 .msg .body code{font-family:var(--mono);font-size:12.5px;background:var(--panel);padding:1px 4px;border-radius:3px}
 .h .g{color:var(--human)} .h .who .n{color:var(--human)}

@@ -43,6 +43,15 @@ const EXIT_GRACE_MS = 1500;
  */
 export class Dispatcher {
   private readonly running = new Map<string, RunningWorker>();
+  /**
+   * Workers whose task is already finished but whose process is still alive.
+   *
+   * A spawned `claude -p` can linger for minutes after posting its result
+   * (SessionEnd hooks, telemetry flushes). Field-tested: ~2 minutes. Those
+   * seconds must not hold a concurrency slot, so the worker moves here — it
+   * no longer counts against `maxConcurrent`, but stays killable.
+   */
+  private readonly lingering = new Map<string, RunningWorker>();
   private readonly queue: Task[] = [];
 
   constructor(
@@ -184,8 +193,21 @@ export class Dispatcher {
     return { spawned: true, detail: result.detail };
   }
 
+  /**
+   * The task reported in — give its slot back now, even though the process
+   * may take a while to actually exit.
+   */
+  release(taskId: string): void {
+    const worker = this.running.get(taskId);
+    if (!worker) return;
+    this.running.delete(taskId);
+    this.lingering.set(taskId, worker);
+    void this.drain();
+  }
+
   private onWorkerExit(taskId: string, agent: string, exit: WorkerExit): void {
     this.running.delete(taskId);
+    this.lingering.delete(taskId);
     // A slot opened — launch the next queued task for which there is room.
     void this.drain();
 
@@ -241,17 +263,22 @@ export class Dispatcher {
    * process (and its slot) gone.
    */
   kill(taskId: string): boolean {
-    const worker = this.running.get(taskId);
+    const worker = this.running.get(taskId) ?? this.lingering.get(taskId);
     if (!worker) return false;
     this.running.delete(taskId);
+    this.lingering.delete(taskId);
     killTree(worker.pid);
     void this.drain();
     return true;
   }
 
-  /** Snapshot for the API: who is running, who is waiting. */
-  status(): { running: RunningWorker[]; queued: string[] } {
-    return { running: [...this.running.values()], queued: this.queue.map((t) => t.id) };
+  /** Snapshot for the API: who holds a slot, who is waiting, who is just winding down. */
+  status(): { running: RunningWorker[]; queued: string[]; lingering: RunningWorker[] } {
+    return {
+      running: [...this.running.values()],
+      queued: this.queue.map((t) => t.id),
+      lingering: [...this.lingering.values()],
+    };
   }
 
   /**
@@ -271,9 +298,10 @@ export class Dispatcher {
       const qi = this.queue.findIndex((t) => t.id === id);
       if (qi >= 0) this.queue.splice(qi, 1);
 
-      const worker = this.running.get(id);
+      const worker = this.running.get(id) ?? this.lingering.get(id);
       if (worker) {
         this.running.delete(id);
+        this.lingering.delete(id);
         killTree(worker.pid);
       }
       const result = `cancelled by ${by}${reason ? `: ${reason}` : ""}`;
