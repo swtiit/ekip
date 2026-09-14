@@ -10,15 +10,20 @@ một thành viên ngang hàng trong ê-kíp đó.
 - **Hub** — một server nhỏ chạy cho mỗi dự án (`ekip serve`). Mọi agent cắm
   vào hub qua MCP; không agent nào nói chuyện trực tiếp với agent nào.
 - **Task** — một đơn vị việc giao từ agent này sang agent kia, đi qua vòng
-  đời `pending → claimed → done/failed`.
+  đời `pending → claimed → done/failed/cancelled`.
 - **Blackboard** — kho ngữ cảnh chung dạng key/value (`plan.v1`,
   `review.round1`…). Agent chạy headless là "một lần rồi thôi", ngữ cảnh
   sống sót nhờ blackboard.
 - **Dispatcher** — khi có task, hub tự bật CLI headless của agent đích
   (`claude -p`, `agy -p`…), xong việc thì process tự tắt. **Không cần mở
   app nào của bên nhận.**
-- **Watchdog** — agent chết im (hết quota, thiếu quyền) thì task được đánh
-  `failed` kèm lý do moi từ log, không treo vĩnh viễn.
+- **Theo dõi worker** — hub giữ tiến trình nó vừa bật. Agent chết im (hết
+  quota, thiếu quyền, thiếu binary) thì task `failed` **trong vài giây**,
+  kèm mã thoát và lý do moi từ log. Watchdog vẫn còn làm lưới cuối cho
+  worker sống mà treo.
+- **Cancel + giới hạn song song** — `ekip cancel <id>` dừng cả cây task và
+  giết tiến trình; `maxConcurrent` (mặc định 4) xếp hàng các task thừa thay
+  vì bật thêm process đốt quota.
 
 ## 2. Cài đặt (một lần cho máy)
 
@@ -126,13 +131,18 @@ qua lệnh — watchdog sẽ báo *hậu kiểm* nếu run chết vì hết quot
 
 ## 8. Khi có gì đó sai
 
-- Task `failed` với `watchdog: ... spawn log hints: "You've hit your session
-  limit"` → hết quota Claude, chờ reset rồi giao lại.
+- Task `failed` với `worker exited ... spawn log hints: "You've hit your
+  session limit"` → hết quota Claude, chờ reset rồi giao lại.
+- Task `failed` với `dispatch refused: ...` → tên agent sai, thiếu adapter,
+  hoặc vượt `maxDepth`; sửa config rồi giao lại.
 - `... "auto-denied"` → agy thiếu grant — đọc log để biết class quyền
   (`mcp(...)`, `write_file(...)`, `command(...)`) rồi thêm vào config.json
   của agy.
-- Task treo `pending` mãi + log rỗng → binary agent không chạy được
-  (`ekip logs <id>` xem "spawn error").
+- `worker failed to start: spawn ... ENOENT` → binary agent không có trong
+  PATH của hub.
+- Task `pending` lâu mà chưa có `pid` → đang xếp hàng chờ slot
+  (`maxConcurrent`); `ekip tasks claimed` xem ai đang chiếm, hoặc
+  `ekip cancel` bớt việc.
 - Hub không lên: port 4319 đang bận? Mỗi dự án một hub, chạy lần lượt hoặc
   đổi `port` trong config.
 

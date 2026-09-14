@@ -43,6 +43,7 @@ export const claudeAdapter: Adapter = {
       cwd: req.cwd,
       env: bridgeEnv(req),
       logFile,
+      onExit: req.onExit,
       label: "claude -p",
     });
   },

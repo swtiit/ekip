@@ -49,6 +49,7 @@ export const antigravityAdapter: Adapter = {
       cwd: req.cwd,
       env: bridgeEnv(req),
       logFile,
+      onExit: req.onExit,
       label: "agy -p",
     });
   },

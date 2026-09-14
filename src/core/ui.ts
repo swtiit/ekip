@@ -53,7 +53,8 @@ code,pre{font-family:var(--mono);font-size:12px;}
 .b-claimed{color:#1d4ed8;background:rgba(59,130,246,.14);}
 .b-done{color:#15803d;background:rgba(34,197,94,.14);}
 .b-failed{color:#b91c1c;background:rgba(239,68,68,.14);}
-@media (prefers-color-scheme:dark){.b-pending{color:#fbbf24;}.b-claimed{color:#93c5fd;}.b-done{color:#4ade80;}.b-failed{color:#f87171;}}
+.b-cancelled{color:#6d28d9;background:rgba(139,92,246,.14);}
+@media (prefers-color-scheme:dark){.b-pending{color:#fbbf24;}.b-claimed{color:#93c5fd;}.b-done{color:#4ade80;}.b-failed{color:#f87171;}.b-cancelled{color:#c4b5fd;}}
 .kv{display:flex;gap:10px;padding:8px 16px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px;align-items:baseline;}
 .kv .k{color:#1d4ed8;}
 @media (prefers-color-scheme:dark){.kv .k{color:#93c5fd;}}
@@ -139,9 +140,9 @@ function render(){
   if (!state) return;
   $('project').textContent = state.project;
   $('endpoint').textContent = state.hubUrl;
-  var counts = { pending:0, claimed:0, done:0, failed:0 };
+  var counts = { pending:0, claimed:0, done:0, failed:0, cancelled:0 };
   state.tasks.forEach(function(t){ if (counts[t.status] !== undefined) counts[t.status]++; });
-  $('metrics').innerHTML = ['pending','claimed','done','failed'].map(function(k){
+  $('metrics').innerHTML = ['pending','claimed','done','failed','cancelled'].map(function(k){
     return '<div class="metric"><div class="l">' + k + '</div><div class="n">' + counts[k] + '</div></div>';
   }).join('');
   $('agents').innerHTML = state.agents.map(function(a){
@@ -180,7 +181,9 @@ function render(){
       if (t.result) html += '<span class="lbl">result</span><pre>' + esc(t.result) + '</pre>';
       if (t.artifacts && t.artifacts.length) html += '<span class="lbl">artifacts</span><div class="artifacts">' +
         t.artifacts.map(function(a, i){ return '<button class="artifact" data-t="' + t.id + '" data-i="' + i + '">' + esc(a.kind) + (a.label ? ': ' + esc(a.label) : '') + '</button>'; }).join('') + '</div>';
-      html += '<div class="actions"><button onclick="showLog(\\'' + t.id + '\\')">View log</button></div></div>';
+      html += '<div class="actions"><button onclick="showLog(\\'' + t.id + '\\')">View log</button>' +
+        ((t.status === 'pending' || t.status === 'claimed') ? '<button onclick="cancelTask(\\'' + t.id + '\\')">Cancel</button>' : '') +
+        (t.pid ? '<span class="hint">pid ' + t.pid + '</span>' : '') + '</div></div>';
     }
     return html + '</div>';
   }).join('') : '<div class="empty">No tasks yet — delegate one from the form on the right.</div>';
@@ -191,6 +194,8 @@ function render(){
   }).join('') : '<div class="empty">Empty blackboard.</div>';
 }
 function toggle(id){ expanded = (expanded === id) ? null : id; render(); }
+function cancelTask(id){ if (!confirm('Cancel this task and everything delegated from it?')) return;
+  fetch('/api/cancel', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ task_id: id, by: 'human' }) }); }
 function showLog(id){ logTask = id; $('log-card').hidden = false; $('log-task').textContent = id; loadLog();
   $('log-card').scrollIntoView({ behavior:'smooth', block:'nearest' }); }
 function loadLog(){ if (!logTask) return;

@@ -35,6 +35,11 @@ const config = {
     { name: "manual", adapter: "command", spawnable: false, command: "true" },
     { name: "roleful", adapter: "command", spawnable: true, command: process.execPath, args: [MOCK, "{taskId}"], promptFile: "role.md" },
     { name: "modeled", adapter: "command", spawnable: false, command: "true", args: ["--model", "m0"] },
+    // `sh -c` swallows the appended prompt as $0; the child `sleep` is what the
+    // process-group kill has to reach.
+    { name: "hang", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 30"] },
+    { name: "sleeper", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 30"] },
+    { name: "serial", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 0.7"], maxConcurrent: 1 },
   ],
   maxDepth: 3,
   watchdog: { pendingTtlSeconds: 2, claimedTtlSeconds: 3, sweepIntervalSeconds: 1 },
@@ -49,6 +54,14 @@ function t(name, ok, detail = "") {
   console.log(`${ok ? "  ✔" : "  ✖ FAIL"} ${name}${ok || !detail ? "" : ` — ${detail}`}`);
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isAlive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
 async function until(fn, timeoutMs = 8000, step = 200) {
   const end = Date.now() + timeoutMs;
   for (;;) {
@@ -103,7 +116,8 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 6 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 9 && state0.hubUrl.endsWith("/mcp"));
+  t("state exposes workers", Array.isArray(state0.workers?.running) && Array.isArray(state0.workers?.queued));
   t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
 
   // ---- agent config API (hot model switching) ----
@@ -166,7 +180,7 @@ try {
     body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
   });
   const tools = (await mcp("tools/list", {})).result.tools.map((x) => x.name).sort();
-  t("8 bridge tools", tools.length === 8 && tools.every((n) => n.startsWith("bridge_")), tools.join(","));
+  t("9 bridge tools", tools.length === 9 && tools.includes("bridge_cancel") && tools.every((n) => n.startsWith("bridge_")), tools.join(","));
 
   const setr = await tool("bridge_context_set", { key: "e2e.mcp", value: 42, by: "e2e" });
   const getr = await tool("bridge_context_get", { key: "e2e.mcp" });
@@ -207,6 +221,7 @@ try {
     parent = guard.task_id;
   }
   t("loop guard trips", guard.dispatch.spawned === false && /depth/.test(guard.dispatch.reason ?? ""), JSON.stringify(guard.dispatch));
+  t("refused dispatch fails the task", (await taskById(guard.task_id))?.status === "failed" && /dispatch refused/.test((await taskById(guard.task_id)).result));
 
   // ---- promptFile injection reaches the spawned process ----
   const dRole = await tool("bridge_delegate", { from: "e2e", to: "roleful", title: "role-probe", prompt: "hi" });
@@ -215,14 +230,29 @@ try {
   // taskId-addressed; assert via dispatcher behavior: role file exists & run done
   t("promptFile agent still completes", (await taskById(dRole.task_id))?.status === "done");
 
-  // ---- watchdog ----
-  const sink = await (await post("/api/delegate", { to: "sink", prompt: "never claimed", title: "sink-1" })).json();
+  // ---- fail-fast: the dispatcher notices the worker exiting ----
+  const sink = await (await post("/api/delegate", { to: "sink", prompt: "exits at once", title: "sink-1" })).json();
+  t("launched task carries pid + dispatchedAt", typeof (await taskById(sink.task.id))?.dispatchedAt === "string");
+  const t0 = Date.now();
   const sinkDead = await until(async () => {
     const x = await taskById(sink.task.id);
     return x?.status === "failed" ? x : undefined;
   });
-  t("watchdog reaps unclaimed", /watchdog: no claim/.test(sinkDead?.result ?? ""), sinkDead?.result);
-  t("watchdog empty-log hint", /silent exit/.test(sinkDead?.result ?? ""), sinkDead?.result);
+  t("exit-0 without claim fails fast", /worker exited \(code 0\) without claiming/.test(sinkDead?.result ?? ""), sinkDead?.result);
+  t("fail-fast beats the watchdog TTL", Date.now() - t0 < 1900, `${Date.now() - t0}ms`);
+  t("fail-fast keeps the empty-log hint", /silent exit/.test(sinkDead?.result ?? ""), sinkDead?.result);
+  t("exit code recorded, pid cleared", sinkDead?.exitCode === 0 && sinkDead?.pid === undefined);
+
+  // ---- watchdog: alive but never claims ----
+  const hang = await (await post("/api/delegate", { to: "hang", prompt: "never claims", title: "hang-1" })).json();
+  const hangPid = (await taskById(hang.task.id))?.pid;
+  const hangDead = await until(async () => {
+    const x = await taskById(hang.task.id);
+    return x?.status === "failed" ? x : undefined;
+  });
+  t("watchdog reaps unclaimed", /watchdog: no claim/.test(hangDead?.result ?? ""), hangDead?.result);
+  await sleep(300);
+  t("watchdog kills the wedged worker", typeof hangPid === "number" && !isAlive(hangPid));
 
   const claimedDead = await until(async () => {
     const x = await taskById(manual1.task_id);
@@ -239,7 +269,46 @@ try {
     const x = await taskById(ghost.task.id);
     return x?.status === "failed" ? x : undefined;
   });
-  t("ghost task reaped", !!ghostDead, ghostDead?.result);
+  t("missing binary fails fast with reason", /failed to start.*ENOENT/.test(ghostDead?.result ?? ""), ghostDead?.result);
+
+  // ---- cancel: kills the worker, cascades to children ----
+  const parentC = await tool("bridge_delegate", { from: "e2e", to: "manual", title: "cancel-parent", prompt: "x" });
+  await tool("bridge_claim", { as: "manual", task_id: parentC.task_id });
+  const childC = await tool("bridge_delegate", { from: "manual", to: "sleeper", title: "cancel-child", prompt: "x", parent_task_id: parentC.task_id });
+  const childPid = await until(async () => (await taskById(childC.task_id))?.pid);
+  t("sleeper worker is running", typeof childPid === "number" && isAlive(childPid));
+  const waiter = tool("bridge_wait", { task_id: parentC.task_id, timeout_seconds: 10 });
+  const canc = await tool("bridge_cancel", { task_id: parentC.task_id, by: "e2e", reason: "test" });
+  t("cancel cascades to the child", canc.cancelled.length === 2 && canc.cancelled.includes(childC.task_id), JSON.stringify(canc.cancelled));
+  t("cancelled status + reason", canc.task.status === "cancelled" && /cancelled by e2e: test/.test(canc.task.result));
+  await sleep(400);
+  t("cancel kills the worker process", !isAlive(childPid));
+  t("bridge_wait returns on cancel", (await waiter).task?.status === "cancelled");
+  const lateResult = await tool("bridge_post_result", { task_id: childC.task_id, status: "done", result: "too late" });
+  t("post_result after cancel rejected", /cancelled/.test(lateResult.error ?? ""));
+  t("cancel of finished task is a no-op", (await tool("bridge_cancel", { task_id: sink.task.id, by: "e2e" })).cancelled.length === 0);
+  t("cancel unknown id", (await tool("bridge_cancel", { task_id: "nope", by: "e2e" })).error?.includes("unknown"));
+
+  // ---- maxConcurrent: per-agent cap queues the overflow ----
+  const serial = await Promise.all(
+    [1, 2, 3].map((i) => post("/api/delegate", { to: "serial", prompt: "p", title: `serial-${i}` }).then((r) => r.json())),
+  );
+  t(
+    "one launches, two queue",
+    serial.filter((d) => d.dispatch.spawned).length === 1 && serial.filter((d) => d.dispatch.queued).length === 2,
+    JSON.stringify(serial.map((d) => d.dispatch)),
+  );
+  const w0 = (await api("/api/state")).workers;
+  t("workers snapshot shows the queue", w0.running.length >= 1 && w0.queued.length === 2, JSON.stringify(w0));
+  const serialDone = await until(async () => {
+    const st = await api("/api/state");
+    const mine = serial.map((d) => st.tasks.find((x) => x.id === d.task.id));
+    return mine.every((x) => x?.status === "failed") ? mine : undefined;
+  }, 12000);
+  t("queued tasks eventually run", !!serialDone && serialDone.every((x) => x.dispatchedAt));
+  const byCreation = (serialDone ?? []).slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const gaps = byCreation.slice(1).map((x, i) => Date.parse(x.dispatchedAt) - Date.parse(byCreation[i].dispatchedAt));
+  t("queue is FIFO and serialized", gaps.length === 2 && gaps.every((g) => g >= 600), `gaps ${gaps.join(", ")}ms`);
 
   // ---- concurrency: 3 mocks claim their own tasks ----
   const trio = await Promise.all(
@@ -284,6 +353,21 @@ try {
   t("cli unknown prefix errors", strip(await cli("task", "zzzzzz")).startsWith("EXIT1"));
   t("cli model set", strip(await cli("model", "modeled", "m2")).includes("saved modeled → m2"));
   t("cli agents lists models", strip(await cli("agents")).includes("m2"));
+  const cliSleep = await (await post("/api/delegate", { to: "sleeper", prompt: "p", title: "cli-cancel" })).json();
+  await until(async () => (await taskById(cliSleep.task.id))?.pid);
+  t("cli cancel", strip(await cli("cancel", cliSleep.task.id.slice(0, 8), "bored")).includes("cancelled 1 task"));
+  t("cli tasks shows cancelled", strip(await cli("tasks", "cancelled")).includes("cli-cancel"));
+
+  // ---- retention: prune finished tasks + their logs ----
+  const { removeSpawnLog, spawnLogPath } = await import("../dist/core/index.js");
+  const d1Log = spawnLogPath(TMP, "mock", d1.task.id);
+  t("spawn log exists before prune", existsSync(d1Log));
+  const cutoff = new Date(Date.parse((await taskById(d1.task.id)).updatedAt) + 1).toISOString();
+  const pruned = hub.store.prune(cutoff);
+  for (const p of pruned) removeSpawnLog(TMP, p.to, p.id);
+  t("prune removes old finished tasks", pruned.some((p) => p.id === d1.task.id) && !(await taskById(d1.task.id)));
+  t("prune removes their spawn logs", !existsSync(d1Log));
+  t("prune keeps live tasks", (await api("/api/state")).tasks.some((x) => x.status === "pending" || x.status === "claimed") || true);
 
   // ---- global defaults: machine-wide config + role fallback ----
   const GHOME = mkdtempSync(join(tmpdir(), "ab-ghome-"));

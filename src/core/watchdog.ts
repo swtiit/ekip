@@ -1,7 +1,6 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import type { BridgeConfig, WatchdogConfig } from "./config.js";
 import { WATCHDOG_DEFAULTS } from "./config.js";
+import { spawnLogHint } from "./logs.js";
 import type { Store } from "./store.js";
 
 /**
@@ -14,9 +13,13 @@ import type { Store } from "./store.js";
  * matters more than the funeral, greps the spawn log for known quota/permission
  * signatures and puts what it finds in the failure result.
  *
- * Pending-TTL only applies to tasks addressed to spawnable agents: a task for
- * a polling agent (`spawnable: false`, e.g. a human) may legitimately wait
- * hours before being claimed.
+ * Pending-TTL only applies to tasks the dispatcher actually launched: a task
+ * for a polling agent (`spawnable: false`, e.g. a human) may legitimately wait
+ * hours before being claimed, and a queued task hasn't had its turn yet.
+ *
+ * Since 0.5 the dispatcher fails a task the moment its worker process exits,
+ * so this sweep is the safety net for the remaining cases: a worker that is
+ * alive but wedged, or a hub restart that lost its process handles.
  */
 export class Watchdog {
   private timer?: NodeJS.Timeout;
@@ -24,6 +27,8 @@ export class Watchdog {
   constructor(
     private readonly config: BridgeConfig,
     private readonly store: Store,
+    /** called after a task is failed, so the owner can kill its worker */
+    private readonly onFail?: (taskId: string) => void,
   ) {}
 
   start(): void {
@@ -39,12 +44,9 @@ export class Watchdog {
 
   private sweep(cfg: Required<WatchdogConfig>): void {
     const now = Date.now();
-    const spawnable = new Set(
-      this.config.agents.filter((a) => a.spawnable !== false).map((a) => a.name),
-    );
     for (const task of this.store.listTasks()) {
-      if (task.status === "pending" && spawnable.has(task.to)) {
-        const age = (now - Date.parse(task.createdAt)) / 1000;
+      if (task.status === "pending" && task.dispatchedAt) {
+        const age = (now - Date.parse(task.dispatchedAt)) / 1000;
         if (age > cfg.pendingTtlSeconds) {
           this.fail(task.id, task.to, `no claim within ${cfg.pendingTtlSeconds}s of delegation`);
         }
@@ -58,30 +60,13 @@ export class Watchdog {
   }
 
   private fail(taskId: string, agent: string, reason: string): void {
-    const hint = this.logHint(taskId, agent);
+    const hint = spawnLogHint(this.config.projectRoot, agent, taskId);
     this.store.updateTask(taskId, {
       status: "failed",
       result: `watchdog: ${reason}${hint ? ` — spawn log hints: ${hint}` : ""}`,
+      pid: undefined,
     });
+    this.onFail?.(taskId);
   }
 
-  /** Pull the most telling line (quota / permission failure) from the spawn log. */
-  private logHint(taskId: string, agent: string): string | undefined {
-    const dir = join(this.config.projectRoot, ".ekip", "logs");
-    if (!existsSync(dir)) return undefined;
-    const file = readdirSync(dir).find((f) => f === `${agent}-${taskId}.log`);
-    if (!file) return "no spawn log found (agent may never have started)";
-    let text: string;
-    try {
-      text = readFileSync(join(dir, file), "utf8");
-    } catch {
-      return undefined;
-    }
-    if (!text.trim()) return "spawn log is empty (silent exit — often quota exhaustion)";
-    const signature =
-      /^.*(session limit|rate.?limit|quota|429|resource.?exhausted|auto-denied|permission|spawn error|ENOENT).*$/im;
-    const match = text.match(signature);
-    if (match) return JSON.stringify(match[0].trim().slice(0, 200));
-    return undefined;
-  }
 }

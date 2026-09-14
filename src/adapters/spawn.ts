@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
-import type { SpawnResult } from "./index.js";
+import type { SpawnResult, WorkerExit } from "./index.js";
 
 export interface LaunchOptions {
   command: string;
@@ -11,6 +11,8 @@ export interface LaunchOptions {
   logFile: string;
   /** human label for SpawnResult.detail, e.g. "claude -p" */
   label: string;
+  /** fires exactly once when the process ends or fails to start */
+  onExit?: (exit: WorkerExit) => void;
 }
 
 /**
@@ -18,8 +20,11 @@ export interface LaunchOptions {
  *
  * The `error` handler is load-bearing: a missing binary emits an async
  * `error` event on the child, and with no listener that exception kills the
- * whole hub. We log it instead — the task stays pending and the watchdog
- * reaps it with the "spawn error" hint from this log.
+ * whole hub. We log it and report it through `onExit` so the dispatcher can
+ * fail the task right away instead of waiting for the watchdog.
+ *
+ * The child runs in its own process group (`detached`), which is what lets
+ * `cancel` take the whole tree down with one signal to `-pid`.
  */
 export function launchDetached(opts: LaunchOptions): SpawnResult {
   mkdirSync(dirname(opts.logFile), { recursive: true });
@@ -30,13 +35,21 @@ export function launchDetached(opts: LaunchOptions): SpawnResult {
     stdio: ["ignore", fd, fd],
     env: opts.env,
   });
+  let settled = false;
+  const settle = (exit: WorkerExit): void => {
+    if (settled) return;
+    settled = true;
+    opts.onExit?.(exit);
+  };
   child.on("error", (err) => {
     try {
       appendFileSync(opts.logFile, `spawn error: ${err.message}\n`);
     } catch {
       // nothing left to report to
     }
+    settle({ code: null, signal: null, error: err.message });
   });
+  child.on("exit", (code, signal) => settle({ code, signal }));
   child.unref();
   return {
     launched: true,

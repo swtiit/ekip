@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Artifact, Task } from "../protocol/index.js";
+import { isTerminal } from "../protocol/index.js";
 
 /** ANSI palette shared by the CLI surfaces. */
 export const C = {
@@ -20,6 +21,7 @@ export const STATUS_GLYPH: Record<string, string> = {
   claimed: `${C.blue}● working${C.reset}`,
   done: `${C.green}✔ done${C.reset}`,
   failed: `${C.red}✖ failed${C.reset}`,
+  cancelled: `${C.magenta}⊘ cancelled${C.reset}`,
 };
 
 export interface HubState {
@@ -41,6 +43,21 @@ export async function apiState(base: string): Promise<HubState> {
       `Cannot reach the hub at ${base} — is \`ekip serve\` running in this project?`,
     );
   }
+}
+
+export async function apiCancel(
+  base: string,
+  taskId: string,
+  reason?: string,
+): Promise<{ cancelled: string[]; task: Task }> {
+  const res = await fetch(`${base}/api/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task_id: taskId, by: "human", reason }),
+  });
+  const data = (await res.json()) as { cancelled?: string[]; task?: Task; error?: string };
+  if (!data.task) throw new Error(data.error ?? "cancel failed");
+  return { cancelled: data.cancelled ?? [], task: data.task };
 }
 
 export async function apiDelegate(
@@ -91,18 +108,18 @@ function printTransition(t: Task, rootId: string): void {
   const indent = t.id === rootId ? "" : "  ";
   const who = t.id === rootId ? `${C.bold}${t.to}${C.reset}` : `${C.cyan}${t.to}${C.reset}`;
   let line = `${C.dim}${hhmmss(t.updatedAt)}${C.reset}  ${indent}${STATUS_GLYPH[t.status] ?? t.status}  ${who}  ${C.dim}${t.title.slice(0, 48)}${C.reset}`;
-  if (t.status === "done" || t.status === "failed") {
+  if (isTerminal(t.status)) {
     line += ` ${C.dim}(${duration(t.createdAt, t.updatedAt)})${C.reset}`;
   }
   console.log(line);
-  if ((t.status === "done" || t.status === "failed") && t.result && t.id !== rootId) {
+  if (isTerminal(t.status) && t.result && t.id !== rootId) {
     const snippet = t.result.replace(/\s+/g, " ").slice(0, 110);
     console.log(`${" ".repeat(11)}${indent}${C.dim}└ ${snippet}${C.reset}`);
   }
 }
 
 function printFinal(t: Task): void {
-  const color = t.status === "done" ? C.green : C.red;
+  const color = t.status === "done" ? C.green : t.status === "cancelled" ? C.magenta : C.red;
   console.log("");
   console.log(`${color}${C.bold}━━ ${t.status.toUpperCase()} ━━${C.reset} ${C.dim}${t.title} · ${duration(t.createdAt, t.updatedAt)} total${C.reset}`);
   if (t.result) console.log(`\n${t.result}\n`);
@@ -139,7 +156,7 @@ export async function followTask(base: string, rootId: string): Promise<number> 
       console.error(`${C.red}Unknown task ${rootId}${C.reset}`);
       return 1;
     }
-    if (root.status === "done" || root.status === "failed") break;
+    if (isTerminal(root.status)) break;
     await new Promise((r) => setTimeout(r, 1500));
   }
   printFinal(root);
@@ -182,6 +199,8 @@ export function printTaskDetail(t: Task): void {
   console.log(`${C.dim}route${C.reset}    ${t.from} → ${t.to}  (depth ${t.depth}${t.parentId ? `, parent ${t.parentId.slice(0, 8)}` : ""})`);
   console.log(`${C.dim}created${C.reset}  ${t.createdAt}`);
   console.log(`${C.dim}updated${C.reset}  ${t.updatedAt}  (${duration(t.createdAt, t.updatedAt)})`);
+  if (t.pid !== undefined) console.log(`${C.dim}worker${C.reset}   pid ${t.pid} (running)`);
+  else if (t.exitCode !== undefined) console.log(`${C.dim}worker${C.reset}   exited with code ${t.exitCode ?? "(signal)"}`);
   console.log(`\n${C.bold}Prompt${C.reset}\n${t.prompt}`);
   if (t.result) console.log(`\n${C.bold}Result${C.reset}\n${t.result}`);
   if (t.artifacts?.length) {

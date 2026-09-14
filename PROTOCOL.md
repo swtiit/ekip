@@ -1,4 +1,4 @@
-# ekip protocol (v0.4.0)
+# ekip protocol (v0.5.0)
 
 Vendor-neutral contract for coordinating multiple coding agents over MCP. No
 part of it names a specific agent or project — Claude Code and Antigravity are
@@ -8,7 +8,7 @@ just the first two adapters.
 
 - **Task** — a unit of work addressed *from* one agent *to* another. It carries
   a `prompt` (the instruction), optional structured `context`, and moves through
-  `pending → claimed → done | failed`.
+  `pending → claimed → done | failed | cancelled`.
 - **Context** — a shared key/value blackboard both agents read and write. Used
   for hand-off state that isn't a discrete task (plans, decisions, file notes).
 - **Hub** — a single MCP server (Streamable HTTP) both agents connect to. It
@@ -35,14 +35,42 @@ the relationship symmetric: either side can delegate to the other.
 ```
 
 `bridge_wait` polls the in-memory store and returns as soon as the task is
-`done`/`failed`, or when its timeout elapses.
+terminal (`done`, `failed`, or `cancelled`), or when its timeout elapses.
 
-A **watchdog** in the hub sweeps orphaned tasks: `pending` past its TTL
-(spawnable targets only — polling agents may legitimately wait) or `claimed`
-with no result past its TTL becomes `failed`, with the reason — including any
-quota/permission signature found in the spawn log — recorded in `result`.
-Spawned agents die silently often enough (quota exhaustion, permission
-denials) that this is what keeps long delegation chains from wedging.
+## Worker tracking
+
+When the dispatcher launches a worker it records `dispatchedAt` and the
+worker's `pid` on the task, and keeps the process handle. If the process
+ends while the task is still `pending`/`claimed`, the task becomes `failed`
+within seconds, with `exitCode` recorded and the reason — including any
+quota/permission signature found in the spawn log — in `result`. Spawned
+agents die silently often enough (quota exhaustion, permission denials,
+missing binaries) that this is what keeps long delegation chains from
+wedging.
+
+A **watchdog** remains as the safety net for workers that are alive but
+wedged, or for tasks a restarted hub can no longer track: `pending` past its
+TTL (measured from `dispatchedAt`, so queued and polling-agent tasks are
+exempt) or `claimed` with no result past its TTL becomes `failed`, and the
+worker is killed.
+
+Dispatch that can never succeed — unknown agent, missing adapter, loop-guard
+depth exceeded, adapter failed to launch — fails the task immediately with
+`dispatch refused: <reason>` rather than leaving it `pending`.
+
+## Concurrency
+
+`maxConcurrent` caps simultaneously running workers, hub-wide (default 4)
+and optionally per agent. A delegation past the cap is accepted but
+**queued** (`dispatch.queued: true`); it launches, FIFO, when a slot frees.
+
+## Cancellation
+
+`bridge_cancel` stops a task and everything delegated from it (children
+first): running workers get `SIGTERM` on their whole process group, queued
+tasks leave the queue, and each affected task becomes `cancelled` with
+`cancelled by <agent>[: reason]` in `result`. Finished tasks are untouched. A
+`bridge_post_result` arriving for a cancelled task is rejected.
 
 ## Tools
 
@@ -51,7 +79,8 @@ denials) that this is what keeps long delegation chains from wedging.
 | `bridge_delegate` | Create a task for a peer; the hub launches (or the peer polls for) it. |
 | `bridge_claim` | Claim a `pending` task addressed to you (a specific `task_id`, or the oldest one); marks it `claimed`. |
 | `bridge_post_result` | Finish a task (`done`/`failed`) with a result + artifacts. |
-| `bridge_wait` | Block until a task finishes or times out. |
+| `bridge_wait` | Block until a task finishes (or is cancelled) or times out. |
+| `bridge_cancel` | Cancel a task and its descendants; kills running workers. |
 | `bridge_task_get` | Fetch one task by id. |
 | `bridge_list_tasks` | List tasks, optionally filtered by target/status. |
 | `bridge_context_set` | Write a shared-context key. |

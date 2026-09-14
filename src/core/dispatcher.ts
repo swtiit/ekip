@@ -1,25 +1,54 @@
 import { readFileSync } from "node:fs";
 import type { Task } from "../protocol/index.js";
-import { DEFAULT_MAX_DEPTH } from "../protocol/index.js";
+import { DEFAULT_MAX_DEPTH, isTerminal } from "../protocol/index.js";
 import { getAdapter } from "../adapters/index.js";
+import type { WorkerExit } from "../adapters/index.js";
 import type { AgentConfig, BridgeConfig } from "./config.js";
-import { hubUrl, resolveRoleFile } from "./config.js";
+import { DEFAULT_MAX_CONCURRENT, hubUrl, resolveRoleFile } from "./config.js";
+import { spawnLogHint } from "./logs.js";
+import type { Store } from "./store.js";
 
 export interface DispatchOutcome {
   spawned: boolean;
+  /** true when the task waits for a concurrency slot instead of launching now */
+  queued?: boolean;
   reason?: string;
   detail?: string;
 }
 
+interface RunningWorker {
+  taskId: string;
+  agent: string;
+  pid: number;
+}
+
+/** How long after a worker exits we wait for an in-flight post_result before failing the task. */
+const EXIT_GRACE_MS = 1500;
+
 /**
- * Turns a freshly-created task into a running headless agent.
+ * Turns a freshly-created task into a running headless agent — and keeps
+ * watching it.
  *
  * Looks up the target agent in config, finds its adapter, and spawns it with a
  * bootstrap prompt telling it to claim the task, do the work, and post a
- * result. Fire-and-forget: the agent reports back through the bridge MCP tools.
+ * result. The agent reports back through the bridge MCP tools; the dispatcher
+ * only tracks the *process*: when it exits without having posted a result,
+ * the task fails immediately (with the exit code and any quota/permission
+ * hint from its log) instead of waiting for the watchdog TTL.
+ *
+ * Concurrency: `maxConcurrent` (hub-wide, and optionally per agent) caps how
+ * many workers run at once. Tasks past the cap queue in FIFO order and launch
+ * as slots free up — the guard against a runaway conductor spawning ten Opus
+ * runs into the same quota.
  */
 export class Dispatcher {
-  constructor(private readonly config: BridgeConfig) {}
+  private readonly running = new Map<string, RunningWorker>();
+  private readonly queue: Task[] = [];
+
+  constructor(
+    private readonly config: BridgeConfig,
+    private readonly store: Store,
+  ) {}
 
   /** Standing role instructions from the agent's promptFile, if configured. */
   private rolePrompt(agent: AgentConfig): string | undefined {
@@ -58,34 +87,56 @@ export class Dispatcher {
     ].join("\n");
   }
 
+  /** Reject outright: the task can never run, so say so on the task itself. */
+  private refuse(task: Task, reason: string): DispatchOutcome {
+    this.store.updateTask(task.id, { status: "failed", result: `dispatch refused: ${reason}` });
+    return { spawned: false, reason };
+  }
+
+  private runningFor(agent: string): number {
+    let n = 0;
+    for (const w of this.running.values()) if (w.agent === agent) n++;
+    return n;
+  }
+
+  private hasSlot(agent: AgentConfig): boolean {
+    const hubCap = this.config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
+    if (this.running.size >= hubCap) return false;
+    if (agent.maxConcurrent !== undefined && this.runningFor(agent.name) >= agent.maxConcurrent) return false;
+    return true;
+  }
+
   async dispatch(task: Task): Promise<DispatchOutcome> {
     const maxDepth = this.config.maxDepth ?? DEFAULT_MAX_DEPTH;
     if (task.depth > maxDepth) {
-      return {
-        spawned: false,
-        reason: `max delegation depth ${maxDepth} exceeded (loop guard)`,
-      };
+      return this.refuse(task, `max delegation depth ${maxDepth} exceeded (loop guard)`);
     }
 
     const agent = this.config.agents.find((a) => a.name === task.to);
-    if (!agent) {
-      return { spawned: false, reason: `unknown agent "${task.to}"` };
-    }
+    if (!agent) return this.refuse(task, `unknown agent "${task.to}"`);
     if (agent.spawnable === false) {
       return {
         spawned: false,
         reason: `agent "${task.to}" is not spawnable; it must poll for tasks`,
       };
     }
-
-    const adapter = getAdapter(agent.adapter);
-    if (!adapter) {
-      return {
-        spawned: false,
-        reason: `no adapter "${agent.adapter}" registered for agent "${task.to}"`,
-      };
+    if (!getAdapter(agent.adapter)) {
+      return this.refuse(task, `no adapter "${agent.adapter}" registered for agent "${task.to}"`);
     }
 
+    if (!this.hasSlot(agent)) {
+      this.queue.push(task);
+      return {
+        spawned: false,
+        queued: true,
+        reason: `queued: ${this.running.size} worker(s) running (position ${this.queue.length})`,
+      };
+    }
+    return this.launch(task, agent);
+  }
+
+  private async launch(task: Task, agent: AgentConfig): Promise<DispatchOutcome> {
+    const adapter = getAdapter(agent.adapter)!;
     const result = await adapter.spawn({
       agentName: agent.name,
       prompt: this.buildBootstrap(task, this.rolePrompt(agent)),
@@ -95,8 +146,132 @@ export class Dispatcher {
       depth: task.depth,
       extraArgs: agent.args,
       command: agent.command,
+      onExit: (exit) => this.onWorkerExit(task.id, agent.name, exit),
     });
 
-    return { spawned: result.launched, detail: result.detail };
+    if (!result.launched) {
+      return this.refuse(task, result.detail ?? "adapter did not launch the worker");
+    }
+    if (result.pid !== undefined) {
+      this.running.set(task.id, { taskId: task.id, agent: agent.name, pid: result.pid });
+    }
+    this.store.updateTask(task.id, { dispatchedAt: new Date().toISOString(), pid: result.pid }, { touch: false });
+    return { spawned: true, detail: result.detail };
+  }
+
+  private onWorkerExit(taskId: string, agent: string, exit: WorkerExit): void {
+    this.running.delete(taskId);
+    // A slot opened — launch the next queued task for which there is room.
+    void this.drain();
+
+    const finish = (): void => {
+      const task = this.store.getTask(taskId);
+      if (!task) return;
+      const patch: Parameters<Store["updateTask"]>[1] = { exitCode: exit.code, pid: undefined };
+      if (isTerminal(task.status)) {
+        // Already reported (or cancelled): keep the bookkeeping, don't move updatedAt.
+        this.store.updateTask(taskId, patch, { touch: false });
+        return;
+      }
+      {
+        const how = exit.error
+          ? `worker failed to start: ${exit.error}`
+          : `worker exited (${exit.signal ? `signal ${exit.signal}` : `code ${exit.code}`}) ${
+              task.status === "pending" ? "without claiming the task" : "before posting a result"
+            }`;
+        const hint = spawnLogHint(this.config.projectRoot, agent, taskId);
+        patch.status = "failed";
+        patch.result = `${how}${hint ? ` — spawn log hints: ${hint}` : ""}`;
+      }
+      this.store.updateTask(taskId, patch);
+    };
+    // The post_result HTTP call completes before the CLI exits, but give a
+    // moment for the transport to settle before declaring the task dead.
+    if (exit.error) finish();
+    else setTimeout(finish, EXIT_GRACE_MS).unref();
+  }
+
+  private async drain(): Promise<void> {
+    for (let i = 0; i < this.queue.length; ) {
+      const task = this.queue[i];
+      const current = this.store.getTask(task.id);
+      if (!current || isTerminal(current.status)) {
+        this.queue.splice(i, 1);
+        continue;
+      }
+      const agent = this.config.agents.find((a) => a.name === task.to);
+      if (!agent || !this.hasSlot(agent)) {
+        i++;
+        continue;
+      }
+      this.queue.splice(i, 1);
+      await this.launch(current, agent);
+    }
+  }
+
+  /**
+   * Kill a task's worker without touching the task's status — for the
+   * watchdog, which has already declared the task failed and just needs the
+   * process (and its slot) gone.
+   */
+  kill(taskId: string): boolean {
+    const worker = this.running.get(taskId);
+    if (!worker) return false;
+    this.running.delete(taskId);
+    killTree(worker.pid);
+    void this.drain();
+    return true;
+  }
+
+  /** Snapshot for the API: who is running, who is waiting. */
+  status(): { running: RunningWorker[]; queued: string[] } {
+    return { running: [...this.running.values()], queued: this.queue.map((t) => t.id) };
+  }
+
+  /**
+   * Stop a task and everything delegated from it. Kills the worker's process
+   * group when one is running, drops queued descendants, and marks each
+   * affected task `cancelled`. Already-finished tasks are left alone.
+   */
+  cancel(taskId: string, by: string, reason?: string): string[] {
+    const cancelled: string[] = [];
+    const visit = (id: string): void => {
+      const task = this.store.getTask(id);
+      if (!task) return;
+      // Children first so a parent never reports done while a child is still alive.
+      for (const child of this.store.listTasks()) if (child.parentId === id) visit(child.id);
+      if (isTerminal(task.status)) return;
+
+      const qi = this.queue.findIndex((t) => t.id === id);
+      if (qi >= 0) this.queue.splice(qi, 1);
+
+      const worker = this.running.get(id);
+      if (worker) {
+        this.running.delete(id);
+        killTree(worker.pid);
+      }
+      this.store.updateTask(id, {
+        status: "cancelled",
+        result: `cancelled by ${by}${reason ? `: ${reason}` : ""}`,
+        pid: undefined,
+      });
+      cancelled.push(id);
+    };
+    visit(taskId);
+    void this.drain();
+    return cancelled;
+  }
+}
+
+/** SIGTERM the process group (the worker was spawned detached), falling back to the pid. */
+function killTree(pid: number): void {
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+      // already gone
+    }
   }
 }

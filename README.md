@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-58_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-83_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -104,18 +104,18 @@ sequenceDiagram
     H-->>A: final task state
 ```
 
-Eight MCP tools cover the whole protocol: `bridge_delegate`, `bridge_claim`,
-`bridge_post_result`, `bridge_wait`, `bridge_task_get`, `bridge_list_tasks`,
-`bridge_context_set`, `bridge_context_get`. Full contract in
-[PROTOCOL.md](PROTOCOL.md).
+Nine MCP tools cover the whole protocol: `bridge_delegate`, `bridge_claim`,
+`bridge_post_result`, `bridge_wait`, `bridge_cancel`, `bridge_task_get`,
+`bridge_list_tasks`, `bridge_context_set`, `bridge_context_get`. Full
+contract in [PROTOCOL.md](PROTOCOL.md).
 
 ## Three ways to watch and drive it
 
 | Surface | What you get |
 | --- | --- |
 | **Dashboard** `http://127.0.0.1:4319/ui` | Live task board (SSE), blackboard viewer/editor, per-task logs, artifact viewer, and a form to delegate work yourself — the human is one more peer |
-| **CLI** | `run` (delegate + live-follow the whole task tree), `follow`, `tasks`, `task`, `logs`, `context`, `watch`, `ui` |
-| **HTTP API** | `GET /api/state`, `GET /api/events` (SSE), `POST /api/delegate`, `POST /api/context`, `GET /api/logs/:taskId` |
+| **CLI** | `run` (delegate + live-follow the whole task tree), `follow`, `cancel`, `tasks`, `task`, `logs`, `context`, `watch`, `ui` |
+| **HTTP API** | `GET /api/state`, `GET /api/events` (SSE), `POST /api/delegate`, `POST /api/cancel`, `POST /api/context`, `GET /api/logs/:taskId` |
 
 ## Multi-agent pipelines
 
@@ -152,7 +152,9 @@ The examples ship a field-tested crew and flow:
     { "name": "me", "adapter": "claude", "spawnable": false }
   ],
   "maxDepth": 6,
-  "watchdog": { "pendingTtlSeconds": 600, "claimedTtlSeconds": 3600 }
+  "maxConcurrent": 4,
+  "watchdog": { "pendingTtlSeconds": 600, "claimedTtlSeconds": 3600 },
+  "retention": { "days": 14 }
 }
 ```
 
@@ -167,6 +169,12 @@ The examples ship a field-tested crew and flow:
   `--model` args — delegating to a *name* picks a *model*.
 - `spawnable: false` registers an agent that polls (`bridge_claim`) instead
   of being auto-launched — e.g. a session you drive interactively.
+- **`maxConcurrent`** caps how many workers run at once, hub-wide (default
+  4) and per agent (`"maxConcurrent": 1` on an agent entry). Delegations past
+  the cap queue and launch FIFO as slots free — so a runaway conductor can't
+  fork ten Opus runs into your quota.
+- **`retention.days`** drops finished tasks and their spawn logs after that
+  many days (default 14; `0` keeps everything).
 - `promptFile` prepends a markdown role to every spawn of that agent.
 - The **`command` adapter** plugs in any CLI with `{prompt}`, `{hubUrl}`,
   `{taskId}`, `{agent}`, `{depth}` templating — no code required.
@@ -190,14 +198,20 @@ Out of the box a spawned run can only talk to the bridge. For real coding
   always passes `--add-dir <cwd>` — without it, headless runs write into
   agy's scratch directory instead of your project.
 
-## The watchdog (and the quota question)
+## When workers die (and the quota question)
 
 Spawned agents die silently more often than you'd hope — quota exhaustion
 (Claude's "session limit", agy's silent 429 exit), permission denials,
-missing binaries. The hub sweeps orphaned tasks past their TTL to `failed`
-and greps the spawn log for the *reason*, so the dashboard tells you
-`watchdog: no claim within 600s — spawn log hints: "You've hit your session
-limit…"` instead of hanging forever.
+missing binaries. The hub keeps the worker's process handle: the moment it
+exits without having posted a result, the task fails **within seconds**,
+with the exit code and the *reason* grepped from the spawn log — so the
+dashboard tells you `worker exited (code 0) without claiming the task —
+spawn log hints: "You've hit your session limit…"` instead of hanging.
+
+A watchdog remains as the safety net for workers that are alive but wedged
+(TTL on `pending`/`claimed`, then the worker is killed), and `ekip cancel
+<task>` (or `bridge_cancel` from any agent) stops a task and everything
+delegated from it, killing the whole process tree.
 
 Neither vendor exposes remaining quota programmatically today, so the bridge
 surfaces quota problems post-mortem — and the pipeline templates carry spawn
@@ -206,13 +220,15 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 58 end-to-end cases, no LLMs involved
+npm test   # 83 end-to-end cases, no LLMs involved
 ```
 
-Boots a real hub on a scratch port and exercises the HTTP API, all 8 MCP
-tools, the dispatcher, permission/claim edge cases, watchdog reaping,
-loop-guard, concurrency (parallel claims), crash-safety (missing binaries),
-and the CLI as a subprocess.
+Boots a real hub on a scratch port and exercises the HTTP API, all 9 MCP
+tools, the dispatcher, permission/claim edge cases, fail-fast on worker
+exit, watchdog reaping (and worker kill), cancellation with process-tree
+kill and cascade, `maxConcurrent` queueing, retention pruning, loop-guard,
+concurrency (parallel claims), crash-safety (missing binaries), and the CLI
+as a subprocess. The same suite runs in CI on Linux and macOS, Node 20 and 22.
 
 ## FAQ
 
@@ -231,7 +247,8 @@ adapter file implementing `spawn` + `mcpConfigSnippet`.
 
 **What if two agents delegate to each other forever?** Every task carries a
 delegation `depth`; the dispatcher refuses past `maxDepth` (default 6), and
-pipeline templates cap their debate/review loops.
+pipeline templates cap their debate/review loops. `maxConcurrent` bounds the
+blast radius in the meantime, and `ekip cancel` stops a whole tree.
 
 ## Prior art & positioning
 

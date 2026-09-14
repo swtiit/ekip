@@ -16,6 +16,7 @@ export * from "./server.js";
 export { Store } from "./store.js";
 export { Dispatcher } from "./dispatcher.js";
 export { buildHub } from "./hub.js";
+export { removeSpawnLog, spawnLogHint, spawnLogPath } from "./logs.js";
 export {
   registerAdapter,
   getAdapter,

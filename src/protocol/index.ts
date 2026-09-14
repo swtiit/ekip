@@ -10,7 +10,12 @@ export type TaskStatus =
   | "pending" // created, waiting for the target agent to pick up
   | "claimed" // target agent acknowledged it
   | "done" // finished successfully
-  | "failed"; // finished with an error
+  | "failed" // finished with an error
+  | "cancelled"; // stopped on request before it finished
+
+/** Statuses a task never leaves. */
+export const TERMINAL_STATUSES: readonly TaskStatus[] = ["done", "failed", "cancelled"];
+export const isTerminal = (status: TaskStatus): boolean => TERMINAL_STATUSES.includes(status);
 
 export interface Artifact {
   /** standard kinds: "file", "diff", "url", "log", "note" (others pass through) */
@@ -40,6 +45,12 @@ export interface Task {
   parentId?: string;
   createdAt: string;
   updatedAt: string;
+  /** when the hub actually launched a worker for it (absent while queued) */
+  dispatchedAt?: string;
+  /** OS pid of the spawned worker, while the hub tracks it */
+  pid?: number;
+  /** exit code of the spawned worker once it ended (null = killed by signal) */
+  exitCode?: number | null;
 }
 
 export interface ContextEntry {
@@ -56,7 +67,7 @@ export interface BridgeState {
   context: ContextEntry[];
 }
 
-export const PROTOCOL_VERSION = "0.4.0";
+export const PROTOCOL_VERSION = "0.5.0";
 
 /** Maximum delegation depth before the dispatcher refuses to spawn again. */
 export const DEFAULT_MAX_DEPTH = 6;

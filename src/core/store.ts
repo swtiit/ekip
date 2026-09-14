@@ -9,6 +9,7 @@ import type {
   Task,
   TaskStatus,
 } from "../protocol/index.js";
+import { isTerminal } from "../protocol/index.js";
 
 /**
  * In-memory task queue + context blackboard with best-effort JSON persistence.
@@ -98,14 +99,36 @@ export class Store extends EventEmitter {
 
   updateTask(
     id: string,
-    patch: Partial<Pick<Task, "status" | "result" | "artifacts">>,
+    patch: Partial<Pick<Task, "status" | "result" | "artifacts" | "dispatchedAt" | "pid" | "exitCode">>,
+    /** `touch: false` records bookkeeping (pid, exit code) without moving `updatedAt` */
+    opts: { touch?: boolean } = {},
   ): Task | undefined {
     const task = this.tasks.get(id);
     if (!task) return undefined;
-    Object.assign(task, patch, { updatedAt: new Date().toISOString() });
+    Object.assign(task, patch, opts.touch === false ? {} : { updatedAt: new Date().toISOString() });
+    // `undefined` means "clear the field" — drop it so it doesn't persist as null.
+    for (const key of Object.keys(patch) as Array<keyof typeof patch>) {
+      if (patch[key] === undefined) delete task[key];
+    }
     this.persist();
     this.emit("change", { kind: "task", id: task.id });
     return task;
+  }
+
+  /**
+   * Drop finished tasks last touched before `cutoff` (ISO time). Returns what
+   * was removed so the caller can clean up their spawn logs too.
+   */
+  prune(cutoff: string): Task[] {
+    const removed: Task[] = [];
+    for (const task of this.tasks.values()) {
+      if (isTerminal(task.status) && task.updatedAt < cutoff) removed.push(task);
+    }
+    if (removed.length === 0) return removed;
+    for (const t of removed) this.tasks.delete(t.id);
+    this.persist();
+    this.emit("change", { kind: "prune", count: removed.length });
+    return removed;
   }
 
   setContext(key: string, value: unknown, updatedBy: string): ContextEntry {

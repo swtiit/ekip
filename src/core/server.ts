@@ -6,9 +6,10 @@ import { join } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { BridgeConfig } from "./config.js";
-import { CONFIG_FILENAME, getAgentFlag, hubUrl, setAgentFlag, stateFilePath } from "./config.js";
+import { CONFIG_FILENAME, RETENTION_DEFAULTS, getAgentFlag, hubUrl, setAgentFlag, stateFilePath } from "./config.js";
 import { Dispatcher } from "./dispatcher.js";
 import { buildHub } from "./hub.js";
+import { removeSpawnLog } from "./logs.js";
 import { Store } from "./store.js";
 import { dashboardHtml } from "./ui.js";
 import { Watchdog } from "./watchdog.js";
@@ -68,9 +69,25 @@ function sendText(res: ServerResponse, status: number, body: string, type = "tex
  */
 export function startServer(config: BridgeConfig): Promise<RunningHub> {
   const store = new Store(stateFilePath(config));
-  const dispatcher = new Dispatcher(config);
-  const watchdog = new Watchdog(config, store);
+  const dispatcher = new Dispatcher(config, store);
+  const watchdog = new Watchdog(config, store, (taskId) => dispatcher.kill(taskId));
   watchdog.start();
+
+  // A hub restart loses process handles: whatever was running is unknowable
+  // now. Drop stale pids so the dashboard doesn't show ghosts; the watchdog
+  // still reaps those tasks by TTL if their workers never report back.
+  for (const t of store.listTasks()) if (t.pid !== undefined) store.updateTask(t.id, { pid: undefined });
+
+  // Retention: finished tasks older than N days go, with their spawn logs.
+  const retentionDays = config.retention?.days ?? RETENTION_DEFAULTS.days;
+  const prune = (): void => {
+    if (!retentionDays || retentionDays <= 0) return;
+    const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
+    for (const t of store.prune(cutoff)) removeSpawnLog(config.projectRoot, t.to, t.id);
+  };
+  prune();
+  const pruneTimer = setInterval(prune, 3_600_000);
+  pruneTimer.unref();
 
   const transports: Record<string, StreamableHTTPServerTransport> = {};
   const sseClients = new Set<ServerResponse>();
@@ -155,6 +172,24 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     });
     const outcome = await dispatcher.dispatch(task);
     sendJson(res, 200, { task: store.getTask(task.id), dispatch: outcome });
+  }
+
+  async function handleCancel(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const { task_id, by, reason } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    if (typeof task_id !== "string" || !task_id) {
+      sendJson(res, 400, { error: "`task_id` is required" });
+      return;
+    }
+    if (!store.getTask(task_id)) {
+      sendJson(res, 404, { error: `unknown task ${task_id}` });
+      return;
+    }
+    const cancelled = dispatcher.cancel(
+      task_id,
+      typeof by === "string" && by ? by : "human",
+      typeof reason === "string" ? reason : undefined,
+    );
+    sendJson(res, 200, { cancelled, task: store.getTask(task_id) });
   }
 
   async function handleContext(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -304,6 +339,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
             agents: config.agents.map(describeAgent),
             tasks: store.listTasks(),
             context: store.listContext(),
+            workers: dispatcher.status(),
           });
         case "GET /api/events":
           return handleEvents(req, res);
@@ -313,6 +349,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return handleDelegate(req, res);
         case "POST /api/context":
           return handleContext(req, res);
+        case "POST /api/cancel":
+          return handleCancel(req, res);
         case "POST /api/config/agent":
           return handleConfigAgent(req, res);
         default:
@@ -341,6 +379,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
         close: () =>
           new Promise<void>((done) => {
             watchdog.stop();
+            clearInterval(pruneTimer);
             for (const res of sseClients) res.end();
             sseClients.clear();
             httpServer.close(() => done());

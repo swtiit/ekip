@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { PROTOCOL_VERSION } from "../protocol/index.js";
 import type { TaskStatus } from "../protocol/index.js";
+import { isTerminal } from "../protocol/index.js";
 import type { BridgeConfig } from "./config.js";
 import { Dispatcher } from "./dispatcher.js";
 import { Store } from "./store.js";
@@ -117,12 +118,16 @@ export function buildHub(
       },
     },
     async ({ task_id, status, result, artifacts }) => {
+      const existing = store.getTask(task_id);
+      if (!existing) return jsonText({ error: `unknown task ${task_id}` });
+      if (existing.status === "cancelled") {
+        return jsonText({ error: `task ${task_id} was cancelled; result discarded` });
+      }
       const updated = store.updateTask(task_id, {
         status: status as TaskStatus,
         result,
         artifacts,
       });
-      if (!updated) return jsonText({ error: `unknown task ${task_id}` });
       return jsonText({ ok: true, task: updated });
     },
   );
@@ -145,7 +150,7 @@ export function buildHub(
       while (true) {
         const task = store.getTask(task_id);
         if (!task) return jsonText({ error: `unknown task ${task_id}` });
-        if (task.status === "done" || task.status === "failed") {
+        if (isTerminal(task.status)) {
           return jsonText({ task });
         }
         if (Date.now() >= deadline) {
@@ -172,11 +177,30 @@ export function buildHub(
       description: "Optionally filter by target agent and/or status.",
       inputSchema: {
         to: z.string().optional(),
-        status: z.enum(["pending", "claimed", "done", "failed"]).optional(),
+        status: z.enum(["pending", "claimed", "done", "failed", "cancelled"]).optional(),
       },
     },
     async ({ to, status }) =>
       jsonText({ tasks: store.listTasks({ to, status: status as TaskStatus }) }),
+  );
+
+  server.registerTool(
+    "bridge_cancel",
+    {
+      title: "Cancel a task and everything delegated from it",
+      description:
+        "Stops a pending/claimed task: kills its worker process if the hub launched one, drops queued descendants, and marks each affected task `cancelled`. Finished tasks are untouched.",
+      inputSchema: {
+        task_id: z.string(),
+        by: z.string().describe("your own agent name"),
+        reason: z.string().optional(),
+      },
+    },
+    async ({ task_id, by, reason }) => {
+      if (!store.getTask(task_id)) return jsonText({ error: `unknown task ${task_id}` });
+      const cancelled = dispatcher.cancel(task_id, by, reason);
+      return jsonText({ cancelled, task: store.getTask(task_id) });
+    },
   );
 
   server.registerTool(

@@ -21,6 +21,8 @@ export interface AgentConfig {
   promptFile?: string;
   /** set false to register the agent without letting the hub spawn it */
   spawnable?: boolean;
+  /** cap on simultaneous workers for this agent (within the hub-wide cap) */
+  maxConcurrent?: number;
 }
 
 export interface WatchdogConfig {
@@ -41,6 +43,15 @@ export const WATCHDOG_DEFAULTS: Required<WatchdogConfig> = {
   enabled: true,
 };
 
+export interface RetentionConfig {
+  /** drop finished tasks (and their spawn logs) older than this; 0 keeps forever */
+  days?: number;
+}
+
+/** Hub-wide cap on simultaneously running workers. */
+export const DEFAULT_MAX_CONCURRENT = 4;
+export const RETENTION_DEFAULTS: Required<RetentionConfig> = { days: 14 };
+
 export interface BridgeConfig {
   /** human label for the project this hub serves */
   project: string;
@@ -50,7 +61,10 @@ export interface BridgeConfig {
   projectRoot: string;
   agents: AgentConfig[];
   maxDepth?: number;
+  /** hub-wide cap on simultaneously running workers (default 4); extra tasks queue */
+  maxConcurrent?: number;
   watchdog?: WatchdogConfig;
+  retention?: RetentionConfig;
 }
 
 export const CONFIG_FILENAME = "ekip.config.json";

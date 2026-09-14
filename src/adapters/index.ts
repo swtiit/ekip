@@ -24,6 +24,15 @@ export interface SpawnRequest {
   extraArgs?: string[];
   /** executable from config, used by the generic "command" adapter */
   command?: string;
+  /** called once when the spawned process ends (or fails to start) */
+  onExit?: (exit: WorkerExit) => void;
+}
+
+export interface WorkerExit {
+  code: number | null;
+  signal: string | null;
+  /** set when the process never started (e.g. ENOENT) */
+  error?: string;
 }
 
 export interface SpawnResult {
