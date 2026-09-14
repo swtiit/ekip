@@ -33,6 +33,7 @@ export interface SpawnRequest {
 export type WorkerEvent =
   | { kind: "text"; text: string }
   | { kind: "tool"; name: string; input: unknown }
+  | { kind: "model"; model: string }
   | { kind: "usage"; usage: import("../protocol/index.js").TaskUsage; isError?: boolean };
 
 export interface WorkerExit {

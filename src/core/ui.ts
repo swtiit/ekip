@@ -245,8 +245,10 @@ $('agent-cfg').addEventListener('click', function(e){
     });
 });
 fetch('/api/models').then(function(r){ return r.json(); }).then(function(m){
-  $('models-claude').innerHTML = (m.claude || []).map(function(x){ return '<option value="' + esc(x) + '">'; }).join('');
-  $('models-antigravity').innerHTML = (m.antigravity || []).map(function(x){ return '<option value="' + esc(x) + '">'; }).join('');
+  ['claude','antigravity'].forEach(function(k){
+    var el = $('models-' + k); if (!el) return;
+    el.innerHTML = ((m[k] && m[k].models) || []).map(function(x){ return '<option value="' + esc(x.value) + '">'; }).join('');
+  });
 });
 var es = new EventSource('/api/events');
 es.onopen = function(){ var c = $('conn'); c.textContent = 'live'; c.className = 'pill live'; load(); };

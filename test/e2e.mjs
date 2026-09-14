@@ -156,7 +156,21 @@ try {
   const cfgUnset = await (await post("/api/config/agent", { name: "modeled", model: "", effort: "" })).json();
   t("config unset model", cfgUnset.agent?.model === null && cfgUnset.agent?.effort === null);
   const models = await api("/api/models");
-  t("models endpoint", Array.isArray(models.claude) && models.claude.includes("sonnet"));
+  // The e2e agents all use the generic "command" adapter, which has no model
+  // list; the catalog still answers, with a note saying why it is empty.
+  t("models endpoint answers per adapter", !!models.command && Array.isArray(models.command.models) && /no model list/.test(models.command.note ?? ""), JSON.stringify(models).slice(0, 160));
+  const { claudeCatalog } = await import("../dist/core/index.js");
+  const cc = claudeCatalog();
+  t("claude catalog always offers the aliases", ["fable", "opus", "sonnet", "haiku"].every((a) => cc.models.some((m) => m.value === a)));
+  t("claude catalog explains itself", /no list-models command/.test(cc.note ?? ""));
+
+  const limits = await api("/api/limits");
+  t("limits endpoint", limits.maxDepth === 3 && limits.watchdog.pendingTtlSeconds === 2 && typeof limits.maxConcurrent === "number");
+  const mc = await (await post("/api/config/agent", { name: "modeled", maxConcurrent: 2 })).json();
+  t("config sets maxConcurrent", mc.agent?.maxConcurrent === 2);
+  t("config rejects bad maxConcurrent", (await post("/api/config/agent", { name: "modeled", maxConcurrent: 0 })).status === 400);
+  const mcOff = await (await post("/api/config/agent", { name: "modeled", maxConcurrent: "" })).json();
+  t("config unsets maxConcurrent", mcOff.agent?.maxConcurrent === null);
 
   const d1 = await (await post("/api/delegate", { to: "mock", prompt: "ping", title: "api-mock-1" })).json();
   t("delegate accepted", d1.task?.status === "pending" && d1.dispatch?.spawned === true);

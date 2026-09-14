@@ -6,6 +6,7 @@ import type { WorkerEvent, WorkerExit } from "../adapters/index.js";
 import type { AgentConfig, BridgeConfig } from "./config.js";
 import { DEFAULT_MAX_CONCURRENT, hubUrl, resolveRoleFile } from "./config.js";
 import { spawnLogHint } from "./logs.js";
+import { recordSeenModel } from "./models.js";
 import type { Store } from "./store.js";
 
 export interface DispatchOutcome {
@@ -115,8 +116,15 @@ export class Dispatcher {
         text: summarizeToolInput(event.name, event.input),
         meta: { tool: event.name, input: event.input },
       });
+    } else if (event.kind === "model") {
+      recordSeenModel(event.model);
+      const task = this.store.getTask(taskId);
+      if (task?.usage?.model !== event.model) {
+        this.store.updateTask(taskId, { usage: { ...task?.usage, model: event.model } }, { touch: false });
+      }
     } else if (event.kind === "usage") {
-      this.store.updateTask(taskId, { usage: event.usage }, { touch: false });
+      const task = this.store.getTask(taskId);
+      this.store.updateTask(taskId, { usage: { model: task?.usage?.model, ...event.usage } }, { touch: false });
     }
   }
 

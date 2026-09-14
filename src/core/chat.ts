@@ -71,6 +71,24 @@ main{display:flex;flex-direction:column;min-height:0}
 .b-pending{color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
 .empty{color:var(--muted);text-align:center;padding:80px 20px}
 .empty b{display:block;font-size:16px;color:var(--text);margin-bottom:6px}
+.settings{flex:1;overflow:auto;padding:20px 0 40px}
+.settings h2{font-size:15px;margin:22px 0 10px;font-weight:600}
+.settings h2:first-child{margin-top:0}
+.settings .lede{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+.agent{border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;background:var(--panel)}
+.agent .hd{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.agent .nm{font-weight:600}
+.agent .ad{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.agent .role{font-size:11px;color:var(--muted);font-family:var(--mono);margin-left:auto}
+.agent .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
+.agent label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted)}
+.agent input,.agent select{font:inherit;font-size:13px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);min-width:0}
+.agent .chk{flex-direction:row;align-items:center;gap:6px;font-size:12px;color:var(--text)}
+.agent .act{display:flex;gap:8px;align-items:center;margin-top:10px}
+.agent button{font:inherit;font-size:12px;padding:5px 12px;border:0;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font-weight:600}
+.agent .said{font-size:12px;color:var(--muted)}
+.note{font-size:12px;color:var(--muted);border-left:2px solid var(--border);padding:2px 0 2px 10px;margin-bottom:10px}
+.note b{color:var(--text);font-weight:600}
 .compose{border-top:1px solid var(--border);padding:12px 20px 14px;background:var(--panel)}
 .compose .row{max-width:860px;margin:0 auto;display:flex;gap:8px;align-items:flex-end}
 .compose .box{flex:1;border:1px solid var(--border);border-radius:8px;background:var(--bg);display:flex;flex-direction:column}
@@ -91,11 +109,18 @@ main{display:flex;flex-direction:column;min-height:0}
   <div class="hd"><b>ekip</b><span id="project" style="color:var(--muted)"></span><span class="pill" id="conn">connecting</span></div>
   <button class="new" id="new">+ New conversation</button>
   <div class="threads" id="threads"></div>
-  <div class="ft"><a href="/ui">board</a><span id="agents-ft"></span></div>
+  <div class="ft"><a href="#" id="settings-link">settings</a><a href="/ui">board</a><span id="agents-ft"></span></div>
 </aside>
 <main>
   <div class="top"><span class="title" id="title">Pick a conversation, or start one below</span><span class="sub" id="sub"></span><span class="sp"></span><button id="cancel" hidden>Cancel</button></div>
   <div class="log" id="log"><div class="wrap" id="lines"><div class="empty"><b>Nothing here yet</b>Type a request below — it goes to the agent you pick, and every reply, hand-off and tool call shows up here as it happens.</div></div></div>
+  <div class="settings" id="settings" hidden><div class="wrap">
+    <h2>Agents</h2>
+    <p class="lede" id="limits"></p>
+    <div id="agent-cards"></div>
+    <h2>Where these lists come from</h2>
+    <div id="catalog-notes"></div>
+  </div></div>
   <div class="compose"><div class="row">
     <div class="box">
       <textarea id="text" rows="1" placeholder="Ask the crew… (Enter to send, Shift+Enter for a new line)"></textarea>
@@ -148,6 +173,7 @@ function renderThreads(){
   }).join('') : '<div class="empty" style="padding:30px 14px;font-size:12px">No conversations yet.</div>';
 }
 function render(){
+  if (showSettings) return;
   var cancelBtn = $('cancel');
   if (!thread) { $('title').textContent = 'Pick a conversation, or start one below'; $('sub').textContent = ''; cancelBtn.hidden = true; $('mode').textContent = 'starts a new conversation';
     $('lines').innerHTML = '<div class="empty"><b>Nothing here yet</b>Type a request below — it goes to the agent you pick, and every reply, hand-off and tool call shows up here as it happens.</div>'; return; }
@@ -181,7 +207,72 @@ function render(){
   $('lines').innerHTML = html;
   if (stick) log.scrollTop = log.scrollHeight;
 }
-function select(id){ current = id; renderThreads(); loadThread().then(function(){ $('log').scrollTop = $('log').scrollHeight; }); }
+var catalogs = {}, showSettings = false;
+function loadCatalogs(){ return fetch('/api/models').then(function(r){ return r.json(); }).then(function(c){ catalogs = c; }); }
+function renderSettings(){
+  if (!showSettings) return;
+  fetch('/api/limits').then(function(r){ return r.json(); }).then(function(l){
+    $('limits').textContent = 'Hub limits: up to ' + l.maxConcurrent + ' workers at once, delegation depth ' + l.maxDepth +
+      ', watchdog ' + l.watchdog.pendingTtlSeconds + 's/' + l.watchdog.claimedTtlSeconds + 's, keeping finished tasks ' + l.retention.days + ' days. Edit ekip.config.json to change these.';
+  });
+  $('agent-cards').innerHTML = agents.map(function(a){
+    var cat = (catalogs[a.adapter] && catalogs[a.adapter].models) || [];
+    var known = cat.some(function(m){ return m.value === a.model; });
+    var opts = cat.map(function(m){
+      return '<option value="' + esc(m.value) + '"' + (m.value === a.model ? ' selected' : '') + '>' + esc(m.label) + (m.source === 'seen' ? ' · seen here' : m.source === 'account' ? ' · your account' : '') + '</option>';
+    }).join('');
+    return '<div class="agent" data-name="' + esc(a.name) + '">' +
+      '<div class="hd"><span class="nm">' + esc(a.name) + '</span><span class="ad">' + esc(a.adapter) + '</span>' +
+      (a.promptFile ? '<span class="role">role: ' + esc(a.promptFile) + '</span>' : '') + '</div>' +
+      '<div class="grid">' +
+        '<label>model<select data-f="model">' +
+          '<option value=""' + (a.model ? '' : ' selected') + '>(adapter default)</option>' + opts +
+          (a.model && !known ? '<option value="' + esc(a.model) + '" selected>' + esc(a.model) + ' · current</option>' : '') +
+          '<option value="__custom">type a custom id…</option>' +
+        '</select></label>' +
+        (a.adapter === 'claude' ? '<label>effort<select data-f="effort">' +
+          ['', 'low', 'medium', 'high', 'xhigh', 'max'].map(function(o){
+            return '<option value="' + o + '"' + ((a.effort || '') === o ? ' selected' : '') + '>' + (o || '(model default)') + '</option>';
+          }).join('') + '</select></label>' : '') +
+        '<label>max parallel<input data-f="maxConcurrent" type="number" min="1" placeholder="hub limit" value="' + (a.maxConcurrent == null ? '' : a.maxConcurrent) + '"></label>' +
+        '<label class="chk"><input data-f="spawnable" type="checkbox"' + (a.spawnable ? ' checked' : '') + '> hub may launch it</label>' +
+      '</div>' +
+      '<div class="act"><button class="save">Save</button><span class="said"></span></div></div>';
+  }).join('');
+  $('catalog-notes').innerHTML = Object.keys(catalogs).map(function(k){
+    var c = catalogs[k];
+    return '<div class="note"><b>' + esc(k) + '</b> — ' + (c.live ? c.models.length + ' models, live' : 'no live list') + '. ' + esc(c.note || '') + '</div>';
+  }).join('') || '<div class="note">No adapters configured.</div>';
+}
+$('agent-cards').addEventListener('change', function(e){
+  if (e.target.getAttribute('data-f') !== 'model' || e.target.value !== '__custom') return;
+  var typed = prompt('Model id to pass after --model:');
+  if (!typed) { e.target.value = ''; return; }
+  var opt = document.createElement('option'); opt.value = typed; opt.textContent = typed + ' · custom';
+  e.target.insertBefore(opt, e.target.lastElementChild); e.target.value = typed;
+});
+$('agent-cards').addEventListener('click', function(e){
+  if (!e.target.classList.contains('save')) return;
+  var card = e.target.closest('.agent'), body = { name: card.getAttribute('data-name') }, said = card.querySelector('.said');
+  card.querySelectorAll('[data-f]').forEach(function(el){
+    var f = el.getAttribute('data-f');
+    body[f] = f === 'spawnable' ? el.checked : el.value;
+  });
+  if (body.model === '__custom') { said.textContent = 'pick or type a model first'; return; }
+  said.textContent = 'saving…';
+  fetch('/api/config/agent', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })
+    .then(function(r){ return r.json(); })
+    .then(function(d){ said.textContent = d.error ? d.error : 'saved — applies to the next task'; loadState(); });
+});
+function toggleSettings(on){
+  showSettings = on;
+  $('settings').hidden = !on; $('log').hidden = on;
+  $('title').textContent = on ? 'Settings' : (thread ? ($('title').textContent) : 'Pick a conversation, or start one below');
+  $('settings-link').textContent = on ? 'back to chat' : 'settings';
+  if (on) { loadCatalogs().then(renderSettings); renderSettings(); } else render();
+}
+$('settings-link').addEventListener('click', function(e){ e.preventDefault(); toggleSettings(!showSettings); });
+function select(id){ if (showSettings) toggleSettings(false); current = id; renderThreads(); loadThread().then(function(){ $('log').scrollTop = $('log').scrollHeight; }); }
 $('threads').addEventListener('click', function(e){ var el = e.target.closest('.th'); if (el) select(el.getAttribute('data-id')); });
 $('new').addEventListener('click', function(){ current = null; thread = null; renderThreads(); render(); $('text').focus(); });
 $('cancel').addEventListener('click', function(){ if (!thread || !confirm('Cancel this conversation and everything running in it?')) return;

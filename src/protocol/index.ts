@@ -56,6 +56,8 @@ export interface Task {
 }
 
 export interface TaskUsage {
+  /** the model the worker actually ran with, when it reports one */
+  model?: string;
   inputTokens?: number;
   outputTokens?: number;
   costUsd?: number;

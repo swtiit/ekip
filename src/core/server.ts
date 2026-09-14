@@ -6,10 +6,20 @@ import { join } from "node:path";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import type { BridgeConfig } from "./config.js";
-import { CONFIG_FILENAME, RETENTION_DEFAULTS, getAgentFlag, hubUrl, setAgentFlag, stateFilePath } from "./config.js";
+import {
+  CONFIG_FILENAME,
+  DEFAULT_MAX_CONCURRENT,
+  RETENTION_DEFAULTS,
+  WATCHDOG_DEFAULTS,
+  getAgentFlag,
+  hubUrl,
+  setAgentFlag,
+  stateFilePath,
+} from "./config.js";
 import { Dispatcher } from "./dispatcher.js";
 import { buildHub } from "./hub.js";
 import { removeSpawnLog } from "./logs.js";
+import { catalogFor } from "./models.js";
 import { Store } from "./store.js";
 import { dashboardHtml } from "./ui.js";
 import { chatHtml } from "./chat.js";
@@ -212,38 +222,14 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     });
   }
 
-  // Known Claude model names plus live `agy models` output, cached briefly.
-  const CLAUDE_MODELS = [
-    "fable",
-    "opus",
-    "sonnet",
-    "haiku",
-    "claude-fable-5",
-    "claude-opus-4-8",
-    "claude-sonnet-5",
-    "claude-haiku-4-5-20251001",
-  ];
-  let agyModelsCache: { at: number; models: string[] } | undefined;
-  function agyModels(): Promise<string[]> {
-    if (agyModelsCache && Date.now() - agyModelsCache.at < 600_000) {
-      return Promise.resolve(agyModelsCache.models);
-    }
-    return new Promise((resolveModels) => {
-      execFile("agy", ["models"], { timeout: 10_000 }, (err, stdout) => {
-        const models = err
-          ? []
-          : stdout
-              .split("\n")
-              .map((l) => l.trim())
-              .filter(Boolean);
-        agyModelsCache = { at: Date.now(), models };
-        resolveModels(models);
-      });
-    });
-  }
-
+  /**
+   * Model catalogs per adapter — see core/models.ts for where each list
+   * comes from and why neither vendor simply hands one over.
+   */
   async function handleModels(res: ServerResponse): Promise<void> {
-    sendJson(res, 200, { claude: CLAUDE_MODELS, antigravity: await agyModels() });
+    const adapters = [...new Set(config.agents.map((a) => a.adapter))];
+    const entries = await Promise.all(adapters.map(async (a) => [a, await catalogFor(a)] as const));
+    sendJson(res, 200, Object.fromEntries(entries));
   }
 
   /**
@@ -277,6 +263,15 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       setAgentFlag(agent, "--effort", effort as string);
     }
     if ("spawnable" in body) agent.spawnable = body.spawnable !== false;
+    if ("maxConcurrent" in body) {
+      const raw = body.maxConcurrent;
+      const n = raw === "" || raw === null ? undefined : Number(raw);
+      if (n !== undefined && (!Number.isInteger(n) || n < 1)) {
+        sendJson(res, 400, { error: "`maxConcurrent` must be a whole number ≥ 1, or empty to unset" });
+        return;
+      }
+      agent.maxConcurrent = n;
+    }
 
     // Persist to the project's config file, touching only this agent's entry.
     try {
@@ -286,6 +281,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       if (entry) {
         entry.args = agent.args;
         entry.spawnable = agent.spawnable;
+        if (agent.maxConcurrent === undefined) delete entry.maxConcurrent;
+        else entry.maxConcurrent = agent.maxConcurrent;
         writeFileSync(path, JSON.stringify(raw, null, 2) + "\n");
       }
     } catch {
@@ -302,6 +299,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     model: getAgentFlag(a, "--model") ?? null,
     effort: getAgentFlag(a, "--effort") ?? null,
     promptFile: a.promptFile ?? null,
+    maxConcurrent: a.maxConcurrent ?? null,
+    args: a.args ?? [],
   });
 
   function handleThreads(res: ServerResponse): void {
@@ -383,6 +382,13 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return handleEvents(req, res);
         case "GET /api/models":
           return handleModels(res);
+        case "GET /api/limits":
+          return sendJson(res, 200, {
+            maxConcurrent: config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT,
+            maxDepth: config.maxDepth ?? 6,
+            watchdog: { ...WATCHDOG_DEFAULTS, ...config.watchdog },
+            retention: { days: retentionDays },
+          });
         case "POST /api/delegate":
           return handleDelegate(req, res);
         case "POST /api/context":

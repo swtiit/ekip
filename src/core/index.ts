@@ -17,6 +17,7 @@ export { Store } from "./store.js";
 export { Dispatcher } from "./dispatcher.js";
 export { buildHub } from "./hub.js";
 export { removeSpawnLog, spawnLogHint, spawnLogPath } from "./logs.js";
+export { agyCatalog, catalogFor, claudeCatalog, listSeenModels, recordSeenModel } from "./models.js";
 export {
   registerAdapter,
   getAdapter,

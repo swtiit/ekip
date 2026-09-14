@@ -96,7 +96,9 @@ export function parseClaudeStreamLine(line: string): WorkerEvent[] {
   }
   const out: WorkerEvent[] = [];
   if (msg.type === "assistant") {
-    const content = (msg.message as { content?: StreamBlock[] } | undefined)?.content ?? [];
+    const message = msg.message as { content?: StreamBlock[]; model?: string } | undefined;
+    if (message?.model) out.push({ kind: "model", model: message.model });
+    const content = message?.content ?? [];
     for (const block of content) {
       if (block.type === "text" && block.text?.trim()) out.push({ kind: "text", text: block.text.trim() });
       else if (block.type === "tool_use" && block.name) out.push({ kind: "tool", name: block.name, input: block.input });
