@@ -401,6 +401,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return sendJson(res, 200, {
             project: config.project,
             hubUrl: hubUrl(config),
+            language: config.language ?? null,
             agents: config.agents.map(describeAgent),
             tasks: store.listTasks(),
             context: store.listContext(),

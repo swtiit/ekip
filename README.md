@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-121_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-124_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -111,13 +111,18 @@ Eleven MCP tools cover the whole protocol: `bridge_delegate`, `bridge_claim`,
 
 ## Three ways to watch and drive it
 
-The hub serves one web app at `http://127.0.0.1:4319` with three views:
+The hub serves one web app at `http://127.0.0.1:4319`. It follows the hub's
+reporting language, so a crew set to Vietnamese gets a Vietnamese interface.
 
 | View | What you get |
 | --- | --- |
-| **Chat** `/chat` | A transcript per conversation, in the shape a coding-agent transcript has taught people to read: one block per task, the agent's words as prose, its tool calls as one-liners you can open (`wrote greet.js`, `ran node greet.js`), and **work it hands to another agent nested underneath**, with that run's model, tokens and cost on its header. A composer at the bottom talks to the crew or replies into a running thread |
-| **Board** `/board` | Live task board (SSE), blackboard viewer/editor, per-task logs and artifacts, cancel, and a form to delegate work yourself — the human is one more peer |
-| **Settings** `/settings` | Per-agent model, effort, parallelism and auto-spawn, with model lists read live where the vendor offers one (see below), plus the hub's current limits |
+| **Chat** `/chat` | Conversations on the left, a transcript in the middle, the **crew** on the right. The transcript reads like a coding-agent session: your request as a bubble, each agent's words as prose, its tool calls as plain-language steps (open while it works, folded when done, the current step lit), work it **hands to another agent nested under the hand-off**, and a result card with receipts (files, logs) and what the run cost. Type `@` to pick who gets the message. The crew panel shows who is working on what, for how long, with Stop and Message on every member |
+| **Board** `/board` | A kanban by state (queued, working, done, failed and stopped) with per-agent filters and search. Click a card for its request, result, model, tokens, cost, receipts and log. The blackboard sits alongside |
+| **Settings** `/settings` | Reporting language, and each member's model (live lists where the vendor offers one), effort, parallelism and auto-launch — all saved as you change them. Plus the hub's limits and the snippet to connect another agent |
+
+An agent that is working lights its tally — the red lamp a camera shows while
+it records — everywhere it appears. `⌘K` jumps to any view, conversation or
+agent. Light and dark follow the system, with a toggle in the header.
 
 And two more ways in:
 

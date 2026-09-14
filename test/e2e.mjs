@@ -220,6 +220,17 @@ try {
   t("app served", appRes.status === 200 && appHtml.includes("<!doctype html>") && appHtml.length > 8000);
   t("app has all three views", ["v-chat", "v-board", "v-settings"].every((v) => appHtml.includes(v)));
   t("app escapes + routes", appHtml.includes("function esc(") && appHtml.includes("history.pushState"));
+  {
+    // The client ships inside a template string; a lost backslash or a stray
+    // backtick breaks it silently in the browser. It must at least parse, and
+    // its regexes must arrive intact.
+    const js = appHtml.slice(appHtml.lastIndexOf("<script>") + 8, appHtml.lastIndexOf("</script>"));
+    let parses = true;
+    try { new Function(js); } catch { parses = false; }
+    t("client script parses", parses);
+    t("client regexes keep their backslashes", js.includes("/^\\S+ started: /") && js.includes("\\x60\\x60\\x60"));
+    t("client speaks Vietnamese and English", js.includes("Giao việc cho ê-kíp") && js.includes("Put your crew to work"));
+  }
   t("same app at /settings", (await (await fetch(`${BASE}/settings`)).text()) === appHtml);
   t("deep link serves the app", (await (await fetch(`${BASE}/chat/${d1.task.id}`)).text()) === appHtml);
   const uiRedirect = await fetch(`${BASE}/ui`, { redirect: "manual" });
