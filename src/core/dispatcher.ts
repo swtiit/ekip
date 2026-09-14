@@ -74,19 +74,41 @@ export class Dispatcher {
     }
   }
 
+  /**
+   * Who else is on the crew, by address and by what they are for — so an
+   * agent picks "claude-coder" for code because its description says so, not
+   * because it guessed from the name.
+   */
+  private crewLines(self: string): string[] {
+    const others = this.config.agents.filter((a) => a.name !== self);
+    if (others.length === 0) return [];
+    return [
+      `Your crew — delegate with \`bridge_delegate\` using the name on the left:`,
+      ...others.map(
+        (a) =>
+          `- ${a.name}${a.label ? ` (${a.label})` : ""}: ${a.description ?? `${a.adapter} agent`}${
+            a.spawnable === false ? " — works interactively, may not pick up right away" : ""
+          }`,
+      ),
+    ];
+  }
+
   private buildBootstrap(task: Task, role?: string): string {
     const header = role
       ? [`[Standing role instructions for "${task.to}"]`, role, "", "---", ""]
       : [];
+    const me = this.config.agents.find((a) => a.name === task.to);
     return [
       ...header,
-      `You are the agent "${task.to}" in an ekip session.`,
+      `You are the agent "${task.to}"${me?.label ? ` (${me.label})` : ""} in an ekip session.`,
+      ...(me?.description ? [`Your part in the crew: ${me.description}`] : []),
       `A task has been delegated to you by "${task.from}".`,
       ``,
       `1. Call the MCP tool \`bridge_claim\` with { as: "${task.to}", task_id: "${task.id}" } to acknowledge it.`,
       `2. Carry out the task in this repository.`,
       `3. When finished, call \`bridge_post_result\` with { task_id: "${task.id}", status: "done", result: "<summary>" }. Use status "failed" if you could not complete it.`,
       `You may read/write shared context with \`bridge_context_get\` / \`bridge_context_set\`, and delegate sub-tasks with \`bridge_delegate\`.`,
+      ...this.crewLines(task.to),
       ...(this.config.language
         ? [
             `Write in ${this.config.language}: everything you say, every bridge_say note, and your bridge_post_result summary. Code, file names, commands and identifiers stay as they are.`,

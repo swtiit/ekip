@@ -13,6 +13,7 @@ import {
   WATCHDOG_DEFAULTS,
   getAgentFlag,
   hubUrl,
+  resolveRoleFile,
   setAgentFlag,
   stateFilePath,
 } from "./config.js";
@@ -262,6 +263,17 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       setAgentFlag(agent, "--effort", effort as string);
     }
     if ("spawnable" in body) agent.spawnable = body.spawnable !== false;
+    for (const [field, max] of [["label", 40], ["description", 240]] as const) {
+      if (!(field in body)) continue;
+      const raw = body[field];
+      if (typeof raw !== "string" || raw.length > max) {
+        sendJson(res, 400, { error: `\`${field}\` must be a string of at most ${max} characters (empty to unset)` });
+        return;
+      }
+      const value = raw.trim();
+      if (value) agent[field] = value;
+      else delete agent[field];
+    }
     if ("maxConcurrent" in body) {
       const raw = body.maxConcurrent;
       const n = raw === "" || raw === null ? undefined : Number(raw);
@@ -282,6 +294,10 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
         entry.spawnable = agent.spawnable;
         if (agent.maxConcurrent === undefined) delete entry.maxConcurrent;
         else entry.maxConcurrent = agent.maxConcurrent;
+        for (const field of ["label", "description"] as const) {
+          if (agent[field] === undefined) delete entry[field];
+          else entry[field] = agent[field];
+        }
         writeFileSync(path, JSON.stringify(raw, null, 2) + "\n");
       }
     } catch {
@@ -326,6 +342,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     model: getAgentFlag(a, "--model") ?? null,
     effort: getAgentFlag(a, "--effort") ?? null,
     promptFile: a.promptFile ?? null,
+    label: a.label ?? null,
+    description: a.description ?? null,
     maxConcurrent: a.maxConcurrent ?? null,
     args: a.args ?? [],
   });
@@ -437,6 +455,13 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           // routes; serve the app and let it read the path.
           if (req.method === "GET" && /^\/chat\/[A-Za-z0-9-]+$/.test(path)) {
             return sendText(res, 200, appHtml(), "text/html");
+          }
+          if (req.method === "GET" && path.startsWith("/api/role/")) {
+            const who = config.agents.find((a) => a.name === decodeURIComponent(path.slice("/api/role/".length)));
+            if (!who) return sendJson(res, 404, { error: "unknown agent" });
+            const file = who.promptFile ? resolveRoleFile(config.projectRoot, who.promptFile) : undefined;
+            if (!file) return sendJson(res, 200, { file: who.promptFile ?? null, text: null });
+            return sendJson(res, 200, { file: who.promptFile, text: readFileSync(file, "utf8").slice(0, 20000) });
           }
           if (req.method === "GET" && path.startsWith("/api/thread/")) {
             return handleThread(res, decodeURIComponent(path.slice("/api/thread/".length)));

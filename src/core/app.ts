@@ -120,14 +120,15 @@ export function appHtml(): string {
 
       <div class="section">
         <div class="section-hd"><h2 data-t="lang">Reporting language</h2></div>
-        <div class="panel pad" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div class="seg" id="lang-seg"></div>
-          <p class="muted" style="margin:0;font-size:12.5px;flex:1;min-width:240px" data-t="langS"></p>
+        <div class="panel pad setting-row">
+          <select class="field" id="lang-select" style="max-width:240px"></select>
+          <p class="muted" data-t="langS"></p>
         </div>
       </div>
 
       <div class="section">
-        <div class="section-hd"><h2 data-t="roster">Members</h2><p data-t="rosterS"></p></div>
+        <div class="section-hd"><h2 data-t="roster">Members</h2></div>
+        <div class="panel pad explain" id="roles-explain"></div>
         <div class="roster" id="roster"></div>
       </div>
 

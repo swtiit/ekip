@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-124_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-134_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -157,9 +157,13 @@ The examples ship a field-tested crew and flow:
   "port": 4319,
   "agents": [
     { "name": "planner", "adapter": "claude",
+      "label": "Planner",
+      "description": "Researches the repo and writes the plan. Does not write code.",
       "args": ["--model", "claude-opus-4-8", "--effort", "high"],
       "promptFile": ".ekip/roles/planner.md" },
     { "name": "coder", "adapter": "antigravity",
+      "label": "Coder · Gemini",
+      "description": "Writes and edits files. Cannot run shell commands.",
       "args": ["--model", "Gemini 3.6 Flash (High)"] },
     { "name": "codex", "adapter": "command",
       "command": "codex", "args": ["exec", "{prompt}"] },
@@ -179,6 +183,13 @@ The examples ship a field-tested crew and flow:
   `init && serve`. Project files always win over machine defaults, field by
   field; role `promptFile`s resolve in the project first, then
   `~/.ekip/roles/` by filename.
+- **`name` is the address, `label` and `description` are the meaning.** Agents
+  hand each other work by `name`, so keep it short and stable. `label` is what
+  people see in the app; `description` says what the member is for — it is
+  shown in the app and told to every spawned agent as part of a crew roster,
+  so a conductor picks the right member from what each one does rather than
+  from its name. Both are editable in Settings, which also shows each role
+  brief.
 - **Model-per-role**: register the same adapter several times with different
   `--model` args — delegating to a *name* picks a *model*. The Settings view
   edits these live (applies to the next task, and writes the config file).

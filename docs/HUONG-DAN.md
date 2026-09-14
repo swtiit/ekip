@@ -28,6 +28,11 @@ một thành viên ngang hàng trong ê-kíp đó.
   (chọn model/effort/số việc song song cho từng agent; danh sách model của
   agy đọc trực tiếp từ `agy models`). Agent "nói" bằng `bridge_say`, đọc lại
   bằng `bridge_thread`.
+- **Tên và việc của từng vai** — mỗi agent có `name` (địa chỉ để giao việc,
+  nên ngắn, vd `claude-coder`), `label` (tên hiển thị, vd "Lập trình · Claude")
+  và `description` (vai này làm gì). Mô tả được báo cho mọi agent, nên người
+  điều phối tự chọn đúng người theo việc chứ không đoán theo tên. Sửa được
+  trong Cài đặt, ở đó cũng xem được nội dung chỉ dẫn của từng vai.
 - **Tiếng Việt** — đặt `"language": "Vietnamese"` trong `ekip.config.json`
   (hoặc chọn trong Settings) là mọi agent sẽ viết ghi chú, bàn giao và kết
   quả bằng tiếng Việt; code, tên file, câu lệnh giữ nguyên.

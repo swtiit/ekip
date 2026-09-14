@@ -63,7 +63,8 @@ const config = {
     { name: "sleeper", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 30"] },
     { name: "serial", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 0.7"], maxConcurrent: 1 },
     { name: "talker", adapter: "fakeclaude", spawnable: true },
-    { name: "echoer", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'printf "%s" "$0" > prompt.txt'] },
+    { name: "echoer", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'printf "%s" "$0" > prompt.txt'],
+      label: "Người nhắc lại", description: "Ghi lại đúng prompt nó nhận được." },
     { name: "noisy", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'echo "Error: invalid --model \"X\": model X is not recognized" >&2; exit 1'] },
     { name: "linger", adapter: "command", spawnable: true, command: process.execPath, args: [join(REPO, "test", "mock-linger.mjs"), "{taskId}"], maxConcurrent: 1 },
   ],
@@ -179,9 +180,26 @@ try {
     const promptSeen = existsSync(join(TMP, "prompt.txt")) ? readFileSync(join(TMP, "prompt.txt"), "utf8") : "";
     t("worker prompt carries the language instruction", /Write in Vietnamese/.test(promptSeen), promptSeen.slice(0, 120));
     t("worker prompt still carries the task", /lang-probe|p$/m.test(promptSeen));
+    t("worker is told its own name and job", /You are the agent "echoer" \(Người nhắc lại\)/.test(promptSeen) && /Your part in the crew: Ghi lại đúng prompt/.test(promptSeen));
+    t("worker is told who else is on the crew", /Your crew/.test(promptSeen) && /- mock: command agent/.test(promptSeen) && !/- echoer/.test(promptSeen));
   }
   const langOff = await (await post("/api/config/hub", { language: "" })).json();
   t("language can be cleared", langOff.language === null && !("language" in JSON.parse(readFileSync(join(TMP, "ekip.config.json"), "utf8"))));
+
+  // labels & jobs: the meaning of a member, separate from its address
+  const echoState = (await api("/api/state")).agents.find((a) => a.name === "echoer");
+  t("state exposes label and job", echoState?.label === "Người nhắc lại" && /prompt/.test(echoState?.description ?? ""));
+  const relabel = await (await post("/api/config/agent", { name: "modeled", label: "Người mẫu", description: "Chỉ dùng để thử cấu hình." })).json();
+  t("config sets label and job", relabel.agent?.label === "Người mẫu" && relabel.agent?.description === "Chỉ dùng để thử cấu hình.");
+  const onDiskAgent = JSON.parse(readFileSync(join(TMP, "ekip.config.json"), "utf8")).agents.find((a) => a.name === "modeled");
+  t("label and job persisted", onDiskAgent.label === "Người mẫu" && onDiskAgent.description === "Chỉ dùng để thử cấu hình.");
+  t("label too long → 400", (await post("/api/config/agent", { name: "modeled", label: "x".repeat(41) })).status === 400);
+  const unlabel = await (await post("/api/config/agent", { name: "modeled", label: "", description: "" })).json();
+  t("label and job can be cleared", unlabel.agent?.label === null && unlabel.agent?.description === null);
+  const role = await api("/api/role/roleful");
+  t("role brief is readable from the app", /MARKER-XYZZY/.test(role.text ?? ""));
+  t("role endpoint: no brief", (await api("/api/role/mock")).text === null);
+  t("role endpoint: unknown agent → 404", (await fetch(BASE + "/api/role/nobody")).status === 404);
 
   const limits = await api("/api/limits");
   t("limits endpoint", limits.maxDepth === 3 && limits.watchdog.pendingTtlSeconds === 2 && typeof limits.maxConcurrent === "number");

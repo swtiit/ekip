@@ -70,7 +70,14 @@ var DICT = {
     openChat:'Open conversation', viewLog:'View log', prompt:'Request', copyId:'Copy id', title:'Title', optional:'optional', whatToDo:'What should this agent do?', cancel:'Cancel', send:'Send', setKey:'Set key',
     key:'key, e.g. plan.v1', value:'value (JSON or text)', emptyBB:'Nothing on the blackboard yet.', setLead:'The crew for {p}. Changes save themselves and apply from the next task.',
     lang:'Reporting language', langS:'Agents write notes, hand-offs and results in this language. Code and commands stay as they are.', def:'Default', other:'Other…',
-    roster:'Members', rosterS:'Model, effort and parallelism per role.', model:'Model', effort:'Effort', parallel:'Parallel', auto:'Auto-launch', hubLimit:'hub limit', adapterDef:'adapter default', custom:'Type another id…',
+    roster:'Members', rosterS:'Name, job, model, effort and parallelism per role. The @handle is what agents address.', displayName:'Name', describe:'Job', describePh:'What this member is for — the crew reads this',
+    langDef:'Each agent’s own default', parDef:'Up to the hub limit', parN:'At most {n} at once', autoOn:'Starts on its own when work arrives', autoOff:'Waits to be run by hand',
+    eff_def:'Model default', eff_low:'Low — quick and cheap', eff_medium:'Medium', eff_high:'High — thinks it through', eff_xhigh:'Extra high', eff_max:'Max — slowest, most thorough',
+    seeBrief:'Read the role brief', noBrief:'No role brief — this member only follows the task it is given.', noBriefFile:'The role file is missing.',
+    exRole:'A member is a role', exRoleS:'One job on the crew: plan, code, review… Several can share a model.',
+    exId:'@id — the address', exIdS:'What agents write to hand each other work. Keep it short; changing it breaks old hand-offs.',
+    exJob:'Name and job — the meaning', exJobS:'Shown to you here, and told to every agent so each one knows whom to ask for what.',
+    exBrief:'Role brief — the standing orders', exBriefS:'A markdown file loaded at the start of every run: rules, checklists, what “done” means.', model:'Model', effort:'Effort', parallel:'Parallel', auto:'Auto-launch', hubLimit:'hub limit', adapterDef:'adapter default', custom:'Type another id…',
     limits:'Hub limits', limitsS:'Edit these in ekip.config.json.', lWorkers:'workers at once', lDepth:'delegation depth', lWait:'max wait to be picked up', lKeep:'days finished tasks are kept',
     sources:'Where model lists come from', connect:'Connect another agent', connectS:'Point any MCP-speaking agent at this endpoint.', copied:'Copied', saved:'Saved · applies from the next task', stopped:'Stopped',
     confirmStop:'Stop this and everything handed out from it?', online:'live', offline:'offline', nobody:'All quiet', nWorking:'{n} working', delegated:'Sent to {a}',
@@ -94,7 +101,14 @@ var DICT = {
     openChat:'Mở hội thoại', viewLog:'Xem log', prompt:'Yêu cầu', copyId:'Sao chép id', title:'Tiêu đề', optional:'không bắt buộc', whatToDo:'Agent này cần làm gì?', cancel:'Huỷ', send:'Gửi', setKey:'Ghi khoá',
     key:'khoá, vd plan.v1', value:'giá trị (JSON hoặc chữ)', emptyBB:'Bảng đen đang trống.', setLead:'Ê-kíp của dự án {p}. Thay đổi tự lưu và áp dụng từ task tiếp theo.',
     lang:'Ngôn ngữ báo cáo', langS:'Agent viết ghi chú, bàn giao và kết quả bằng ngôn ngữ này. Code và câu lệnh giữ nguyên.', def:'Mặc định', other:'Khác…',
-    roster:'Thành viên', rosterS:'Model, mức suy nghĩ và số việc song song cho từng vai.', model:'Model', effort:'Suy nghĩ', parallel:'Song song', auto:'Tự khởi chạy', hubLimit:'theo hub', adapterDef:'mặc định adapter', custom:'Nhập id khác…',
+    roster:'Thành viên', rosterS:'Tên, việc, model, mức suy nghĩ và số việc song song cho từng vai. @id là địa chỉ để agent gọi nhau.', displayName:'Tên', describe:'Việc', describePh:'Vai này làm gì — cả ê-kíp sẽ đọc dòng này',
+    langDef:'Để mỗi agent tự chọn', parDef:'Theo giới hạn chung của hub', parN:'Tối đa {n} việc cùng lúc', autoOn:'Tự chạy khi có việc giao tới', autoOff:'Chờ bạn chạy tay',
+    eff_def:'Mặc định của model', eff_low:'Thấp — nhanh, rẻ', eff_medium:'Vừa', eff_high:'Cao — suy nghĩ kỹ', eff_xhigh:'Rất cao', eff_max:'Tối đa — chậm nhất, kỹ nhất',
+    seeBrief:'Xem chỉ dẫn vai', noBrief:'Chưa có chỉ dẫn vai — thành viên này chỉ làm theo đúng việc được giao.', noBriefFile:'Không tìm thấy file chỉ dẫn.',
+    exRole:'Mỗi thành viên là một vai', exRoleS:'Một việc trong ê-kíp: lên kế hoạch, viết code, review… Nhiều vai có thể dùng chung một model.',
+    exId:'@id — địa chỉ', exIdS:'Tên agent dùng để giao việc cho nhau. Nên ngắn gọn; đổi id sẽ làm lệch các lần bàn giao cũ.',
+    exJob:'Tên và việc — ý nghĩa', exJobS:'Hiện cho bạn đọc ở đây, và được báo cho mọi agent để biết nên nhờ ai làm gì.',
+    exBrief:'Chỉ dẫn vai — quy tắc thường trực', exBriefS:'File markdown nạp vào đầu mỗi lần chạy: quy tắc, checklist, thế nào là xong việc.', model:'Model', effort:'Suy nghĩ', parallel:'Song song', auto:'Tự khởi chạy', hubLimit:'theo hub', adapterDef:'mặc định adapter', custom:'Nhập id khác…',
     limits:'Giới hạn hub', limitsS:'Sửa trong ekip.config.json.', lWorkers:'worker cùng lúc', lDepth:'tầng giao việc', lWait:'chờ nhận việc tối đa', lKeep:'ngày lưu task đã xong',
     sources:'Danh sách model lấy từ đâu', connect:'Kết nối agent khác', connectS:'Trỏ agent biết MCP vào địa chỉ này.', copied:'Đã sao chép', saved:'Đã lưu · áp dụng từ task sau', stopped:'Đã dừng',
     confirmStop:'Dừng việc này và mọi việc đã giao tiếp từ nó?', online:'trực tuyến', offline:'mất kết nối', nobody:'Không ai đang làm', nWorking:'{n} đang làm', delegated:'Đã gửi cho {a}',
@@ -156,9 +170,16 @@ function md(text){
   }).join('');
 }
 function initials(name){
-  var parts = String(name).split(/[^A-Za-z0-9]+/).filter(Boolean);
-  if (parts.length > 1) return (parts[0][0] + parts[1][0]);
+  // First letter of the first and last word: "Lập trình · Gemini" → LG, "Điều phối" → ĐP.
+  var parts = String(name).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  if (parts.length > 1) return parts[0][0] + parts[parts.length - 1][0];
   return String(name).slice(0, 2);
+}
+function fold(s){ return String(s || '').normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase(); }
+function dn(name){
+  if (name === 'human') return LANG === 'vi' ? 'bạn' : 'you';
+  var a = agentByName(name);
+  return (a && a.label) || name;
 }
 var ADAPTER_MARK = { claude:'C', antigravity:'G', command:'›' };
 function avatar(name, opts){
@@ -166,8 +187,8 @@ function avatar(name, opts){
   if (name === 'human' || name === 'you') return '<span class="av you' + (opts.size ? ' ' + opts.size : '') + '">' + (LANG === 'vi' ? 'B' : 'Y') + '</span>';
   var a = agentByName(name);
   var mark = a ? (ADAPTER_MARK[a.adapter] || '') : '';
-  return '<span class="av' + (opts.size ? ' ' + opts.size : '') + (opts.live ? ' live' : '') + '" style="--h:' + hashHue(name) + '" title="' + esc(name) + '">' +
-    esc(initials(name)) + (mark && opts.size !== 'sm' ? '<span class="ad">' + mark + '</span>' : '') + '</span>';
+  return '<span class="av' + (opts.size ? ' ' + opts.size : '') + (opts.live ? ' live' : '') + '" style="--h:' + hashHue(name) + '" title="' + esc(dn(name) + (dn(name) !== name ? ' · @' + name : '')) + '">' +
+    esc(initials(dn(name))) + (mark && opts.size !== 'sm' ? '<span class="ad">' + mark + '</span>' : '') + '</span>';
 }
 
 /* ================= state ================= */
@@ -250,8 +271,8 @@ function applyStaticText(){
 
 /* ================= chat: sidebar ================= */
 function renderSide(){
-  var q = S.filter;
-  var list = S.threads.filter(function(t){ return !q || (t.title + ' ' + t.to).toLowerCase().indexOf(q) >= 0; });
+  var q = fold(S.filter);
+  var list = S.threads.filter(function(t){ return !q || fold(t.title + ' ' + t.to + ' ' + dn(t.to)).indexOf(q) >= 0; });
   var sig = JSON.stringify([S.current, q, LANG, list.map(function(t){ return [t.id, t.status, t.messages, t.lastAt.slice(0, 16)]; })]);
   if (sig === S.sig.side) return;
   S.sig.side = sig;
@@ -270,7 +291,7 @@ function renderSide(){
       var st = isDone(t.status) ? (t.status === 'done' ? '' : '<span class="state ' + t.status + '">' + esc(T(t.status)) + ' ·</span>') : '<span class="state working">' + esc(T('working')) + ' ·</span>';
       html += '<div class="th' + (t.id === S.current ? ' sel' : '') + '" data-id="' + t.id + '">' +
         avatar(t.to, { live: !isDone(t.status) }) +
-        '<div class="body"><div class="t">' + esc(t.title) + '</div><div class="m">' + st + '<span>' + esc(t.to) + '</span></div></div>' +
+        '<div class="body"><div class="t">' + esc(t.title) + '</div><div class="m">' + st + '<span>' + esc(dn(t.to)) + '</span></div></div>' +
         '<span class="when">' + esc(ago(t.lastAt).replace(' ' + T('ago'), '')) + '</span></div>';
     });
   });
@@ -293,7 +314,7 @@ function describeTool(name, input){
   if (n === 'bridge_claim') set('check', 't_claim', null, true);
   else if (n === 'bridge_post_result') set('send', 't_post', null, true);
   else if (n === 'bridge_say') set('note', 't_say', null, true);
-  else if (n === 'bridge_delegate') set('handoff', 't_hand', { t: '<b>' + esc(a.title || '') + '</b>', a: '<b>' + esc(a.to || '') + '</b>' });
+  else if (n === 'bridge_delegate') set('handoff', 't_hand', { t: '<b>' + esc(a.title || '') + '</b>', a: '<b>' + esc(a.to ? dn(a.to) : '') + '</b>' });
   else if (n === 'bridge_wait') set('clock', 't_wait', { id: c(shortId(a.task_id)) }, true);
   else if (n === 'bridge_thread') set('chat', 't_thread', null, true);
   else if (n === 'bridge_context_set') set('blackboard', 't_cset', { k: c(a.key || '') });
@@ -358,7 +379,7 @@ function renderStage(){
   var cost = 0, tk = 0;
   th.tasks.forEach(function(t){ if (t.usage) { cost += t.usage.costUsd || 0; tk += (t.usage.inputTokens || 0) + (t.usage.outputTokens || 0); } });
   top.innerHTML = '<span class="title">' + esc(root.title) + '</span>' +
-    '<span class="facts">' + (live.length ? '<span class="pill working">' + esc(live.length === 1 ? live[0].to + ' ' + T('working') : T('nWorking', { n: live.length })) + '</span>' : '<span class="pill ' + root.status + '">' + esc(T(root.status)) + '</span>') +
+    '<span class="facts">' + (live.length ? '<span class="pill working">' + esc(live.length === 1 ? dn(live[0].to) + ' ' + T('working') : T('nWorking', { n: live.length })) + '</span>' : '<span class="pill ' + root.status + '">' + esc(T(root.status)) + '</span>') +
     '<span class="num">' + th.tasks.length + ' task</span>' + (tk ? '<span class="dotsep">·</span><span class="num">' + toks(tk) + ' ' + esc(T('tokens')) + '</span>' : '') +
     (cost ? '<span class="dotsep">·</span><span class="num">' + money(cost) + '</span>' : '') + '</span><span class="sp"></span>' +
     (live.length ? '<button class="btn danger sm" data-stop="' + root.id + '">' + icon('stop', 'sm') + esc(T('stop')) + '</button>' : '') + crewToggle();
@@ -372,7 +393,7 @@ function renderStage(){
     var out = '';
     msgs.forEach(function(m){
       if (m.kind !== 'human') return;
-      out += '<div class="you-row"><div class="you"><div class="to">' + esc(T('to')) + ' ' + avatar(m.to || t.to, { size:'sm' }) + '<b>' + esc(m.to || t.to) + '</b> · ' + clock(m.at) + '</div><div class="text">' + md(m.text) + '</div></div></div>';
+      out += '<div class="you-row"><div class="you"><div class="to">' + esc(T('to')) + ' ' + avatar(m.to || t.to, { size:'sm' }) + '<b>' + esc(dn(m.to || t.to)) + '</b> · ' + clock(m.at) + '</div><div class="text">' + md(m.text) + '</div></div></div>';
     });
     var liveT = !isDone(t.status);
     var u = t.usage || {};
@@ -416,7 +437,7 @@ function renderStage(){
       var k = pending.splice(i, 1)[0];
       if (!k) return '';
       return '<div class="handoff">' + avatar(t.to, { size:'sm' }) + '<span class="baton">' + icon('handoff', 'sm') + '</span>' + avatar(k.to, { size:'sm' }) +
-        '<span><b>' + esc(t.to) + '</b> ' + esc(T('hands')) + ' <b>' + esc(k.to) + '</b></span></div>' +
+        '<span><b>' + esc(dn(t.to)) + '</b> ' + esc(T('hands')) + ' <b>' + esc(dn(k.to)) + '</b></span></div>' +
         '<div class="nested">' + turn(k, depth + 1) + '</div>';
     }
 
@@ -436,7 +457,7 @@ function renderStage(){
         return;
       }
       if (m.meta && m.meta.delegation) {
-        body += '<details class="brief"><summary>' + icon('note', 'sm') + esc(T('brief')) + ' <b>' + esc(m.from) + '</b></summary><div class="text">' + md(m.text) + '</div></details>';
+        body += '<details class="brief"><summary>' + icon('note', 'sm') + esc(T('brief')) + ' <b>' + esc(dn(m.from)) + '</b></summary><div class="text">' + md(m.text) + '</div></details>';
         return;
       }
       if (m.meta && m.meta.result) {
@@ -457,12 +478,12 @@ function renderStage(){
     while (pending.length) body += placeChild(pending[0].title);
     if (liveT) {
       var what = t.status === 'claimed' ? T('isWorking') : t.pid ? T('starting') : t.dispatchedAt ? T('lost') : T('waitingSlot');
-      body += '<div class="working">' + avatar(t.to, { size:'sm', live:true }) + '<span class="shimmer"><b>' + esc(t.to) + '</b> ' + esc(what) + '…</span>' +
+      body += '<div class="working">' + avatar(t.to, { size:'sm', live:true }) + '<span class="shimmer"><b>' + esc(dn(t.to)) + '</b> ' + esc(what) + '…</span>' +
         '<span class="since" data-since="' + esc(t.dispatchedAt || t.createdAt) + '">' + elapsed(t.dispatchedAt || t.createdAt) + '</span></div>';
     }
 
     return out + '<div class="turn"><div class="gutter">' + avatar(t.to, { live: liveT }) + '<div class="rail"></div></div><div>' +
-      '<div class="turn-hd"><span class="name" style="color:hsl(' + hashHue(t.to) + ' 55% 45%)">' + esc(t.to) + '</span>' + metaBits.join('') +
+      '<div class="turn-hd"><span class="name" style="color:hsl(' + hashHue(t.to) + ' 55% 45%)">' + esc(dn(t.to)) + '</span>' + (dn(t.to) !== t.to ? '<span class="handle">@' + esc(t.to) + '</span>' : '') + metaBits.join('') +
       (depth > 0 || t.status !== 'done' ? '<span class="pill ' + (liveT ? (t.status === 'claimed' || t.pid ? 'working' : 'queued') : t.status) + '">' + esc(T(liveT ? (t.status === 'claimed' || t.pid ? 'working' : 'queued') : t.status)) + '</span>' : '') +
       '<span class="meta">' + meta + (liveT ? '<button class="btn ghost sm stop live" data-stop="' + t.id + '" title="' + esc(T('stop')) + '">' + icon('stop', 'sm') + '</button>' : '') + '</span></div>' +
       '<div class="turn-body">' + body + '</div></div></div>';
@@ -530,19 +551,19 @@ function defaultTarget(){
 }
 function setTarget(name){
   S.target = name;
-  $('target').innerHTML = name ? avatar(name, { size:'sm' }) + '<b>' + esc(name) + '</b>' + icon('down', 'sm') : '';
+  $('target').innerHTML = name ? avatar(name, { size:'sm' }) + '<b>' + esc(dn(name)) + '</b>' + icon('down', 'sm') : '';
 }
 function autosize(){ var ta = $('text'); ta.style.height = 'auto'; ta.style.height = Math.min(220, ta.scrollHeight) + 'px'; $('send').disabled = !ta.value.trim(); }
 var pop = { open:false, items:[], hi:0, mode:'' };
 function showAgentPopover(query, mode){
-  var q = String(query || '').toLowerCase();
-  var items = S.state.agents.filter(function(a){ return !q || a.name.toLowerCase().indexOf(q) >= 0; });
+  var q = fold(query);
+  var items = S.state.agents.filter(function(a){ return !q || fold(a.name + ' ' + (a.label || '') + ' ' + (a.description || '')).indexOf(q) >= 0; });
   pop = { open:true, items:items, hi:0, mode:mode };
   var el = $('agent-pop');
   el.innerHTML = '<div class="ttl">' + esc(T('to')) + '</div>' + (items.length ? items.map(function(a, i){
     var busy = liveWorkForAgent(a.name).length;
-    return '<div class="opt' + (i === 0 ? ' hi' : '') + '" data-pick="' + esc(a.name) + '">' + avatar(a.name, { size:'sm', live: busy > 0 }) + '<span>' + esc(a.name) + '</span><span class="sub">' +
-      esc(busy ? T('working') : shortModel(a.model) || a.adapter) + '</span></div>';
+    return '<div class="opt' + (i === 0 ? ' hi' : '') + '" data-pick="' + esc(a.name) + '">' + avatar(a.name, { size:'sm', live: busy > 0 }) + '<span class="who"><b>' + esc(dn(a.name)) + '</b><span>' + esc(a.description || ('@' + a.name)) + '</span></span><span class="sub">' +
+      esc(busy ? T('working') : '@' + a.name) + '</span></div>';
   }).join('') : '<div class="opt">' + esc(T('noResults')) + '</div>');
   el.hidden = false;
   el.style.left = '8px'; el.style.bottom = 'calc(100% + 8px)';
@@ -551,7 +572,7 @@ function hidePopover(){ pop.open = false; $('agent-pop').hidden = true; }
 function pickAgent(name){
   if (pop.mode === 'mention') {
     var ta = $('text'); var caret = ta.selectionStart;
-    var before = ta.value.slice(0, caret).replace(/@[\w.-]*$/, ''); ta.value = before + ta.value.slice(caret);
+    var before = ta.value.slice(0, caret).replace(/@[\p{L}\p{N}._-]*$/u, ''); ta.value = before + ta.value.slice(caret);
     ta.selectionStart = ta.selectionEnd = before.length; autosize();
   }
   setTarget(name); hidePopover(); $('text').focus();
@@ -561,7 +582,7 @@ $('agent-pop').addEventListener('click', function(e){ var o = e.target.closest('
 document.addEventListener('click', function(e){ if (pop.open && !e.target.closest('#agent-pop') && !e.target.closest('#target')) hidePopover(); });
 $('text').addEventListener('input', function(){
   autosize();
-  var ta = $('text'); var m = /@([\w.-]*)$/.exec(ta.value.slice(0, ta.selectionStart));
+  var ta = $('text'); var m = /@([\p{L}\p{N}._-]*)$/u.exec(ta.value.slice(0, ta.selectionStart));
   if (m) showAgentPopover(m[1], 'mention'); else if (pop.mode === 'mention') hidePopover();
 });
 $('text').addEventListener('keydown', function(e){
@@ -613,8 +634,9 @@ function renderCrew(){
     if (runs.length) sub.push(runs.length + ' ' + T('runs'));
     if (spent) sub.push(money(spent));
     return '<div class="member ' + state + '"><div class="top">' + avatar(a.name, { live: state === 'working' }) +
-      '<div class="who"><b>' + esc(a.name) + '</b><span>' + esc(sub.join(' · ')) + '</span></div>' +
+      '<div class="who"><b>' + esc(dn(a.name)) + '</b><span>' + esc(sub.join(' · ')) + '</span></div>' +
       '<span class="pill ' + state + '">' + esc(T(state)) + (waiting && active.length ? ' +' + waiting : '') + '</span></div>' +
+      (a.description && !doing ? '<div class="desc">' + esc(a.description) + '</div>' : '') +
       (doing ? '<div class="doing">' + icon(state === 'working' ? 'terminal' : 'clock', 'sm') + '<span class="t" data-open-task="' + doing.id + '">' + esc(doing.title) + '</span><span class="since" data-since="' + esc(doing.dispatchedAt || doing.createdAt) + '">' + elapsed(doing.dispatchedAt || doing.createdAt) + '</span></div>' : '') +
       '<div class="acts"><button class="btn quiet sm" data-message="' + esc(a.name) + '">' + icon('at', 'sm') + esc(T('message')) + '</button>' +
       (doing ? '<button class="btn danger sm" data-stop="' + doing.id + '">' + icon('stop', 'sm') + esc(T('stop')) + '</button>' : '') + '</div></div>';
@@ -651,10 +673,10 @@ function renderBoard(){
   if (sig === S.sig.board) { updateTicks(); return; }
   S.sig.board = sig;
   $('agent-filters').innerHTML = st.agents.map(function(a){
-    return '<button class="filter' + (who === a.name ? ' on' : '') + '" data-filter="' + esc(a.name) + '">' + avatar(a.name, { size:'sm', live: liveWorkForAgent(a.name).length > 0 }) + esc(a.name) + '</button>';
+    return '<button class="filter' + (who === a.name ? ' on' : '') + '" data-filter="' + esc(a.name) + '">' + avatar(a.name, { size:'sm', live: liveWorkForAgent(a.name).length > 0 }) + esc(dn(a.name)) + '</button>';
   }).join('');
   var tasks = st.tasks.filter(function(t){
-    return (!who || t.to === who) && (!q || (t.title + ' ' + t.prompt + ' ' + t.to).toLowerCase().indexOf(q) >= 0);
+    return (!who || t.to === who) && (!q || fold(t.title + ' ' + t.prompt + ' ' + t.to + ' ' + dn(t.to)).indexOf(fold(q)) >= 0);
   }).sort(function(a, b){ return b.updatedAt.localeCompare(a.updatedAt); });
   var lanes = [[T('laneQ'), 'var(--warn)', []], [T('laneW'), 'var(--tally)', []], [T('laneD'), 'var(--ok)', []], [T('laneF'), 'var(--bad)', []]];
   tasks.forEach(function(t){ lanes[laneOf(t)][2].push(t); });
@@ -664,7 +686,7 @@ function renderBoard(){
       (cards.length ? cards.map(function(t){
         var live = !isDone(t.status), u = t.usage || {};
         return '<div class="card' + (S.selectedTask === t.id ? ' sel' : '') + '" data-task="' + t.id + '"><div class="ct">' + esc(t.title) + '</div><div class="cm">' + avatar(t.to, { size:'sm', live: live && li === 1 }) +
-          '<span class="route">' + esc(t.from === 'human' ? (LANG === 'vi' ? 'bạn' : 'you') : t.from) + ' → ' + esc(t.to) + '</span><span class="sp"></span>' +
+          '<span class="route">' + esc(dn(t.from)) + ' → ' + esc(dn(t.to)) + '</span><span class="sp"></span>' +
           (u.costUsd ? '<span class="num">' + money(u.costUsd) + '</span>' : '') +
           (live ? '<span class="num" data-since="' + esc(t.dispatchedAt || t.createdAt) + '">' + elapsed(t.dispatchedAt || t.createdAt) + '</span>' : '<span>' + esc(ago(t.updatedAt).replace(' ' + T('ago'), '')) + '</span>') + '</div>' +
           (t.status === 'failed' && t.result ? '<div class="reason">' + esc(t.result) + '</div>' : '') + '</div>';
@@ -714,7 +736,7 @@ function renderDrawer(){
   var u = t.usage || {}, live = !isDone(t.status);
   var state = live ? (t.status === 'claimed' || t.pid ? 'working' : 'queued') : t.status;
   $('d-head').innerHTML = avatar(t.to, { size:'lg', live: state === 'working' }) + '<div style="min-width:0;flex:1"><div class="ttl">' + esc(t.title) + '</div><div class="sub"><span class="pill ' + state + '">' + esc(T(state)) + '</span>' +
-    '<span>' + esc(t.from === 'human' ? (LANG === 'vi' ? 'bạn' : 'you') : t.from) + ' → ' + esc(t.to) + '</span><span class="mono">' + shortId(t.id) + '</span></div></div>' +
+    '<span>' + esc(dn(t.from)) + ' → ' + esc(dn(t.to)) + '</span><span class="mono">' + shortId(t.id) + '</span></div></div>' +
     '<button class="btn ghost icon" data-close="1" title="' + esc(T('closeK')) + '">' + icon('x') + '</button>';
   var html = '';
   if (S.drawerArtifact != null && t.artifacts && t.artifacts[S.drawerArtifact]) {
@@ -751,7 +773,7 @@ $('scrim').addEventListener('click', function(){ closeDrawer(); closeModal(); cl
 
 /* ================= new task modal ================= */
 function openModal(){
-  $('m-to').innerHTML = S.state.agents.map(function(a){ return '<option value="' + esc(a.name) + '">' + esc(a.name) + '</option>'; }).join('');
+  $('m-to').innerHTML = S.state.agents.map(function(a){ return '<option value="' + esc(a.name) + '">' + esc(dn(a.name)) + (dn(a.name) !== a.name ? ' (@' + esc(a.name) + ')' : '') + '</option>'; }).join('');
   $('m-to').value = S.boardAgent || defaultTarget();
   $('scrim').classList.add('on'); $('modal').classList.add('on'); setTimeout(function(){ $('m-prompt').focus(); }, 40);
 }
@@ -775,14 +797,21 @@ function renderSettings(){
   var st = S.state, l = S.limits;
   var sig = JSON.stringify([LANG, st.agents, !!S.catalogs, l]);
   if (sig === S.sig.settings) return;
-  if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#settings-root select')) return;
+  if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#settings-root input, #settings-root textarea')) return;
   S.sig.settings = sig;
   $('set-lead').textContent = T('setLead', { p: st.project });
   var lang = l ? (l.language || '') : '';
-  var known = ['', 'Vietnamese', 'English'];
-  $('lang-seg').innerHTML = [['', T('def')], ['Vietnamese', 'Tiếng Việt'], ['English', 'English']].concat(known.indexOf(lang) < 0 ? [[lang, lang]] : []).map(function(o){
-    return '<button data-lang="' + esc(o[0]) + '" class="' + (o[0] === lang ? 'on' : '') + '">' + esc(o[1]) + '</button>';
-  }).join('') + '<button data-lang="__other">' + esc(T('other')) + '</button>';
+  var langs = [['', T('langDef')], ['Vietnamese', 'Tiếng Việt'], ['English', 'English'], ['Japanese', '日本語'], ['Korean', '한국어'], ['Chinese', '中文']];
+  if (lang && !langs.some(function(o){ return o[0] === lang; })) langs.push([lang, lang]);
+  $('lang-select').innerHTML = langs.map(function(o){
+    return '<option value="' + esc(o[0]) + '"' + (o[0] === lang ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+  }).join('') + '<option value="__other">' + esc(T('other')) + '</option>';
+  $('roles-explain').innerHTML = '<div class="explain-grid">' + [
+    ['users', T('exRole'), T('exRoleS')],
+    ['at', T('exId'), T('exIdS')],
+    ['note', T('exJob'), T('exJobS')],
+    ['file', T('exBrief'), T('exBriefS')]
+  ].map(function(x){ return '<div class="ex">' + icon(x[0]) + '<div><b>' + esc(x[1]) + '</b><span>' + esc(x[2]) + '</span></div></div>'; }).join('') + '</div>';
 
   $('roster').innerHTML = st.agents.map(function(a){
     var cat = (S.catalogs && S.catalogs[a.adapter] && S.catalogs[a.adapter].models) || [];
@@ -798,14 +827,20 @@ function renderSettings(){
       }).join('') + '<option value="__custom">' + esc(T('custom')) + '</option>';
     var busy = liveWorkForAgent(a.name).length;
     return '<div class="panel agent-card" data-agent="' + esc(a.name) + '"><div class="ah">' + avatar(a.name, { size:'lg', live: busy > 0 }) +
-      '<div class="who"><b>' + esc(a.name) + '</b><span>' + esc(a.adapter) + (a.promptFile ? ' · ' + esc(a.promptFile) : '') + '</span></div><span class="saved">' + icon('check', 'sm') + ' ' + esc(T('saved').split(' · ')[0]) + '</span></div>' +
-      '<div class="ctl"><label>' + esc(T('model')) + '</label><select class="field" data-f="model"' + (S.catalogs ? '' : ' disabled') + '>' + opts + '</select>' +
-      (a.adapter === 'claude' ? '<label>' + esc(T('effort')) + '</label><div class="seg" data-f="effort">' + ['', ].concat(EFFORTS).map(function(e){
-        return '<button data-v="' + e + '" class="' + ((a.effort || '') === e ? 'on' : '') + '">' + (e ? esc(e) : '—') + '</button>';
-      }).join('') + '</div>' : '') +
-      '<label>' + esc(T('parallel')) + '</label><div><span class="stepper" data-f="maxConcurrent"><button data-d="-1" aria-label="-">−</button><span>' + (a.maxConcurrent == null ? esc(T('hubLimit')) : a.maxConcurrent) + '</span><button data-d="1" aria-label="+">+</button></span></div>' +
-      '<label>' + esc(T('auto')) + '</label><div><button class="switch' + (a.spawnable ? ' on' : '') + '" data-f="spawnable" role="switch" aria-checked="' + !!a.spawnable + '"></button></div>' +
-      '</div></div>';
+      '<div class="who"><b>' + esc(dn(a.name)) + '</b><span>@' + esc(a.name) + ' · ' + esc(a.adapter) + (a.promptFile ? ' · ' + esc(a.promptFile) : '') + '</span></div><span class="saved">' + icon('check', 'sm') + ' ' + esc(T('saved').split(' · ')[0]) + '</span></div>' +
+      '<div class="ctl"><label>' + esc(T('displayName')) + '</label><input class="field" data-f="label" maxlength="40" placeholder="' + esc(a.name) + '" value="' + esc(a.label || '') + '">' +
+      '<label class="top-align">' + esc(T('describe')) + '</label><textarea class="field" data-f="description" rows="3" maxlength="240" placeholder="' + esc(T('describePh')) + '">' + esc(a.description || '') + '</textarea>' +
+      '<label>' + esc(T('model')) + '</label><select class="field" data-f="model"' + (S.catalogs ? '' : ' disabled') + '>' + opts + '</select>' +
+      (a.adapter === 'claude' ? '<label>' + esc(T('effort')) + '</label><select class="field" data-f="effort">' + [''].concat(EFFORTS).map(function(e){
+        return '<option value="' + e + '"' + ((a.effort || '') === e ? ' selected' : '') + '>' + esc(T('eff_' + (e || 'def'))) + '</option>';
+      }).join('') + '</select>' : '') +
+      '<label>' + esc(T('parallel')) + '</label><select class="field" data-f="maxConcurrent">' + [''].concat([1, 2, 3, 4, 6, 8]).concat(a.maxConcurrent != null && [1, 2, 3, 4, 6, 8].indexOf(a.maxConcurrent) < 0 ? [a.maxConcurrent] : []).map(function(n){
+        return '<option value="' + n + '"' + (String(a.maxConcurrent == null ? '' : a.maxConcurrent) === String(n) ? ' selected' : '') + '>' + esc(n === '' ? T('parDef') : T('parN', { n: n })) + '</option>';
+      }).join('') + '</select>' +
+      '<label>' + esc(T('auto')) + '</label><div class="auto-row"><button class="switch' + (a.spawnable ? ' on' : '') + '" data-f="spawnable" role="switch" aria-checked="' + !!a.spawnable + '"></button><span>' + esc(a.spawnable ? T('autoOn') : T('autoOff')) + '</span></div>' +
+      '</div>' +
+      (a.promptFile ? '<details class="role-brief" data-role="' + esc(a.name) + '"><summary>' + icon('file', 'sm') + esc(T('seeBrief')) + ' <code>' + esc(a.promptFile) + '</code></summary><pre class="role-text">…</pre></details>' : '<p class="muted no-brief">' + esc(T('noBrief')) + '</p>') +
+      '</div>';
   }).join('');
 
   if (l) {
@@ -827,7 +862,19 @@ function saveAgent(name, patch){
     S.sig.settings = ''; getJSON('/api/state').then(function(s){ if (s) { S.state = s; render(); } });
   });
 }
+$('roster').addEventListener('toggle', function(e){
+  var d = e.target.closest && e.target.closest('details[data-role]');
+  if (!d || !d.open || d.getAttribute('data-loaded')) return;
+  getJSON('/api/role/' + encodeURIComponent(d.getAttribute('data-role'))).then(function(r){
+    d.setAttribute('data-loaded', '1');
+    d.querySelector('.role-text').textContent = r && r.text ? r.text : T('noBriefFile');
+  });
+}, true);
 $('roster').addEventListener('change', function(e){
+  var pick = e.target.closest('select[data-f="effort"], select[data-f="maxConcurrent"]');
+  if (pick) { var p2 = {}; p2[pick.getAttribute('data-f')] = pick.value; saveAgent(pick.closest('[data-agent]').getAttribute('data-agent'), p2); return; }
+  var txt = e.target.closest('input[data-f="label"], textarea[data-f="description"]');
+  if (txt) { var patch = {}; patch[txt.getAttribute('data-f')] = txt.value; saveAgent(txt.closest('[data-agent]').getAttribute('data-agent'), patch); return; }
   var sel = e.target.closest('select[data-f="model"]'); if (!sel) return;
   var name = sel.closest('[data-agent]').getAttribute('data-agent');
   var v = sel.value;
@@ -837,22 +884,12 @@ $('roster').addEventListener('change', function(e){
 $('roster').addEventListener('click', function(e){
   var card = e.target.closest('[data-agent]'); if (!card) return;
   var name = card.getAttribute('data-agent');
-  var seg = e.target.closest('[data-f="effort"] button');
-  if (seg) { saveAgent(name, { effort: seg.getAttribute('data-v') }); return; }
-  var step = e.target.closest('[data-f="maxConcurrent"] button');
-  if (step) {
-    var a = agentByName(name), cur = a.maxConcurrent == null ? 0 : a.maxConcurrent;
-    var next = cur + (+step.getAttribute('data-d'));
-    saveAgent(name, { maxConcurrent: next < 1 ? '' : next });
-    return;
-  }
   var sw = e.target.closest('[data-f="spawnable"]');
   if (sw) { saveAgent(name, { spawnable: !sw.classList.contains('on') }); }
 });
-$('lang-seg').addEventListener('click', function(e){
-  var b = e.target.closest('[data-lang]'); if (!b) return;
-  var v = b.getAttribute('data-lang');
-  if (v === '__other') { v = prompt(T('lang')) || ''; if (!v) return; }
+$('lang-select').addEventListener('change', function(e){
+  var v = e.target.value;
+  if (v === '__other') { v = prompt(T('lang')) || ''; if (!v) { S.sig.settings = ''; renderSettings(); return; } }
   post('/api/config/hub', { language: v }).then(function(d){
     if (d.error) { toast(d.error, true); return; }
     toast(T('saved')); S.sig = {}; refresh();
@@ -878,7 +915,7 @@ function buildPalette(q){
   items.push({ g:T('actions'), icon:'moon', label:T('theme'), run:toggleTheme });
   items.push({ g:T('actions'), icon:'panel', label:T('toggleCrew'), run:function(){ if (S.view !== 'chat') go('/chat'); toggleCrew(); } });
   (S.state ? S.state.agents : []).forEach(function(a){
-    items.push({ g:T('msgTo'), avatar:a.name, label:a.name, sub:shortModel(a.model) || a.adapter, run:function(){ go('/chat'); setTarget(a.name); setTimeout(function(){ $('text').focus(); }, 40); } });
+    items.push({ g:T('msgTo'), avatar:a.name, label:dn(a.name), sub:'@' + a.name + (a.description ? ' · ' + a.description : ''), run:function(){ go('/chat'); setTarget(a.name); setTimeout(function(){ $('text').focus(); }, 40); } });
   });
   S.threads.slice(0, 40).forEach(function(t){
     items.push({ g:T('chats'), avatar:t.to, label:t.title, sub:ago(t.lastAt), run:function(){ go('/chat/' + t.id); } });

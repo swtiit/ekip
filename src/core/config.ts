@@ -21,6 +21,16 @@ export interface AgentConfig {
   promptFile?: string;
   /** set false to register the agent without letting the hub spawn it */
   spawnable?: boolean;
+  /**
+   * Human-friendly name shown in the app, e.g. "Điều phối". `name` stays the
+   * address other agents delegate to, so it can remain short and stable.
+   */
+  label?: string;
+  /**
+   * One line on what this member is for. Shown in the app, and told to every
+   * spawned agent so it knows whom to hand which work to.
+   */
+  description?: string;
   /** cap on simultaneous workers for this agent (within the hub-wide cap) */
   maxConcurrent?: number;
 }
@@ -81,8 +91,20 @@ export function defaultConfig(projectRoot: string): BridgeConfig {
     port: 4319,
     projectRoot,
     agents: [
-      { name: "claude", adapter: "claude", spawnable: true },
-      { name: "antigravity", adapter: "antigravity", spawnable: true },
+      {
+        name: "claude",
+        adapter: "claude",
+        spawnable: true,
+        label: "Claude",
+        description: "Claude Code, headless: reads, writes and runs code in this repository.",
+      },
+      {
+        name: "antigravity",
+        adapter: "antigravity",
+        spawnable: true,
+        label: "Antigravity",
+        description: "Google Antigravity (Gemini), headless: writes code and files in this repository.",
+      },
     ],
   };
 }

@@ -195,6 +195,7 @@ main{flex:1;min-height:0;display:flex}
 .turn .gutter .rail{flex:1;width:2px;background:var(--line-soft);margin-top:6px;border-radius:2px}
 .turn-hd{display:flex;align-items:center;gap:8px;min-height:28px;flex-wrap:wrap}
 .turn-hd .name{font-weight:650;font-size:13.5px}
+.turn-hd .handle{font-family:var(--mono);font-size:11px;color:var(--faint)}
 .chip{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:6px;background:var(--sunk);color:var(--muted);font-size:11px;font-family:var(--mono);white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}
 .turn-hd .meta{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--faint);white-space:nowrap;font-variant-numeric:tabular-nums}
 .turn-hd .stop{opacity:0;transition:opacity .12s}
@@ -280,6 +281,10 @@ main{flex:1;min-height:0;display:flex}
 .popover{position:absolute;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg);padding:6px;min-width:250px}
 .popover .opt{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:13px}
 .popover .opt:hover,.popover .opt.hi{background:var(--hover)}
+.popover .opt .who{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.popover .opt .who b{font-weight:600;font-size:13px}
+.popover .opt .who span{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.popover{min-width:320px}
 .popover .opt .sub{font-size:11.5px;color:var(--muted);margin-left:auto;white-space:nowrap}
 .popover .ttl{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;padding:6px 8px 4px;font-weight:600}
 
@@ -310,6 +315,7 @@ main{flex:1;min-height:0;display:flex}
 .member .who{min-width:0;flex:1}
 .member .who b{display:block;font-size:13px;line-height:1.3}
 .member .who span{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.member .desc{margin:6px 0 0 38px;font-size:12px;color:var(--muted);line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .member .doing{margin:8px 0 0 38px;font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:6px;min-width:0}
 .member .doing .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1;cursor:pointer}
 .member .doing .t:hover{color:var(--accent)}
@@ -415,6 +421,25 @@ main{flex:1;min-height:0;display:flex}
 .agent-card .ctl label{font-size:12.5px;color:var(--muted)}
 .agent-card .saved{font-size:11.5px;color:var(--ok);opacity:0;transition:opacity .2s}
 .agent-card .saved.on{opacity:1}
+.setting-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.setting-row p{margin:0;font-size:12.5px;flex:1;min-width:240px}
+.explain{margin-bottom:12px}
+.explain-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 20px}
+@media (max-width:1100px){.explain-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.agent-card .ctl label.top-align{align-self:start;padding-top:8px}
+.agent-card textarea.field{resize:vertical;min-height:62px;font-size:13px}
+.ex{display:flex;gap:10px;align-items:flex-start}
+.ex .ico{color:var(--accent);margin-top:2px}
+.ex b{display:block;font-size:13px;font-weight:600;margin-bottom:2px}
+.ex span{display:block;font-size:12px;color:var(--muted);line-height:1.5}
+.auto-row{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--muted)}
+.role-brief{border-top:1px solid var(--line-soft);padding-top:10px}
+.role-brief summary{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2);cursor:pointer;list-style:none}
+.role-brief summary::-webkit-details-marker{display:none}
+.role-brief summary:hover{color:var(--accent)}
+.role-brief summary code{font-family:var(--mono);font-size:11px;color:var(--faint);margin-left:auto}
+.role-text{margin:10px 0 0;background:var(--sunk);border-radius:9px;padding:10px 12px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;color:var(--ink-2);max-height:280px;overflow:auto}
+.no-brief{margin:0;font-size:12px;border-top:1px solid var(--line-soft);padding-top:10px}
 .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .tile{padding:13px 14px}
 .tile .n{font-size:20px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
