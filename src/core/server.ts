@@ -21,8 +21,7 @@ import { buildHub } from "./hub.js";
 import { removeSpawnLog } from "./logs.js";
 import { catalogFor } from "./models.js";
 import { Store } from "./store.js";
-import { dashboardHtml } from "./ui.js";
-import { chatHtml } from "./chat.js";
+import { appHtml } from "./app.js";
 import { Watchdog } from "./watchdog.js";
 
 export interface RunningHub {
@@ -360,13 +359,14 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
             sessions: Object.keys(transports).length,
           });
         case "GET /":
-          res.writeHead(302, { Location: "/chat" });
+        case "GET /ui": // the board's old address
+          res.writeHead(302, { Location: path === "/ui" ? "/board" : "/chat" });
           res.end();
           return;
         case "GET /chat":
-          return sendText(res, 200, chatHtml(), "text/html");
-        case "GET /ui":
-          return sendText(res, 200, dashboardHtml(), "text/html");
+        case "GET /board":
+        case "GET /settings":
+          return sendText(res, 200, appHtml(), "text/html");
         case "GET /api/threads":
           return handleThreads(res);
         case "GET /api/state":
@@ -400,6 +400,11 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
         default:
           if (req.method === "GET" && path.startsWith("/api/logs/")) {
             return handleLogs(res, decodeURIComponent(path.slice("/api/logs/".length)));
+          }
+          // Deep links into a conversation (/chat/<task-id>) are client-side
+          // routes; serve the app and let it read the path.
+          if (req.method === "GET" && /^\/chat\/[A-Za-z0-9-]+$/.test(path)) {
+            return sendText(res, 200, appHtml(), "text/html");
           }
           if (req.method === "GET" && path.startsWith("/api/thread/")) {
             return handleThread(res, decodeURIComponent(path.slice("/api/thread/".length)));

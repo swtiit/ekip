@@ -109,13 +109,21 @@ Eleven MCP tools cover the whole protocol: `bridge_delegate`, `bridge_claim`,
 `bridge_thread`, `bridge_task_get`, `bridge_list_tasks`, `bridge_context_set`,
 `bridge_context_get`. Full contract in [PROTOCOL.md](PROTOCOL.md).
 
-## Four ways to watch and drive it
+## Three ways to watch and drive it
+
+The hub serves one web app at `http://127.0.0.1:4319` with three views:
+
+| View | What you get |
+| --- | --- |
+| **Chat** `/chat` | A transcript per conversation, Claude Code style: your ask, each agent's words as it works (decoded live from `claude -p`'s stream), its tool calls (click to expand), hand-offs between agents, results with model/token/cost, and a composer to talk to the crew or reply into a running thread |
+| **Board** `/board` | Live task board (SSE), blackboard viewer/editor, per-task logs and artifacts, cancel, and a form to delegate work yourself — the human is one more peer |
+| **Settings** `/settings` | Per-agent model, effort, parallelism and auto-spawn, with model lists read live where the vendor offers one (see below), plus the hub's current limits |
+
+And two more ways in:
 
 | Surface | What you get |
 | --- | --- |
-| **Chat** `http://127.0.0.1:4319/chat` | A transcript per conversation, Claude Code style: your ask, each agent's words as it works (decoded live from `claude -p`'s stream), its tool calls (click to expand), hand-offs between agents, results with token/cost, and a composer to talk to the crew or reply into a running thread |
-| **Board** `http://127.0.0.1:4319/ui` | Live task board (SSE), blackboard viewer/editor, per-task logs, artifact viewer, agent model settings, and a form to delegate work yourself — the human is one more peer |
-| **CLI** | `run` (delegate + live-follow the whole task tree), `follow`, `cancel`, `tasks`, `task`, `logs`, `context`, `watch`, `ui` |
+| **CLI** | `run` (delegate + live-follow the whole task tree), `follow`, `cancel`, `tasks`, `task`, `logs`, `context`, `config`, `watch`, `ui` |
 | **HTTP API** | `GET /api/state`, `GET /api/events` (SSE), `GET /api/threads`, `GET /api/thread/:taskId`, `POST /api/delegate` (with `parent_task_id` to reply into a thread), `POST /api/cancel`, `POST /api/context`, `GET /api/logs/:taskId` |
 
 ## Multi-agent pipelines
@@ -167,7 +175,12 @@ The examples ship a field-tested crew and flow:
   field; role `promptFile`s resolve in the project first, then
   `~/.ekip/roles/` by filename.
 - **Model-per-role**: register the same adapter several times with different
-  `--model` args — delegating to a *name* picks a *model*.
+  `--model` args — delegating to a *name* picks a *model*. The Settings view
+  edits these live (applies to the next task, and writes the config file).
+  Model lists come from `agy models` for Antigravity — read live, because the
+  names move between releases — and for Claude, which has no list-models
+  command, from the aliases, your account's cached options, and models the
+  hub has seen running here.
 - `spawnable: false` registers an agent that polls (`bridge_claim`) instead
   of being auto-launched — e.g. a session you drive interactively.
 - **`maxConcurrent`** caps how many workers run at once, hub-wide (default

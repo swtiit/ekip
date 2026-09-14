@@ -196,10 +196,15 @@ try {
   t("logs invalid id → 400", (await fetch(`${BASE}/api/logs/..%2Fetc`)).status === 400);
   t("logs unknown id → 404", (await fetch(`${BASE}/api/logs/00000000-dead-beef-0000-000000000000`)).status === 404);
 
-  const uiRes = await fetch(`${BASE}/ui`);
-  const uiHtml = await uiRes.text();
-  t("ui served", uiRes.status === 200 && uiHtml.includes("<!doctype html>") && uiHtml.length > 8000);
-  t("ui has escaping + artifact viewer", uiHtml.includes("function esc(") && uiHtml.includes("closest('.artifact')"));
+  const appRes = await fetch(`${BASE}/board`);
+  const appHtml = await appRes.text();
+  t("app served", appRes.status === 200 && appHtml.includes("<!doctype html>") && appHtml.length > 8000);
+  t("app has all three views", ["v-chat", "v-board", "v-settings"].every((v) => appHtml.includes(v)));
+  t("app escapes + routes", appHtml.includes("function esc(") && appHtml.includes("history.pushState"));
+  t("same app at /settings", (await (await fetch(`${BASE}/settings`)).text()) === appHtml);
+  t("deep link serves the app", (await (await fetch(`${BASE}/chat/${d1.task.id}`)).text()) === appHtml);
+  const uiRedirect = await fetch(`${BASE}/ui`, { redirect: "manual" });
+  t("/ui redirects to /board", uiRedirect.status === 302 && uiRedirect.headers.get("location") === "/board");
   const rootRes = await fetch(BASE + "/", { redirect: "manual" });
   t("/ redirects to /chat", rootRes.status === 302 && rootRes.headers.get("location") === "/chat");
   const chatRes = await fetch(`${BASE}/chat`);
