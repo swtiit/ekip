@@ -56,7 +56,7 @@ export interface BridgeState {
   context: ContextEntry[];
 }
 
-export const PROTOCOL_VERSION = "0.2.0";
+export const PROTOCOL_VERSION = "0.4.0";
 
 /** Maximum delegation depth before the dispatcher refuses to spawn again. */
 export const DEFAULT_MAX_DEPTH = 6;

@@ -206,7 +206,7 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 45 end-to-end cases, no LLMs involved
+npm test   # 58 end-to-end cases, no LLMs involved
 ```
 
 Boots a real hub on a scratch port and exercises the HTTP API, all 8 MCP
