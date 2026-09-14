@@ -105,11 +105,15 @@ export function parseClaudeStreamLine(line: string): WorkerEvent[] {
     }
   } else if (msg.type === "result") {
     const usage = (msg.usage as Record<string, number> | undefined) ?? {};
+    const perModel = Object.values((msg.modelUsage as Record<string, { costBasis?: string }> | undefined) ?? {});
     out.push({
       kind: "usage",
       isError: msg.is_error === true,
       usage: {
         inputTokens: (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0),
+        cacheReadTokens: usage.cache_read_input_tokens,
+        cacheWriteTokens: usage.cache_creation_input_tokens,
+        costBasis: perModel.find((m) => typeof m.costBasis === "string")?.costBasis,
         outputTokens: usage.output_tokens,
         costUsd: typeof msg.total_cost_usd === "number" ? msg.total_cost_usd : undefined,
         durationMs: typeof msg.duration_ms === "number" ? msg.duration_ms : undefined,

@@ -164,8 +164,8 @@ function doc(lang: Lang): string {
   const vi = lang === "vi";
   const sec = (id: string, title: string, body: string) => `<section class="gsec" id="g-${id}-${lang}"><h2>${title}</h2>${body}</section>`;
   const toc: Array<[string, string]> = vi
-    ? [["how", "Cách ekip hoạt động"], ["folders", "Làm việc theo folder"], ["life", "Vòng đời một việc"], ["handoff", "Khi agent giao việc cho nhau"], ["crew", "Ê-kíp của bạn"], ["pipeline", "Quy trình mẫu"], ["screens", "Dùng các trang"], ["start", "Bắt đầu dự án mới"], ["trouble", "Khi có gì đó sai"]]
-    : [["how", "How ekip works"], ["folders", "Working by folder"], ["life", "The life of a task"], ["handoff", "When agents hand work to each other"], ["crew", "Your crew"], ["pipeline", "A sample pipeline"], ["screens", "Using the screens"], ["start", "Start a new project"], ["trouble", "When something goes wrong"]];
+    ? [["how", "Cách ekip hoạt động"], ["folders", "Làm việc theo folder"], ["life", "Vòng đời một việc"], ["handoff", "Khi agent giao việc cho nhau"], ["crew", "Ê-kíp của bạn"], ["pipeline", "Quy trình mẫu"], ["screens", "Dùng các trang"], ["cost", "Chi phí và token"], ["start", "Bắt đầu dự án mới"], ["trouble", "Khi có gì đó sai"]]
+    : [["how", "How ekip works"], ["folders", "Working by folder"], ["life", "The life of a task"], ["handoff", "When agents hand work to each other"], ["crew", "Your crew"], ["pipeline", "A sample pipeline"], ["screens", "Using the screens"], ["cost", "Cost and tokens"], ["start", "Start a new project"], ["trouble", "When something goes wrong"]];
 
   const body = vi
     ? [
@@ -220,6 +220,15 @@ ${crewSlot()}`),
 <li><b>Bảng việc</b> — các cột Đang chờ, Đang làm, Xong, Lỗi. Lọc theo thành viên; bấm thẻ để xem chi tiết, log, chi phí và dừng.</li>
 <li><b>Cài đặt</b> — ngôn ngữ báo cáo, và cho từng vai: tên, việc, model, mức suy nghĩ, số việc song song, xem chỉ dẫn vai. Đổi là tự lưu, áp dụng từ việc tiếp theo.</li>
 <li><kbd>⌘</kbd>+<kbd>K</kbd> mở bảng lệnh để nhảy tới trang, hội thoại hoặc nhắn cho một thành viên. <kbd>Esc</kbd> đóng mọi bảng.</li>
+</ul>`),
+        sec("cost", "Chi phí và token", `
+<p>Số liệu lấy từ tổng kết cuối mỗi lượt chạy mà chính Claude Code gửi ra, không phải ekip tự đoán. Nên đọc như sau:</p>
+<ul class="facts">
+<li><b>Chi phí (≈ $)</b> là giá API niêm yết của Anthropic cho đúng số token lượt đó dùng — đối chiếu tay theo bảng giá khớp đến phần triệu đô. Nếu bạn đăng nhập bằng <b>gói Claude</b>, đây là <b>giá trị tham chiếu</b>: bạn không bị tính tiền theo token, lượt chạy trừ vào hạn mức của gói.</li>
+<li><b>Token ra</b> là phần model thật sự viết. <b>Token vào</b> phần lớn là <b>đọc lại từ cache</b> (hướng dẫn hệ thống, công cụ, ngữ cảnh) — rất nhiều về số lượng nhưng chỉ tốn 1/10 giá. Bấm một thẻ trong Bảng việc để xem thanh phân bổ.</li>
+<li>Mỗi lượt chạy mới phải <b>ghi cache</b> phần khởi đầu, nên việc nhỏ vẫn có giá sàn: khoảng 0,05–0,10 đô với Sonnet, 0,3–0,6 đô với Opus.</li>
+<li>Số liệu đến <b>chậm khoảng hai phút</b> sau khi việc xong ("đang chờ số liệu…"), vì tiến trình Claude còn chạy nốt bước kết thúc.</li>
+<li><b>Không có số liệu</b> cho Gemini (Antigravity không báo token) và cho lượt bị dừng hoặc lỗi giữa chừng; tổng của hội thoại ghi rõ bao nhiêu lượt bị thiếu.</li>
 </ul>`),
         sec("start", "Bắt đầu dự án mới", `
 <ol class="steps">
@@ -293,6 +302,15 @@ ${crewSlot()}`),
 <li><b>Board</b> — columns Queued, Working, Done, Failed. Filter by member; click a card for details, log, cost and Stop.</li>
 <li><b>Settings</b> — reporting language, and per role: name, job, model, effort, parallelism, role brief. Changes save themselves and apply from the next task.</li>
 <li><kbd>⌘</kbd>+<kbd>K</kbd> jumps to any screen, conversation or member. <kbd>Esc</kbd> closes any panel.</li>
+</ul>`),
+        sec("cost", "Cost and tokens", `
+<p>These figures come from the final tally Claude Code itself emits at the end of each run — ekip does not estimate them. Read them like this:</p>
+<ul class="facts">
+<li><b>Cost (≈ $)</b> is Anthropic's API list price for exactly the tokens that run used — checked by hand against the price list to the micro-dollar. If you sign in with a <b>Claude subscription</b>, it is a <b>reference value</b>: you are not billed per token; runs count against your plan's usage limits.</li>
+<li><b>Tokens out</b> is what the model actually wrote. <b>Input</b> is mostly <b>read back from cache</b> (system instructions, tools, context) — large in count but a tenth of the price. Click a card in Board for the breakdown bar.</li>
+<li>Every new run has to <b>write its opening context to cache</b>, so even tiny tasks have a floor: roughly $0.05–0.10 on Sonnet, $0.30–0.60 on Opus.</li>
+<li>Figures arrive <b>about two minutes after</b> the work is done ("tallying…"), because the Claude process finishes its shutdown first.</li>
+<li><b>No data</b> for Gemini (Antigravity reports no usage) or for runs that were stopped or crashed; a conversation's total says how many runs are missing.</li>
 </ul>`),
         sec("start", "Start a new project", `
 <ol class="steps">

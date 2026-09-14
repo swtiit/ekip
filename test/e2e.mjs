@@ -231,6 +231,9 @@ try {
   t("role endpoint: no brief", (await api("/api/role/mock")).text === null);
   t("role endpoint: unknown agent → 404", (await fetch(BASE + "/api/role/nobody")).status === 404);
 
+  const billing = await api("/api/billing");
+  t("billing endpoint says what cost means", ["subscription", "api", "unknown"].includes(billing.claude));
+
   const limits = await api("/api/limits");
   t("limits endpoint", limits.maxDepth === 3 && limits.watchdog.pendingTtlSeconds === 2 && typeof limits.maxConcurrent === "number");
   const mc = await (await post("/api/config/agent", { name: "modeled", maxConcurrent: 2 })).json();
@@ -444,6 +447,7 @@ try {
     return x?.status === "done" ? x : undefined;
   });
   t("fake claude completes", !!convDone, convDone?.result);
+  t("usage keeps the cache split and cost basis", convDone?.usage?.cacheReadTokens === 900 && convDone?.usage?.costBasis === "list", JSON.stringify(convDone?.usage));
   t("usage parsed from result event", convDone?.usage?.costUsd === 0.0123 && convDone.usage.inputTokens === 1000 && convDone.usage.outputTokens === 50 && convDone.usage.turns === 3, JSON.stringify(convDone?.usage));
   const th = await api(`/api/thread/${conv.task.id}`);
   const kinds = th.messages.map((m) => m.kind + ":" + (m.meta?.tool || m.meta?.result || m.from));
@@ -490,6 +494,31 @@ try {
   t("slot freed at post_result, not at exit", Date.now() - lingT0 < 4500, `${Date.now() - lingT0}ms`);
   const lingW = (await api("/api/state")).workers;
   t("lingering workers reported separately", Array.isArray(lingW.lingering) && lingW.lingering.length >= 1, JSON.stringify(lingW));
+
+  // ---- deleting a conversation ----
+  {
+    const root = await (await post("/api/delegate", { to: "mock", prompt: "to be deleted", title: "delete-me" })).json();
+    await until(async () => (await taskById(root.task.id))?.status === "done");
+    const child = await (await post("/api/delegate", { to: "mock", prompt: "child", title: "delete-me-child", parent_task_id: root.task.id })).json();
+    await until(async () => (await taskById(child.task.id))?.status === "done");
+    const logPath = join(TMP, ".ekip", "logs", `mock-${child.task.id}.log`);
+    t("conversation to delete has a log", existsSync(logPath));
+    const gone = await (await post("/api/threads/delete", { id: child.task.id })).json();
+    t("delete by any task removes the whole conversation", gone.deleted === 2 && gone.thread === root.task.id, JSON.stringify(gone));
+    t("its tasks are gone", !(await taskById(root.task.id)) && !(await taskById(child.task.id)));
+    t("its transcript is gone", (await fetch(`${BASE}/api/thread/${root.task.id}`)).status === 404);
+    t("its logs are gone", !existsSync(logPath));
+    t("it leaves the thread list", !(await api("/api/threads")).threads.some((x) => x.id === root.task.id));
+    t("unknown conversation → 404", (await post("/api/threads/delete", { id: "nope" })).status === 404);
+
+    const busy = await (await post("/api/delegate", { to: "sleeper", prompt: "busy", title: "delete-busy" })).json();
+    await until(async () => (await taskById(busy.task.id))?.pid);
+    const busyPid = (await taskById(busy.task.id)).pid;
+    t("running conversation is not deleted silently", (await post("/api/threads/delete", { id: busy.task.id })).status === 409);
+    const forced = await (await post("/api/threads/delete", { id: busy.task.id, stop: true })).json();
+    await sleep(400);
+    t("stop + delete kills the worker and removes it", forced.deleted === 1 && !isAlive(busyPid) && !(await taskById(busy.task.id)));
+  }
 
   // ---- maxConcurrent: per-agent cap queues the overflow ----
   const serial = await Promise.all(

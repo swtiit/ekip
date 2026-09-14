@@ -56,13 +56,22 @@ var ICONS = {
   plug:'<path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/>',
   gauge:'<path d="M12 14l4-4M4.5 18a9 9 0 1 1 15 0"/>',
   note:'<path d="M5 4h14v11l-5 5H5z"/><path d="M14 20v-5h5M8 9h8M8 13h5"/>',
-  refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/>'
+  refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/>',
+  trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>'
 };
 function icon(name, cls){ return '<svg class="ico' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || ICONS.tool) + '</svg>'; }
 
 /* ================= language ================= */
 var DICT = {
   en: {
+    tokOut:'tokens out', tokOutL:'Tokens written', tokRead:'read from cache', tokWrite:'written to cache', tokFresh:'fresh input', costRef:'at API prices',
+    outTokTitle:'Tokens the model wrote. Input — mostly cache reads — is broken down per task in Board.',
+    tokBarTitle:'Where this run’s tokens went. Cache reads cost a tenth of fresh input; cache writes cost more than fresh input.',
+    costNote:'Claude Code’s own figure, at Anthropic’s API list prices for the tokens this run used.',
+    costNoteSub:'Claude Code’s own figure at API list prices. You are signed in with a Claude subscription, so this is a reference value: runs count against your plan’s usage limits instead of being billed per token.',
+    missingTitle:'No cost data: Gemini (Antigravity) does not report usage, and a run that was stopped or crashed never sends its final tally.',
+    missingN:'{n} without data', noData:'no data', awaiting:'tallying…', awaitingTitle:'The work is done; Claude Code sends the final token and cost tally when its process exits, usually within two minutes.',
+    deleteChat:'Delete conversation', confirmDelete:'Delete “{t}”?\n\nIts {n} task(s), transcript and logs go for good.', confirmDeleteLive:'{n} of them are still running and will be stopped first.', deleted:'Conversation deleted',
     folder:'Folder', newIn:'New conversation in this folder', noChatsHere:'No conversations here yet', workIn:'Work in', workingIn:'Working in', browseOther:'Choose another folder…', browseOtherS:'Browse your disk', pickFolder:'Choose a folder to work in', useFolder:'Use this folder', projectBadge:'project', noSubfolders:'No sub-folders here', folderSet:'Now working in {f}', folderLocked:'a conversation keeps its folder', allFolders:'All folders', startIn:'Start in',
     chat:'Chat', board:'Board', guide:'Guide', noJob:'No job description yet — add one in Settings.', guideLink:'New here? Read the guide', settings:'Settings', search:'Search chats, agents, actions', newChat:'New conversation', filter:'Filter conversations',
     live:'Running', today:'Today', earlier:'Earlier', working:'working', queued:'queued', idle:'idle', done:'done', failed:'failed', cancelled:'stopped', pending:'queued', claimed:'working',
@@ -95,6 +104,14 @@ var DICT = {
     t_write:'wrote {f}', t_edit:'edited {f}', t_read:'read {f}', t_run:'ran {c}', t_search:'searched {q}', t_tools:'loaded its tools', t_todo:'updated its checklist', blackboardW:'the blackboard'
   },
   vi: {
+    tokOut:'token ra', tokOutL:'Token model viết', tokRead:'đọc từ cache', tokWrite:'ghi vào cache', tokFresh:'đầu vào mới', costRef:'theo giá API',
+    outTokTitle:'Số token model viết ra. Token đầu vào — phần lớn là đọc cache — xem chi tiết từng việc trong Bảng việc.',
+    tokBarTitle:'Token của lượt chạy này đi đâu. Đọc cache chỉ tốn 1/10 giá đầu vào; ghi cache tốn hơn giá đầu vào.',
+    costNote:'Số do chính Claude Code báo, tính theo bảng giá API niêm yết của Anthropic cho đúng số token lượt chạy đã dùng.',
+    costNoteSub:'Số do chính Claude Code báo, tính theo giá API niêm yết. Bạn đăng nhập bằng gói Claude nên đây là giá trị tham chiếu: lượt chạy trừ vào hạn mức của gói, không bị tính tiền theo token.',
+    missingTitle:'Không có số liệu: Gemini (Antigravity) không báo token, và lượt bị dừng hoặc lỗi giữa chừng không kịp gửi tổng kết.',
+    missingN:'{n} lượt thiếu số liệu', noData:'không có số liệu', awaiting:'đang chờ số liệu…', awaitingTitle:'Việc đã xong; Claude Code gửi tổng kết token và chi phí khi tiến trình thoát hẳn, thường trong vòng hai phút.',
+    deleteChat:'Xoá hội thoại', confirmDelete:'Xoá “{t}”?\n\n{n} việc, toàn bộ transcript và log sẽ mất hẳn.', confirmDeleteLive:'{n} việc trong đó đang chạy và sẽ bị dừng trước.', deleted:'Đã xoá hội thoại',
     folder:'Folder', newIn:'Hội thoại mới trong folder này', noChatsHere:'Chưa có hội thoại nào ở đây', workIn:'Làm việc trong', workingIn:'Làm việc trong', browseOther:'Chọn folder khác…', browseOtherS:'Duyệt thư mục trên máy', pickFolder:'Chọn folder để làm việc', useFolder:'Dùng folder này', projectBadge:'dự án', noSubfolders:'Không có thư mục con', folderSet:'Đã chuyển sang {f}', folderLocked:'hội thoại giữ nguyên folder của nó', allFolders:'Tất cả folder', startIn:'Bắt đầu trong',
     chat:'Trò chuyện', board:'Bảng việc', guide:'Hướng dẫn', noJob:'Chưa có mô tả việc — thêm trong Cài đặt.', guideLink:'Lần đầu dùng? Xem hướng dẫn', settings:'Cài đặt', search:'Tìm hội thoại, agent, thao tác', newChat:'Hội thoại mới', filter:'Lọc hội thoại',
     live:'Đang chạy', today:'Hôm nay', earlier:'Trước đó', working:'đang làm', queued:'đang chờ', idle:'rảnh', done:'xong', failed:'lỗi', cancelled:'đã dừng', pending:'đang chờ', claimed:'đang làm',
@@ -157,6 +174,23 @@ function elapsed(fromIso, toIso){
   return m + ':' + String(r).padStart(2, '0');
 }
 function dur(ms){ var s = Math.round(ms / 1000); return s < 90 ? s + 's' : Math.floor(s / 60) + 'm' + String(s % 60).padStart(2, '0'); }
+/* Cost is Claude Code's own figure at API list prices (verified against the
+   price list); token counts separate what the model wrote from what it read,
+   most of which is cheap cache reads. */
+function awaitingTally(taskId){
+  var w = S.state && S.state.workers;
+  return !!(w && (w.lingering || []).some(function(x){ return x.taskId === taskId; }));
+}
+function outTok(u){ return (u && u.outputTokens) || 0; }
+function costTitle(){ return T(S.billing && S.billing.claude === 'subscription' ? 'costNoteSub' : 'costNote'); }
+function tokenBar(u){
+  var read = u.cacheReadTokens || 0, write = u.cacheWriteTokens || 0, total = u.inputTokens || 0;
+  var fresh = Math.max(0, total - read - write), out = u.outputTokens || 0;
+  var seg = function(n, cls){ return n ? '<span class="seg-' + cls + '" style="flex:' + n + '"></span>' : ''; };
+  var row = function(n, cls, label){ return '<span class="k"><i class="sw ' + cls + '"></i>' + esc(label) + ' <b class="num">' + toks(n) + '</b></span>'; };
+  return '<div class="bar">' + seg(read, 'read') + seg(write, 'write') + seg(fresh, 'fresh') + seg(out, 'out') + '</div>' +
+    '<div class="keys">' + row(read, 'read', T('tokRead')) + row(write, 'write', T('tokWrite')) + row(fresh, 'fresh', T('tokFresh')) + row(out, 'out', T('tokOut')) + '</div>';
+}
 function money(n){ return '$' + (n < 0.01 ? n.toFixed(3) : n.toFixed(2)); }
 function toks(n){ return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n); }
 function shortModel(m){
@@ -197,7 +231,7 @@ function avatar(name, opts){
 }
 
 /* ================= state ================= */
-var S = { folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
+var S = { billing:null, folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
   view:'chat', filter:'', boardFilter:'', boardAgent:'', target:null, selectedTask:null,
   openGroups:{}, openSteps:{}, sig:{} };
 function agentByName(n){ return S.state ? S.state.agents.filter(function(a){ return a.name === n; })[0] : null; }
@@ -242,6 +276,7 @@ function refresh(){
     }
   }
   if (S.view === 'settings') jobs.push(getJSON('/api/limits').then(function(l){ if (l) S.limits = l; }));
+  if (!S.billing) { S.billing = { claude: 'unknown' }; getJSON('/api/billing').then(function(b){ if (b) { S.billing = b; S.sig = {}; render(); } }); }
   Promise.all(jobs).then(render).catch(function(){}).then(function(){
     busy = false;
     if (again) { again = false; setTimeout(refresh, 60); }
@@ -317,12 +352,15 @@ function renderSide(){
         return '<div class="th' + (t.id === S.current ? ' sel' : '') + '" data-id="' + t.id + '">' +
           avatar(t.to, { live: !isDone(t.status) }) +
           '<div class="body"><div class="t">' + esc(t.title) + '</div><div class="m">' + st + '<span>' + esc(dn(t.to)) + '</span></div></div>' +
-          '<span class="when">' + esc(ago(t.lastAt).replace(' ' + T('ago'), '')) + '</span></div>';
+          '<span class="when">' + esc(ago(t.lastAt).replace(' ' + T('ago'), '')) + '</span>' +
+          '<button class="btn ghost sm icon th-del" data-del="' + t.id + '" title="' + esc(T('deleteChat')) + '">' + icon('trash', 'sm') + '</button></div>';
       }).join('') : '<div class="fempty">' + esc(T('noChatsHere')) + '</div>') + '</div></div>';
   }).join('');
   $('threads').innerHTML = html || '<div class="group-label" style="text-transform:none;letter-spacing:0">' + esc(q ? T('noResults') : T('none')) + '</div>';
 }
 $('threads').addEventListener('click', function(e){
+  var del = e.target.closest('[data-del]');
+  if (del) { e.stopPropagation(); deleteThread(del.getAttribute('data-del')); return; }
   var add = e.target.closest('[data-new-in]');
   if (add) { e.stopPropagation(); setFolder(add.getAttribute('data-new-in')); go('/chat'); setTimeout(function(){ $('text').focus(); }, 40); return; }
   var tog = e.target.closest('[data-toggle-folder]');
@@ -379,7 +417,7 @@ function samey(a, b){
 function renderStage(){
   var th = S.thread;
   paintFolderChip();
-  var sig = JSON.stringify([S.current, S.notFound, LANG, S.folder, S.folders.length, th ? [th.messages.length, th.tasks.map(function(t){ return [t.status, t.usage && t.usage.costUsd, !!t.pid]; })] : null, S.state.agents.length]);
+  var sig = JSON.stringify([S.current, S.notFound, LANG, S.folder, S.folders.length, th ? [th.messages.length, th.tasks.map(function(t){ return [t.status, t.usage && t.usage.costUsd, !!t.pid, awaitingTally(t.id)]; })] : null, S.state.agents.length, !!S.billing && S.billing.claude]);
   var top = $('stage-top'), log = $('transcript');
   if (sig === S.sig.stage) { updateTicks(); return; }
   S.sig.stage = sig;
@@ -409,14 +447,19 @@ function renderStage(){
   th.tasks.forEach(function(t){ if (t.parentId && map[t.parentId]) (kids[t.parentId] = kids[t.parentId] || []).push(t); });
   var root = map[th.thread] || th.tasks[0];
   var live = th.tasks.filter(function(t){ return !isDone(t.status); });
-  var cost = 0, tk = 0;
-  th.tasks.forEach(function(t){ if (t.usage) { cost += t.usage.costUsd || 0; tk += (t.usage.inputTokens || 0) + (t.usage.outputTokens || 0); } });
+  var cost = 0, tk = 0, missing = 0;
+  th.tasks.forEach(function(t){
+    if (t.usage && typeof t.usage.costUsd === 'number') { cost += t.usage.costUsd; tk += outTok(t.usage); }
+    else if (isDone(t.status) && !awaitingTally(t.id)) missing++;
+  });
   top.innerHTML = '<span class="title">' + esc(root.title) + '</span>' +
     '<span class="chip folder-tag" title="' + esc(root.cwd || S.home || '') + '">' + icon('folder', 'sm') + esc(folderName(root.cwd || S.home || '')) + '</span>' +
     '<span class="facts">' + (live.length ? '<span class="pill working">' + esc(live.length === 1 ? dn(live[0].to) + ' ' + T('working') : T('nWorking', { n: live.length })) + '</span>' : '<span class="pill ' + root.status + '">' + esc(T(root.status)) + '</span>') +
-    '<span class="num">' + th.tasks.length + ' task</span>' + (tk ? '<span class="dotsep">·</span><span class="num">' + toks(tk) + ' ' + esc(T('tokens')) + '</span>' : '') +
-    (cost ? '<span class="dotsep">·</span><span class="num">' + money(cost) + '</span>' : '') + '</span><span class="sp"></span>' +
-    (live.length ? '<button class="btn danger sm" data-stop="' + root.id + '">' + icon('stop', 'sm') + esc(T('stop')) + '</button>' : '') + crewToggle();
+    '<span class="num">' + th.tasks.length + ' task</span>' + (tk ? '<span class="dotsep">·</span><span class="num" title="' + esc(T('outTokTitle')) + '">' + toks(tk) + ' ' + esc(T('tokOut')) + '</span>' : '') +
+    (cost ? '<span class="dotsep">·</span><span class="num cost" title="' + esc(costTitle()) + '">≈ ' + money(cost) + '</span>' : '') +
+    (missing ? '<span class="dotsep">·</span><span class="num nodata" title="' + esc(T('missingTitle')) + '">' + esc(T('missingN', { n: missing })) + '</span>' : '') + '</span><span class="sp"></span>' +
+    (live.length ? '<button class="btn danger sm" data-stop="' + root.id + '">' + icon('stop', 'sm') + esc(T('stop')) + '</button>' : '') +
+    '<button class="btn ghost sm icon" data-del-current="' + root.id + '" title="' + esc(T('deleteChat')) + '">' + icon('trash', 'sm') + '</button>' + crewToggle();
   $('dock-hint').textContent = T('hintReply');
 
   var byTask = {};
@@ -437,7 +480,10 @@ function renderStage(){
     if (liveT) meta += '<span data-since="' + esc(t.dispatchedAt || t.createdAt) + '">' + elapsed(t.dispatchedAt || t.createdAt) + '</span>';
     else if (u.durationMs) meta += '<span>' + dur(u.durationMs) + '</span>';
     else meta += '<span>' + elapsed(t.createdAt, t.updatedAt) + '</span>';
-    if (u.costUsd) meta += '<span>' + money(u.costUsd) + '</span>';
+    if (typeof u.costUsd === 'number') meta += '<span class="cost" title="' + esc(costTitle()) + '">≈ ' + money(u.costUsd) + '</span>';
+    else if (!liveT && t.status === 'done') meta += awaitingTally(t.id)
+      ? '<span class="nodata" title="' + esc(T('awaitingTitle')) + '">' + esc(T('awaiting')) + '</span>'
+      : '<span class="nodata" title="' + esc(T('missingTitle')) + '">' + esc(T('noData')) + '</span>';
     meta += '<span>' + clock(t.createdAt) + '</span>';
 
     var body = '';
@@ -548,6 +594,8 @@ document.addEventListener('click', function(e){
   if (g) { var box = g.parentNode, k = box.getAttribute('data-group'); box.classList.toggle('open'); S.openGroups[k] = box.classList.contains('open'); return; }
   var st = e.target.closest('[data-step]');
   if (st) { var id = st.getAttribute('data-step'); st.classList.toggle('open'); S.openSteps[id] = st.classList.contains('open'); return; }
+  var dc = e.target.closest('[data-del-current]');
+  if (dc) { deleteThread(dc.getAttribute('data-del-current')); return; }
   var stop = e.target.closest('[data-stop]');
   if (stop) { stopTask(stop.getAttribute('data-stop')); return; }
   var cp = e.target.closest('[data-copy]');
@@ -561,6 +609,24 @@ document.addEventListener('click', function(e){
   if (starter) { var ta = $('text'); ta.value = T(starter.getAttribute('data-starter') + 'v'); autosize(); ta.focus(); return; }
   if (e.target.closest('#crew-toggle')) { toggleCrew(); return; }
 });
+function deleteThread(id){
+  var map = tasksById(), t = map[id];
+  var th = S.threads.filter(function(x){ return x.id === id; })[0];
+  var root = t ? rootOf(t, map) : null;
+  var rootId = root ? root.id : id;
+  var title = (root && root.title) || (th && th.title) || shortId(id);
+  var family = (S.state ? S.state.tasks : []).filter(function(x){ return rootOf(x, map) && rootOf(x, map).id === rootId; });
+  var running = family.filter(function(x){ return !isDone(x.status); }).length;
+  var msg = T('confirmDelete', { t: title, n: family.length || 1 }) + (running ? '\n\n' + T('confirmDeleteLive', { n: running }) : '');
+  if (!confirm(msg)) return;
+  post('/api/threads/delete', { id: rootId, stop: running > 0 }).then(function(d){
+    if (d.error) { toast(d.error, true); return; }
+    toast(T('deleted'));
+    if (S.selectedTask && family.some(function(x){ return x.id === S.selectedTask; })) closeDrawer();
+    S.sig = {};
+    if (S.current === rootId) go('/chat'); else refresh();
+  });
+}
 function stopTask(id){
   if (!confirm(T('confirmStop'))) return;
   post('/api/cancel', { task_id: id, by: 'human' }).then(function(d){ toast(d.error ? d.error : T('stopped'), !!d.error); soon(); });
@@ -730,7 +796,7 @@ function renderCrew(){
   S.sig.crew = sig;
   var todays = st.tasks.filter(function(t){ return Date.parse(t.createdAt) >= startOfDay.getTime(); });
   var cost = 0, tk = 0;
-  todays.forEach(function(t){ if (t.usage) { cost += t.usage.costUsd || 0; tk += (t.usage.inputTokens || 0) + (t.usage.outputTokens || 0); } });
+  todays.forEach(function(t){ if (t.usage) { cost += t.usage.costUsd || 0; tk += outTok(t.usage); } });
   var working = st.agents.filter(function(a){ return liveWorkForAgent(a.name).length; }).length;
   $('crew-sub').textContent = working ? T('nWorking', { n: working }) : T('nobody');
   $('members').innerHTML = st.agents.map(function(a){
@@ -754,8 +820,8 @@ function renderCrew(){
   }).join('');
   $('crew-foot').innerHTML =
     '<div class="stat"><div class="n">' + todays.length + '</div><div class="l">' + esc(T('runsToday')) + '</div></div>' +
-    '<div class="stat"><div class="n">' + (cost ? money(cost) : '$0') + '</div><div class="l">' + esc(T('cost')) + '</div></div>' +
-    '<div class="stat"><div class="n">' + toks(tk) + '</div><div class="l">' + esc(T('tokens')) + '</div></div>';
+    '<div class="stat cost" title="' + esc(costTitle()) + '"><div class="n">≈ ' + (cost ? money(cost) : '$0') + '</div><div class="l">' + esc(S.billing && S.billing.claude === 'subscription' ? T('costRef') : T('cost')) + '</div></div>' +
+    '<div class="stat" title="' + esc(T('outTokTitle')) + '"><div class="n">' + toks(tk) + '</div><div class="l">' + esc(T('tokOut')) + '</div></div>';
 }
 $('members').addEventListener('click', function(e){
   var m = e.target.closest('[data-message]');
@@ -810,7 +876,7 @@ function renderBoard(){
         return '<div class="card' + (S.selectedTask === t.id ? ' sel' : '') + '" data-task="' + t.id + '"><div class="ct">' + esc(t.title) + '</div><div class="cm">' + avatar(t.to, { size:'sm', live: live && li === 1 }) +
           '<span class="route">' + esc(dn(t.from)) + ' → ' + esc(dn(t.to)) + '</span><span class="sp"></span>' +
           (folderKeys.length > 1 ? '<span class="ftag" title="' + esc(folderOf(t)) + '">' + icon('folder', 'sm') + esc(folderName(folderOf(t))) + '</span>' : '') +
-          (u.costUsd ? '<span class="num">' + money(u.costUsd) + '</span>' : '') +
+          (typeof u.costUsd === 'number' ? '<span class="num cost" title="' + esc(costTitle()) + '">≈ ' + money(u.costUsd) + '</span>' : '') +
           (live ? '<span class="num" data-since="' + esc(t.dispatchedAt || t.createdAt) + '">' + elapsed(t.dispatchedAt || t.createdAt) + '</span>' : '<span>' + esc(ago(t.updatedAt).replace(' ' + T('ago'), '')) + '</span>') + '</div>' +
           (t.status === 'failed' && t.result ? '<div class="reason">' + esc(t.result) + '</div>' : '') + '</div>';
       }).join('') : '<div class="none">' + esc(T('none')) + '</div>') + '</div></div>';
@@ -892,10 +958,12 @@ function renderDrawer(){
   }
   html += '<div class="dl">' + esc(T('details')) + '</div><div class="facts-grid">' +
     '<div class="fact"><div class="l">' + esc(T('duration')) + '</div><div class="v">' + (live ? '<span data-since="' + esc(t.dispatchedAt || t.createdAt) + '">' + elapsed(t.dispatchedAt || t.createdAt) + '</span>' : u.durationMs ? dur(u.durationMs) : elapsed(t.createdAt, t.updatedAt)) + '</div></div>' +
-    '<div class="fact"><div class="l">' + esc(T('cost')) + '</div><div class="v">' + (u.costUsd ? money(u.costUsd) : '—') + '</div></div>' +
+    '<div class="fact" title="' + esc(costTitle()) + '"><div class="l">' + esc(T('cost')) + '</div><div class="v">' + (typeof u.costUsd === 'number' ? '≈ ' + money(u.costUsd) : '<span class="nodata">' + esc(T('noData')) + '</span>') + '</div></div>' +
     '<div class="fact"><div class="l">' + esc(T('modelUsed')) + '</div><div class="v" title="' + esc(u.model || '') + '">' + esc(shortModel(u.model) || (agentByName(t.to) || {}).model || '—') + '</div></div>' +
-    '<div class="fact wide"><div class="l">' + esc(T('folder')) + '</div><div class="v mono" title="' + esc((rootOf(t, map) || t).cwd || S.home || '') + '">' + esc(shortPath((rootOf(t, map) || t).cwd || S.home || '')) + '</div></div>' +
-    '<div class="fact"><div class="l">' + esc(T('usage')) + '</div><div class="v">' + ((u.inputTokens || u.outputTokens) ? toks((u.inputTokens || 0) + (u.outputTokens || 0)) : '—') + '</div></div></div>';
+    '<div class="fact"><div class="l">' + esc(T('tokOutL')) + '</div><div class="v">' + (u.outputTokens ? toks(u.outputTokens) : '—') + '</div></div>' +
+    '<div class="fact wide"><div class="l">' + esc(T('folder')) + '</div><div class="v mono" title="' + esc((rootOf(t, map) || t).cwd || S.home || '') + '">' + esc(shortPath((rootOf(t, map) || t).cwd || S.home || '')) + '</div></div></div>' +
+    (u.inputTokens && u.cacheReadTokens !== undefined ? '<div class="tokbar" title="' + esc(T('tokBarTitle')) + '">' + tokenBar(u) + '</div>' : '') +
+    (isDone(t.status) ? '<p class="costnote">' + icon('alert', 'sm') + '<span>' + esc(typeof u.costUsd === 'number' ? costTitle() : awaitingTally(t.id) ? T('awaitingTitle') : T('missingTitle')) + '</span></p>' : '');
   html += '<div class="dl">' + esc(T('prompt')) + '</div><div class="dbox">' + md(t.prompt) + '</div>';
   if (t.result) html += '<div class="dl">' + esc(T('result')) + '</div><div class="dbox">' + md(t.result) + '</div>';
   if (t.artifacts && t.artifacts.length && S.drawerArtifact == null) html += '<div class="dl">' + esc(T('artifacts')) + '</div><div class="receipts" style="padding:0">' + t.artifacts.map(function(a, ai){
@@ -906,7 +974,8 @@ function renderDrawer(){
   $('d-foot').innerHTML = '<button class="btn primary sm" data-open-root="' + t.id + '">' + icon('chat', 'sm') + esc(T('openChat')) + '</button>' +
     '<button class="btn quiet sm" data-log="' + t.id + '">' + icon('log', 'sm') + esc(T('viewLog')) + '</button>' +
     '<button class="btn quiet sm" data-copy-id="' + t.id + '">' + icon('copy', 'sm') + esc(T('copyId')) + '</button>' +
-    (live ? '<button class="btn danger sm" data-stop="' + t.id + '" style="margin-left:auto">' + icon('stop', 'sm') + esc(T('stop')) + '</button>' : '');
+    (live ? '<button class="btn danger sm" data-stop="' + t.id + '" style="margin-left:auto">' + icon('stop', 'sm') + esc(T('stop')) + '</button>' : '') +
+    '<button class="btn danger sm" data-del-task="' + t.id + '"' + (live ? '' : ' style="margin-left:auto"') + '>' + icon('trash', 'sm') + esc(T('deleteChat')) + '</button>';
 }
 $('drawer').addEventListener('click', function(e){
   if (e.target.closest('[data-close]')) { closeDrawer(); return; }
@@ -914,6 +983,8 @@ $('drawer').addEventListener('click', function(e){
   if (o) { var map = tasksById(), t = map[o.getAttribute('data-open-root')]; closeDrawer(); if (t) go('/chat/' + rootOf(t, map).id); return; }
   var l = e.target.closest('[data-log]');
   if (l) { fetch('/api/logs/' + l.getAttribute('data-log')).then(function(r){ return r.ok ? r.text() : '(no log)'; }).then(function(txt){ $('d-log').innerHTML = '<div class="dl">log</div><div class="dbox mono" style="max-height:48vh">' + esc(txt.slice(-20000)) + '</div>'; }); return; }
+  var dt = e.target.closest('[data-del-task]');
+  if (dt) { deleteThread(dt.getAttribute('data-del-task')); return; }
   var c = e.target.closest('[data-copy-id]');
   if (c) { copyText(c.getAttribute('data-copy-id')); }
 });

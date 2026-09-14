@@ -151,6 +151,21 @@ export class Store extends EventEmitter {
     return message;
   }
 
+  /**
+   * Remove a whole conversation: its root task, everything delegated from it,
+   * and its transcript. Returns the removed tasks so the caller can delete
+   * their spawn logs. The caller decides what to do about live tasks.
+   */
+  deleteThread(rootId: string): Task[] {
+    const family = [...this.tasks.values()].filter((t) => this.threadOf(t.id) === rootId);
+    if (family.length === 0) return [];
+    for (const t of family) this.tasks.delete(t.id);
+    this.messages.delete(rootId);
+    this.persist();
+    this.emit("change", { kind: "thread-deleted", threadId: rootId, count: family.length });
+    return family;
+  }
+
   listMessages(threadId: string): Message[] {
     return [...(this.messages.get(threadId) ?? [])];
   }

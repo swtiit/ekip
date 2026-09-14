@@ -185,6 +185,10 @@ main{flex:1;min-height:0;display:flex}
 .th .m .state.working{color:var(--tally);font-weight:600}
 .th .m .state.failed{color:var(--bad);font-weight:600}
 .th .av .ad{display:none}
+.th .th-del{display:none;margin-left:-4px;color:var(--faint)}
+.th:hover .th-del{display:inline-flex}
+.th:hover .when{display:none}
+.th .th-del:hover{color:var(--bad);background:var(--bad-soft)}
 .th .when{font-size:11px;color:var(--faint);white-space:nowrap;padding-top:1px}
 
 .stage{display:flex;flex-direction:column;min-height:0;min-width:0;position:relative;background:var(--ground)}
@@ -405,6 +409,22 @@ main{flex:1;min-height:0;display:flex}
 .facts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .fact{background:var(--raised);border:1px solid var(--line-soft);border-radius:9px;padding:8px 10px}
 .fact.wide{grid-column:1 / -1}
+.cost{cursor:help;text-decoration:underline dotted color-mix(in srgb,var(--faint) 70%,transparent);text-underline-offset:3px}
+.stat.cost{text-decoration:none}
+.nodata{color:var(--faint);cursor:help}
+.tokbar{margin-top:10px;background:var(--raised);border:1px solid var(--line-soft);border-radius:9px;padding:10px 12px}
+.tokbar .bar{display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px;background:var(--sunk)}
+.tokbar .bar span{min-width:3px}
+.seg-read,.sw.read{background:color-mix(in srgb,var(--accent) 35%,var(--sunk))}
+.seg-write,.sw.write{background:var(--warn)}
+.seg-fresh,.sw.fresh{background:var(--accent)}
+.seg-out,.sw.out{background:var(--ok)}
+.tokbar .keys{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:8px;font-size:11.5px;color:var(--muted)}
+.tokbar .k{display:inline-flex;align-items:center;gap:5px}
+.tokbar .k b{color:var(--ink);font-weight:600}
+.sw{display:inline-block;width:8px;height:8px;border-radius:2px}
+.costnote{display:flex;gap:7px;align-items:flex-start;margin:10px 0 0;font-size:12px;color:var(--muted);line-height:1.5}
+.costnote .ico{color:var(--faint);margin-top:2px;flex-shrink:0}
 .fact .l{font-size:11px;color:var(--muted)}
 .fact .v{font-size:13px;font-weight:550;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .modal{position:fixed;left:50%;top:14vh;transform:translate(-50%,-8px) scale(.98);width:min(560px,94vw);background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-lg);z-index:42;opacity:0;pointer-events:none;transition:opacity .14s,transform .14s}

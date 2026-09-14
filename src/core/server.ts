@@ -22,7 +22,9 @@ import {
 import { Dispatcher } from "./dispatcher.js";
 import { buildHub } from "./hub.js";
 import { removeSpawnLog } from "./logs.js";
+import { isTerminal } from "../protocol/index.js";
 import { catalogFor } from "./models.js";
+import { claudeBilling } from "./billing.js";
 import { Store } from "./store.js";
 import { appHtml } from "./app.js";
 import { Watchdog } from "./watchdog.js";
@@ -363,6 +365,31 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     args: a.args ?? [],
   });
 
+  /**
+   * Delete a conversation (the thread a task belongs to). Live work must be
+   * stopped first — pass `stop: true` to cancel it as part of the delete.
+   */
+  async function handleDeleteThread(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const { id, stop } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    if (typeof id !== "string" || !store.getTask(id)) {
+      sendJson(res, 404, { error: "unknown conversation" });
+      return;
+    }
+    const root = store.threadOf(id);
+    const family = store.listTasks().filter((t) => store.threadOf(t.id) === root);
+    const live = family.filter((t) => !isTerminal(t.status));
+    if (live.length > 0) {
+      if (stop !== true) {
+        sendJson(res, 409, { error: `${live.length} task(s) still running — stop them first`, running: live.length });
+        return;
+      }
+      dispatcher.cancel(root, "human", "conversation deleted");
+    }
+    const removed = store.deleteThread(root);
+    for (const t of removed) removeSpawnLog(config.projectRoot, t.to, t.id);
+    sendJson(res, 200, { deleted: removed.length, thread: root });
+  }
+
   /** An absolute, existing directory — or the reason it is not one. */
   function checkFolder(raw: string): string | { error: string } {
     const expanded = raw.trim().replace(/^~(?=$|\/)/, homedir());
@@ -552,6 +579,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return handleModels(res);
         case "POST /api/config/hub":
           return handleConfigHub(req, res);
+        case "GET /api/billing":
+          return claudeBilling().then((b) => sendJson(res, 200, { claude: b.value, plan: b.plan ?? null }));
         case "GET /api/limits":
           return sendJson(res, 200, {
             language: config.language ?? null,
@@ -566,6 +595,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return handleContext(req, res);
         case "POST /api/cancel":
           return handleCancel(req, res);
+        case "POST /api/threads/delete":
+          return handleDeleteThread(req, res);
         case "GET /api/folders":
           return handleFolders(res);
         case "POST /api/folders":

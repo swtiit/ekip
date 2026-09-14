@@ -63,7 +63,18 @@ export interface Task {
 export interface TaskUsage {
   /** the model the worker actually ran with, when it reports one */
   model?: string;
+  /** all input: fresh + written to cache + read from cache */
   inputTokens?: number;
+  /** input read back from the prompt cache (billed at a tenth of the input price) */
+  cacheReadTokens?: number;
+  /** input written to the prompt cache (billed above the input price) */
+  cacheWriteTokens?: number;
+  /**
+   * What `costUsd` is priced at, as the CLI reports it — "list" means API
+   * list prices. On a subscription login that is a reference figure, not a
+   * charge.
+   */
+  costBasis?: string;
   outputTokens?: number;
   costUsd?: number;
   durationMs?: number;
