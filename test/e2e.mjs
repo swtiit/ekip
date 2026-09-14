@@ -72,6 +72,10 @@ const config = {
     { name: "noisy", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'echo "Error: invalid --model \"X\": model X is not recognized" >&2; exit 1'] },
     { name: "grader", adapter: "command", spawnable: true, command: process.execPath, args: [MOCK, "{taskId}", "--script=SCORE: 40|SCORE: 95"] },
     { name: "nayer", adapter: "command", spawnable: true, command: process.execPath, args: [MOCK, "{taskId}", "--script=REVISE: not yet"] },
+    { name: "scribe-a", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 1.5"], writer: true },
+    { name: "scribe-b", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 0.2"], writer: true },
+    { name: "boxed", adapter: "command", spawnable: true, command: "sh", sandbox: true,
+      args: ["-c", 'echo in > boxed-in.txt; cat "$HOME/.ekip-e2e-none" >/dev/null 2>&1; echo leak > "$HOME/ekip-e2e-leak.txt" 2>/dev/null && echo yes > boxed-leaked.flag; true'] },
     { name: "linger", adapter: "command", spawnable: true, command: process.execPath, args: [join(REPO, "test", "mock-linger.mjs"), "{taskId}"], maxConcurrent: 1 },
   ],
   maxDepth: 3,
@@ -167,7 +171,7 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 15 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 18 && state0.hubUrl.endsWith("/mcp"));
   t("state exposes workers", Array.isArray(state0.workers?.running) && Array.isArray(state0.workers?.queued));
   t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
 
@@ -854,6 +858,49 @@ try {
   await sleep(1200);
   const fcStages = (await api("/api/state")).tasks.filter((x) => x.parentId === fc.task.id);
   t("flows: cancel stops the flow", (await taskById(fc.task.id))?.status === "cancelled" && fcStages.length <= 1, `${(await taskById(fc.task.id))?.status} ${fcStages.map((x) => x.to + ":" + x.status).join(",")}`);
+
+  // ---- editors: two file-editing agents never share a folder at once ----
+  const wA = await (await post("/api/delegate", { to: "scribe-a", prompt: "edit", title: "writer-a" })).json();
+  const wB = await (await post("/api/delegate", { to: "scribe-b", prompt: "edit too", title: "writer-b" })).json();
+  t("writers: first editor starts", wA.dispatch?.spawned === true);
+  t("writers: second editor in the same folder waits", wB.dispatch?.queued === true && /editing this folder/.test(wB.dispatch?.reason ?? ""), JSON.stringify(wB.dispatch));
+  const wbMsg = (await api(`/api/thread/${wB.task.id}`)).messages.find((m) => m.meta?.writerWait);
+  t("writers: the wait says who is editing", wbMsg && /scribe-a/.test(wbMsg.text));
+  const otherFolder = join(TMP, "other-project");
+  mkdirSync(otherFolder, { recursive: true });
+  const wC = await (await post("/api/delegate", { to: "scribe-b", prompt: "edit elsewhere", title: "writer-c", cwd: otherFolder })).json();
+  t("writers: an editor in another folder is not held up", wC.dispatch?.spawned === true, JSON.stringify(wC.dispatch));
+  t("writers: the waiting editor starts once the folder frees", !!(await until(async () => (await taskById(wB.task.id))?.dispatchedAt, 8000)));
+  t("writers: non-editors are not held by an editor", !(await import("../dist/core/dispatcher.js")).isWriter({ name: "r", adapter: "claude", args: ["--model", "sonnet"] }) &&
+    (await import("../dist/core/dispatcher.js")).isWriter({ name: "c", adapter: "claude", args: ["--permission-mode", "acceptEdits"] }) &&
+    (await import("../dist/core/dispatcher.js")).isWriter({ name: "g", adapter: "antigravity" }));
+
+  // ---- identity: only the run that claimed a task can report it ----
+  const idTask = await (await post("/api/delegate", { to: "manual", prompt: "mine", title: "identity" })).json();
+  const owner = await openSession(), stranger = await openSession();
+  const claimedBy = await owner("bridge_claim", { as: "manual", task_id: idTask.task.id });
+  t("identity: owner claims", claimedBy.task?.id === idTask.task.id);
+  const hijack = await stranger("bridge_post_result", { task_id: idTask.task.id, status: "done", result: "not yours" });
+  t("identity: another session can't report a claimed task", /claimed by another run/.test(hijack.error ?? ""), JSON.stringify(hijack));
+  const legit = await owner("bridge_post_result", { task_id: idTask.task.id, status: "done", result: "mine indeed" });
+  t("identity: the claiming run reports", legit.ok === true);
+  const overwrite = await stranger("bridge_post_result", { task_id: idTask.task.id, status: "failed", result: "replace it" });
+  t("identity: a reported result can't be replaced", /already reported/.test(overwrite.error ?? "") && (await taskById(idTask.task.id)).result === "mine indeed");
+
+  // ---- OS sandbox (macOS): an agent without a hook still can't leave its folder ----
+  if (process.platform === "darwin") {
+    const { sandboxProfile } = await import("../dist/guard/sandbox.js");
+    const prof = sandboxProfile(TMP);
+    t("sandbox: profile denies home, allows the folder last", prof.indexOf("(deny file-write* (subpath") < prof.lastIndexOf("(allow file-read* file-write* (subpath"));
+    const bx = await (await post("/api/delegate", { to: "boxed", prompt: "probe", title: "sandbox" })).json();
+    await until(async () => existsSync(join(TMP, "boxed-in.txt")), 8000);
+    await sleep(500);
+    const leaked = existsSync(join(process.env.HOME, "ekip-e2e-leak.txt"));
+    if (leaked) execFileSync("rm", ["-f", join(process.env.HOME, "ekip-e2e-leak.txt")]);
+    t("sandbox: writes inside the folder work", existsSync(join(TMP, "boxed-in.txt")));
+    t("sandbox: writes into home outside the folder are blocked", !leaked && !existsSync(join(TMP, "boxed-leaked.flag")));
+    t("sandbox: the log says the run was sandboxed", readFileSync(join(TMP, ".ekip", "logs", `boxed-${bx.task.id}.log`), "utf8").includes("[ekip] sandboxed to"));
+  }
 
   // ---- budgets: one request may only spend so much ----
   const limits0 = await api("/api/limits");

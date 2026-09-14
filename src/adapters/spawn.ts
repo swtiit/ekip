@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { appendFileSync, createWriteStream, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
+import { confine } from "../guard/sandbox.js";
 import type { SpawnResult, WorkerExit } from "./index.js";
 
 export interface LaunchOptions {
@@ -15,6 +16,8 @@ export interface LaunchOptions {
   onExit?: (exit: WorkerExit) => void;
   /** every line the worker writes to stdout (it is also appended to the log) */
   onLine?: (line: string) => void;
+  /** run confined to this folder at the OS level, where the OS supports it */
+  confineTo?: string;
 }
 
 /**
@@ -33,7 +36,9 @@ export function launchDetached(opts: LaunchOptions): SpawnResult {
   const fd = openSync(opts.logFile, "a");
   // stdout comes through us (so adapters can decode it live); stderr goes
   // straight to the log file.
-  const child = spawn(opts.command, opts.args, {
+  const run = confine(opts.command, opts.args, opts.confineTo);
+  if (run.confined) appendFileSync(opts.logFile, `[ekip] sandboxed to ${opts.confineTo}\n`);
+  const child = spawn(run.command, run.args, {
     cwd: opts.cwd,
     detached: true,
     stdio: ["ignore", opts.onLine ? "pipe" : fd, fd],

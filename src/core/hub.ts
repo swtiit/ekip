@@ -15,10 +15,21 @@ const jsonText = (data: unknown) => ({
  * Builds the MCP server that both agents connect to. Every tool is prefixed
  * `bridge_` to stay clear of the host agent's own tool namespace.
  */
+/**
+ * Who claimed what. Each MCP session is one agent run; a task claimed by one
+ * run can only be reported by that run while it is still connected, so a
+ * stray or hostile session can't overwrite another agent's result.
+ */
+export interface HubSessions {
+  claims: Map<string, string>;
+  live: Set<string>;
+}
+
 export function buildHub(
   config: BridgeConfig,
   store: Store,
   dispatcher: Dispatcher,
+  session?: { id: string; registry: HubSessions },
 ): McpServer {
   /**
    * One MCP session serves one agent run, so the folder of the task it claims
@@ -124,6 +135,7 @@ export function buildHub(
       }
       if (!task) return jsonText({ task: null });
       store.updateTask(task.id, { status: "claimed" });
+      session?.registry.claims.set(task.id, session.id);
       remember(task.id);
       store.addMessage({ taskId: task.id, from: as, kind: "system", text: `${as} started: ${task.title}` });
       return jsonText({ task: store.getTask(task.id) });
@@ -155,6 +167,22 @@ export function buildHub(
       if (!existing) return jsonText({ error: `unknown task ${task_id}` });
       if (existing.status === "cancelled") {
         return jsonText({ error: `task ${task_id} was cancelled; result discarded` });
+      }
+      // A reported result stands. The one exception: the hub itself failed the
+      // task (watchdog, lost worker) and the run that claimed it reports late.
+      const lateOwner = session && session.registry.claims.get(task_id) === session.id;
+      if (existing.status === "done" || (existing.status === "failed" && !lateOwner)) {
+        return jsonText({ error: `task ${task_id} already reported ${existing.status}; a result can't be replaced` });
+      }
+      if (session) {
+        const owner = session.registry.claims.get(task_id);
+        if (owner && owner !== session.id && session.registry.live.has(owner)) {
+          return jsonText({ error: `task ${task_id} was claimed by another run; only that run can report its result` });
+        }
+        if (!owner && existing.status === "pending" && existing.pid !== undefined) {
+          return jsonText({ error: `task ${task_id} is waiting for the run the hub started for it; claim a task before reporting on it` });
+        }
+        if (status === "done" || status === "failed") session.registry.claims.delete(task_id);
       }
       const updated = store.updateTask(task_id, {
         status: status as TaskStatus,

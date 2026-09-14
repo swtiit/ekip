@@ -75,6 +75,7 @@ export const claudeAdapter: Adapter = {
       cwd: req.cwd,
       env: bridgeEnv(req),
       logFile,
+      confineTo: req.sandbox ? req.scope : undefined,
       label: "claude -p",
       onExit: req.onExit,
       onLine: req.onEvent

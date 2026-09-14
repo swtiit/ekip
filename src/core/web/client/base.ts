@@ -311,7 +311,7 @@ function refresh(){
   busy = true;
   var jobs = [getJSON('/api/state').then(function(s){ if (s) S.state = s; })];
   if (S.view === 'chat' || S.view === 'board') jobs.push(getJSON('/api/folders').then(function(d){ if (d) { S.folders = d.folders; S.home = d.home; } }));
-  if (S.view === 'chat' && !S.flows) { S.flows = []; getJSON('/api/flows').then(function(d){ if (d) { S.flows = d.flows; S.sig = {}; render(); } }); }
+  if (!S.flows) { S.flows = []; getJSON('/api/flows').then(function(d){ if (d) { S.flows = d.flows; S.sig = {}; render(); } }); }
   if (S.view === 'chat') {
     jobs.push(getJSON('/api/threads').then(function(d){ if (d) S.threads = d.threads; }));
     if (S.current) {

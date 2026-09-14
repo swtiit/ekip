@@ -55,6 +55,7 @@ export const antigravityAdapter: Adapter = {
       cwd: req.cwd,
       env: bridgeEnv(req),
       logFile,
+      confineTo: req.sandbox ? req.scope : undefined,
       label: "agy -p",
       onLine: req.onEvent ? (line) => void lines.push(line) : undefined,
       onExit: (exit) => {

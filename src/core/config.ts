@@ -19,6 +19,19 @@ export interface AgentConfig {
    * conventions). See examples/roles/.
    */
   promptFile?: string;
+  /**
+   * Confine this agent's process to the conversation's folder with the OS
+   * sandbox (macOS). Default: on for Antigravity, which has no tool hook;
+   * off for others (Claude runs are guarded by a hook instead).
+   */
+  sandbox?: boolean;
+  /**
+   * Whether this agent edits files. Two editors never run in the same folder
+   * at once (see `writersPerFolder`), so they can't overwrite each other.
+   * Default: inferred — Antigravity, or Claude with acceptEdits /
+   * bypassPermissions.
+   */
+  writer?: boolean;
   /** set false to register the agent without letting the hub spawn it */
   spawnable?: boolean;
   /**
@@ -93,6 +106,8 @@ export interface BridgeConfig {
    * access outside it.
    */
   folderGuard?: boolean;
+  /** how many file-editing agents may run in one folder at once (default 1; 0 = no limit) */
+  writersPerFolder?: number;
   /**
    * Spending cap per request — a message you send, a flow run, or a top-level
    * delegation — counted in worker runs, output tokens and minutes. Defaults:

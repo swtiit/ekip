@@ -7,6 +7,7 @@
 export const GUIDE = String.raw`
 /* ================= guide ================= */
 function renderGuide(){
+  if (!S.state) return;
   var st = S.state;
   var sig = JSON.stringify([LANG, st.agents]);
   if (sig === S.sig.guide) return;

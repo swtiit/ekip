@@ -31,6 +31,8 @@ export interface SpawnRequest {
   logFile?: string;
   /** folder the run must stay inside; adapters that can enforce it should */
   scope?: string;
+  /** confine the process to `scope` at the OS level (macOS sandbox), for agents without a tool hook */
+  sandbox?: boolean;
   /** headers a spawned agent must send to the hub (the token, when one is set) */
   hubHeaders?: Record<string, string>;
   /** called once when the spawned process ends (or fails to start) */

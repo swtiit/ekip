@@ -8,6 +8,7 @@ export const SETTINGS = String.raw`
 /* ================= settings ================= */
 var EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 function renderSettings(){
+  if (!S.state) return; // the model list can arrive before the hub's state
   var st = S.state, l = S.limits;
   var sig = JSON.stringify([LANG, st.agents, !!S.catalogs, l, S.billing, showMoney()]);
   if (sig === S.sig.settings) return;

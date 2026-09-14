@@ -21,7 +21,7 @@ import {
   stateFilePath,
 } from "./config.js";
 import { Dispatcher } from "./dispatcher.js";
-import { buildHub } from "./hub.js";
+import { buildHub, type HubSessions } from "./hub.js";
 import { removeSpawnLog } from "./logs.js";
 import { FlowRunner, loadFlows, validateFlow } from "./flows.js";
 import { assertSafeBinding, checkAccess, hubToken, presentedToken, tokenMatches } from "./access.js";
@@ -122,6 +122,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   budgetTimer.unref();
 
   const transports: Record<string, StreamableHTTPServerTransport> = {};
+  const sessions: HubSessions = { claims: new Map(), live: new Set() };
   const sseClients = new Set<ServerResponse>();
 
   async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -145,10 +146,13 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
             transports[sid] = transport!;
           },
         });
+        const run = randomUUID();
+        sessions.live.add(run);
         transport.onclose = () => {
+          sessions.live.delete(run);
           if (transport!.sessionId) delete transports[transport!.sessionId];
         };
-        const server = buildHub(config, store, dispatcher);
+        const server = buildHub(config, store, dispatcher, { id: run, registry: sessions });
         await server.connect(transport);
       }
       await transport.handleRequest(req, res, body);
@@ -686,6 +690,10 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           res.end(JSON.stringify({ ok: true }));
           return;
         }
+        case "GET /favicon.ico": // the app ships its icon inline; answer other clients quietly
+          res.writeHead(204);
+          res.end();
+          return;
         case "GET /":
         case "GET /ui": // the board's old address
           res.writeHead(302, { Location: path === "/ui" ? "/board" : "/chat" });

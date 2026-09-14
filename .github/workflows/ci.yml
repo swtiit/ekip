@@ -24,3 +24,6 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - run: npm run test:ui
+        env:
+          UI_REQUIRED: "1"

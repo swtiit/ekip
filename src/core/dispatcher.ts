@@ -26,6 +26,16 @@ interface RunningWorker {
   pid: number;
   /** folder the worker runs in */
   folder: string;
+  /** edits files — holds the folder's editor slot */
+  writer: boolean;
+}
+
+/** Does this member edit files? Explicit `writer` wins; otherwise read it off its permissions. */
+export function isWriter(agent: AgentConfig): boolean {
+  if (agent.writer !== undefined) return agent.writer;
+  if (agent.adapter === "antigravity") return true;
+  const args = agent.args ?? [];
+  return args.some((a) => /^(acceptEdits|bypassPermissions)$/.test(a) || a === "--dangerously-skip-permissions");
 }
 
 /** How long after a worker exits we wait for an in-flight post_result before failing the task. */
@@ -197,19 +207,30 @@ export class Dispatcher {
    * member's own cap also applies per folder.
    */
   private hasSlot(agent: AgentConfig, task: Task): boolean {
+    return this.slotBlocker(agent, task) === undefined;
+  }
+
+  /** Why this task can't start yet, or undefined when it can. */
+  private slotBlocker(agent: AgentConfig, task: Task): string | undefined {
     const total = this.config.maxConcurrentTotal ?? DEFAULT_MAX_CONCURRENT_TOTAL;
-    if (this.running.size >= total) return false;
+    if (this.running.size >= total) return `${this.running.size} worker(s) running across all folders`;
     const folder = this.folderOf(task);
     let inFolder = 0;
     let agentInFolder = 0;
+    const writers: string[] = [];
     for (const w of this.running.values()) {
       if (w.folder !== folder) continue;
       inFolder++;
       if (w.agent === agent.name) agentInFolder++;
+      if (w.writer) writers.push(w.agent);
     }
-    if (inFolder >= (this.config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT)) return false;
-    if (agent.maxConcurrent !== undefined && agentInFolder >= agent.maxConcurrent) return false;
-    return true;
+    if (inFolder >= (this.config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT)) return `${inFolder} worker(s) running in this folder`;
+    if (agent.maxConcurrent !== undefined && agentInFolder >= agent.maxConcurrent) return `${agentInFolder} ${agent.name} run(s) already going`;
+    const writerCap = this.config.writersPerFolder ?? 1;
+    if (writerCap > 0 && isWriter(agent) && writers.length >= writerCap) {
+      return `another agent is editing this folder (${writers.join(", ")})`;
+    }
+    return undefined;
   }
 
   async dispatch(task: Task): Promise<DispatchOutcome> {
@@ -237,18 +258,20 @@ export class Dispatcher {
       return this.refuse(task, `no adapter "${agent.adapter}" registered for agent "${task.to}"`);
     }
 
-    if (!this.hasSlot(agent, task)) {
+    const blocker = this.slotBlocker(agent, task);
+    if (blocker) {
       this.queue.push(task);
       this.store.addMessage({
         taskId: task.id,
         from: "hub",
         kind: "system",
-        text: `queued for ${agent.name} (${this.running.size} worker(s) running, position ${this.queue.length})`,
+        text: `queued for ${agent.name}: ${blocker} (position ${this.queue.length})`,
+        meta: { queued: true, writerWait: blocker.startsWith("another agent is editing") },
       });
       return {
         spawned: false,
         queued: true,
-        reason: `queued: ${this.running.size} worker(s) running (position ${this.queue.length})`,
+        reason: `queued: ${blocker} (position ${this.queue.length})`,
       };
     }
     return this.launch(task, agent);
@@ -269,6 +292,7 @@ export class Dispatcher {
       extraArgs: agent.args,
       command: agent.command,
       scope: this.guardOn() ? this.folderOf(task) : undefined,
+      sandbox: this.guardOn() && (agent.sandbox ?? agent.adapter === "antigravity"),
       hubHeaders: hubToken(this.config) ? { Authorization: `Bearer ${hubToken(this.config)}` } : undefined,
       onExit: (exit) => this.onWorkerExit(task.id, agent.name, exit),
       onEvent: (event) => this.onWorkerEvent(task.id, agent.name, event),
@@ -278,7 +302,7 @@ export class Dispatcher {
       return this.refuse(task, result.detail ?? "adapter did not launch the worker");
     }
     if (result.pid !== undefined) {
-      this.running.set(task.id, { taskId: task.id, agent: agent.name, pid: result.pid, folder: this.folderOf(task) });
+      this.running.set(task.id, { taskId: task.id, agent: agent.name, pid: result.pid, folder: this.folderOf(task), writer: isWriter(agent) });
     }
     this.store.updateTask(task.id, { dispatchedAt: new Date().toISOString(), pid: result.pid }, { touch: false });
     return { spawned: true, detail: result.detail };

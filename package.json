@@ -24,7 +24,8 @@
     "serve": "node dist/cli/index.js serve",
     "test": "node test/e2e.mjs",
     "prepublishOnly": "npm run build && npm test",
-    "soak": "node test/soak.mjs"
+    "soak": "node test/soak.mjs",
+    "test:ui": "node test/ui.mjs"
   },
   "keywords": [
     "mcp",
@@ -41,6 +42,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "playwright-core": "^1.63.0",
     "typescript": "^5.6.0"
   },
   "engines": {

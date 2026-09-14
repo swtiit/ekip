@@ -81,8 +81,18 @@ thư mục). Folder quyết định:
 - **Chặn ngoài folder** (`folderGuard`, mặc định bật): mọi run được báo folder
   của nó; riêng Claude còn có hook PreToolUse chặn cứng mọi thao tác đọc/ghi/
   tìm/lệnh shell trỏ ra ngoài (đã thử thật: không có hook thì `claude -p` đọc
-  và ghi sang folder bên cạnh thoải mái). Antigravity chưa có cơ chế hook nên
-  Gemini chỉ được dặn, không bị chặn cứng.
+  và ghi sang folder bên cạnh thoải mái). Antigravity không có hook, nên trên
+  macOS ekip chạy agy trong **sandbox của hệ điều hành**: đọc/ghi folder khác
+  trong home, `~/.ssh`, `~/.aws` đều bị từ chối (đã thử thật với agy). Linux/
+  Windows thì Gemini chỉ được dặn. Agent khác muốn chặn tương tự thì thêm
+  `"sandbox": true`.
+- **Mỗi folder một người sửa:** agent có quyền sửa file (Antigravity, hoặc
+  Claude có `acceptEdits`; hoặc đặt `"writer": true`) không chạy hai cái cùng
+  lúc trong một folder (`writersPerFolder`, mặc định 1). Cái sau xếp hàng với
+  lý do "another agent is editing this folder". Review, Điều phối chạy song
+  song bình thường.
+- **Chỉ lượt đã nhận việc mới được báo kết quả:** phiên MCP khác không ghi đè
+  được, kết quả đã báo xong thì không thay được.
 
 ## 6. Quy trình (flow) — luật cứng do hub chạy
 

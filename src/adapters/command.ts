@@ -47,6 +47,7 @@ export const commandAdapter: Adapter = {
       cwd: req.cwd,
       env: bridgeEnv(req),
       logFile,
+      confineTo: req.sandbox ? req.scope : undefined,
       onExit: req.onExit,
       label: req.command,
     });

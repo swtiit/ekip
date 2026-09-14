@@ -124,6 +124,22 @@ followed by the last step's result. Gate verdicts are `system` messages on
 the root with `meta.gate` = `pass` | `retry` | `stop`. Cancelling the root
 cancels the running step and ends the flow.
 
+## Ownership
+
+A run that claims a task over MCP owns it. While that session is connected,
+`bridge_post_result` for the task from any other session is refused. A task
+the hub launched a worker for can't be reported before it is claimed. A
+`done` result is final; a `failed` one can be replaced only by the run that
+claimed it (a late report after the watchdog gave up).
+
+## Editors
+
+A member that edits files (`writer`, or inferred from its adapter and
+permissions) holds its folder's editor slot while it runs; with
+`writersPerFolder` (default 1) reached, another editor for the same folder
+queues. On macOS, agents with `sandbox` (default for Antigravity) run under
+`sandbox-exec`, confined to their folder at the OS level.
+
 ## Access
 
 State-changing requests to `/api/*` and `/mcp` must carry
