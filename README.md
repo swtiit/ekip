@@ -147,7 +147,7 @@ The examples ship a field-tested crew and flow:
       "args": ["--model", "claude-opus-4-8", "--effort", "high"],
       "promptFile": ".ekip/roles/planner.md" },
     { "name": "coder", "adapter": "antigravity",
-      "args": ["--model", "Gemini 3.5 Flash (High)"] },
+      "args": ["--model", "Gemini 3.6 Flash (High)"] },
     { "name": "codex", "adapter": "command",
       "command": "codex", "args": ["exec", "{prompt}"] },
     { "name": "me", "adapter": "claude", "spawnable": false }
@@ -190,7 +190,10 @@ Out of the box a spawned run can only talk to the bridge. For real coding
 
 - **Claude Code**: add `"--permission-mode", "acceptEdits"` to the agent's
   `args`; allowlist specific commands via `--allowedTools "Bash(npm test:*)"`.
-- **Antigravity**: headless agy soft-denies anything needing a prompt, and a
+- **Antigravity**: model names move between releases (`agy models` lists what
+  the installed binary accepts — a stale name exits 1 before the run starts,
+  and ekip surfaces that line on the failed task). Headless agy soft-denies
+  anything needing a prompt, and a
   single denial kills the whole run. Grants live in
   `~/.gemini/config/config.json` under
   `userSettings.globalPermissionGrants.allow`: `"mcp(ekip/*)"` for

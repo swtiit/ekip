@@ -12,7 +12,9 @@ import { bridgeEnv, launchDetached } from "./spawn.js";
  *
  * Field notes (verified against the real binary):
  * - Install via `brew install antigravity-cli`; `agy models` lists model
- *   names for `--model` (e.g. "Gemini 3.5 Flash (Low)").
+ *   names for `--model` (e.g. "Gemini 3.6 Flash (High)"). The list moves:
+ *   3.5 names stopped being accepted by 1.1.3 — a wrong name exits 1 before
+ *   the run starts, which the dispatcher now surfaces from the log.
  * - Headless runs do NOT load the workspace `.agents/mcp_config.json` unless
  *   the folder has been trusted interactively first — register the hub in
  *   the global `~/.gemini/config/mcp_config.json` instead (schema requires

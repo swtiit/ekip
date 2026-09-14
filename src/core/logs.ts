@@ -28,7 +28,11 @@ export function spawnLogHint(projectRoot: string, agent: string, taskId: string)
     /^.*(session limit|rate.?limit|quota|429|resource.?exhausted|auto-denied|permission|spawn error|ENOENT|authenticat|OAuth|not logged in).*$/im;
   const match = text.match(signature);
   if (match) return JSON.stringify(match[0].trim().slice(0, 200));
-  return undefined;
+  // No known signature — the last thing the worker said is still the best
+  // clue we have (e.g. agy's "invalid --model ... is not recognized").
+  const lines = text.trim().split("\n").filter((l) => l.trim() && !l.startsWith("{"));
+  const last = lines[lines.length - 1];
+  return last ? JSON.stringify(last.trim().slice(0, 200)) : undefined;
 }
 
 export function removeSpawnLog(projectRoot: string, agent: string, taskId: string): void {

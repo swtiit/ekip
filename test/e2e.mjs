@@ -63,6 +63,7 @@ const config = {
     { name: "sleeper", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 30"] },
     { name: "serial", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 0.7"], maxConcurrent: 1 },
     { name: "talker", adapter: "fakeclaude", spawnable: true },
+    { name: "noisy", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'echo "Error: invalid --model \"X\": model X is not recognized" >&2; exit 1'] },
     { name: "linger", adapter: "command", spawnable: true, command: process.execPath, args: [join(REPO, "test", "mock-linger.mjs"), "{taskId}"], maxConcurrent: 1 },
   ],
   maxDepth: 3,
@@ -140,7 +141,7 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 11 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 12 && state0.hubUrl.endsWith("/mcp"));
   t("state exposes workers", Array.isArray(state0.workers?.running) && Array.isArray(state0.workers?.queued));
   t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
 
@@ -269,6 +270,15 @@ try {
   // The result text proves which path won: the watchdog would write "watchdog: no claim".
   t("fail-fast beats the watchdog", !/watchdog/.test(sinkDead?.result ?? "") && Date.now() - t0 < 5000, `${Date.now() - t0}ms · ${sinkDead?.result}`);
   t("fail-fast keeps the empty-log hint", /silent exit/.test(sinkDead?.result ?? ""), sinkDead?.result);
+
+  // An unknown failure still surfaces the worker's last words (field case:
+  // agy rejecting a --model name that no longer exists).
+  const noisy = await (await post("/api/delegate", { to: "noisy", prompt: "x", title: "noisy-1" })).json();
+  const noisyDead = await until(async () => {
+    const x = await taskById(noisy.task.id);
+    return x?.status === "failed" ? x : undefined;
+  });
+  t("unknown failure quotes the last log line", /is not recognized/.test(noisyDead?.result ?? ""), noisyDead?.result);
   t("exit code recorded, pid cleared", sinkDead?.exitCode === 0 && sinkDead?.pid === undefined);
 
   // ---- watchdog: alive but never claims ----
