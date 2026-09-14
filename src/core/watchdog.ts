@@ -51,12 +51,38 @@ export class Watchdog {
           this.fail(task.id, task.to, `no claim within ${cfg.pendingTtlSeconds}s of delegation`);
         }
       } else if (task.status === "claimed") {
-        const idle = (now - Date.parse(task.updatedAt)) / 1000;
+        // A task that handed work out is waiting, not wedged: while any of its
+        // delegated tasks is still alive, the clock is theirs, not its own.
+        if (this.hasLiveDescendant(task.id)) continue;
+        const idle = (now - Date.parse(this.lastActivity(task.id, task.updatedAt))) / 1000;
         if (idle > cfg.claimedTtlSeconds) {
           this.fail(task.id, task.to, `claimed but no result within ${cfg.claimedTtlSeconds}s`);
         }
       }
     }
+  }
+
+  private hasLiveDescendant(taskId: string): boolean {
+    const all = this.store.listTasks();
+    const stack = [taskId];
+    while (stack.length) {
+      const id = stack.pop()!;
+      for (const t of all) {
+        if (t.parentId !== id) continue;
+        if (t.status === "pending" || t.status === "claimed") return true;
+        stack.push(t.id);
+      }
+    }
+    return false;
+  }
+
+  /** Latest sign of life: its own update, or when its last hand-off finished. */
+  private lastActivity(taskId: string, own: string): string {
+    let latest = own;
+    for (const t of this.store.listTasks()) {
+      if (t.parentId === taskId && t.updatedAt > latest) latest = t.updatedAt;
+    }
+    return latest;
   }
 
   private fail(taskId: string, agent: string, reason: string): void {

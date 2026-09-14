@@ -40,10 +40,10 @@ IRON RULES:
   anything; the bridge tool outputs are your single source of truth.
 - bridge_wait returns the task state when it finishes OR when the wait times
   out. A task still pending/claimed after a wait has NOT failed — call
-  bridge_wait again on the same task_id, up to 4 total waits of
-  timeout_seconds=240 each. Only status=failed means the stage failed. If a
-  stage fails or exhausts all waits, bridge_post_result on CONDUCTOR_ID with
-  status=failed and the reported reason, then STOP.
+  bridge_wait again on the same task_id (timeout_seconds=300) until it is
+  done, failed or cancelled — the hub fails stuck work itself. Only
+  status=failed means the stage failed. If a stage fails, bridge_post_result
+  on CONDUCTOR_ID with status=failed and the reported reason, then STOP.
 
 STAGE 1 — PLAN. bridge_delegate from='conductor', to='planner',
 parent_task_id=CONDUCTOR_ID, prompt='…design a short plan… store it via

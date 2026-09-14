@@ -199,6 +199,8 @@ try {
     t("worker prompt carries the language instruction", /Write in Vietnamese/.test(promptSeen), promptSeen.slice(0, 120));
     t("worker prompt still carries the task", /lang-probe|p$/m.test(promptSeen));
     t("worker is told its own name and job", /You are the agent "echoer" \(Người nhắc lại\)/.test(promptSeen) && /Your part in the crew: Ghi lại đúng prompt/.test(promptSeen));
+    t("worker is told which instructions win", /If instructions conflict, follow this order: \(1\) limits the hub enforces/.test(promptSeen) && /say plainly in bridge_post_result what you did not do/.test(promptSeen));
+    t("step 2 no longer tells every role to do the work itself", !/Carry out the task in this repository/.test(promptSeen) && /in the way your role describes/.test(promptSeen));
     t("worker is told its folder and to stay in it", promptSeen.includes(`Working folder: ${TMP}`) && /Stay inside it/.test(promptSeen));
     t("worker is told who else is on the crew", /Your crew/.test(promptSeen) && /- mock: command agent/.test(promptSeen) && !/- echoer/.test(promptSeen));
   }
@@ -538,6 +540,19 @@ try {
     const forced = await (await post("/api/threads/delete", { id: busy.task.id, stop: true })).json();
     await sleep(400);
     t("stop + delete kills the worker and removes it", forced.deleted === 1 && !isAlive(busyPid) && !(await taskById(busy.task.id)));
+  }
+
+  // ---- a task waiting on its hand-offs is not reaped ----
+  {
+    const parent = (await (await post("/api/delegate", { to: "modeled", prompt: "coordinate", title: "waiting-parent" })).json()).task;
+    const run = await openSession();
+    await run("bridge_claim", { as: "modeled", task_id: parent.id });
+    const child = await run("bridge_delegate", { from: "modeled", to: "modeled", title: "slow-child", prompt: "x", parent_task_id: parent.id });
+    await sleep(5000); // claimedTtlSeconds is 3 in this suite
+    t("a parent waiting on live hand-offs stays claimed", (await taskById(parent.id))?.status === "claimed", (await taskById(parent.id))?.result);
+    await run("bridge_post_result", { task_id: child.task_id, status: "done", result: "child finished" });
+    const reaped = await until(async () => { const x = await taskById(parent.id); return x?.status === "failed" ? x : undefined; }, 9000);
+    t("once hand-offs finish, an idle parent is reaped again", /claimed but no result/.test(reaped?.result ?? ""), reaped?.result);
   }
 
   // ---- folder guard: decisions and the Claude hook ----
