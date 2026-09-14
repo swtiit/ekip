@@ -28,9 +28,9 @@ const L = {
     m1: "① yêu cầu", m2: "② giao việc · bridge_delegate", m3: "③ tự khởi chạy", m4: "④ báo kết quả · bridge_post_result",
     m5: "⑤ kết quả về · bridge_wait", m6: "⑥ báo cáo tổng hợp", working: "đang làm",
     pPlan: "Lên kế hoạch", pCritic: "Phản biện", pCriticSub: "chấm ≥ 90 điểm", pCode: "Lập trình", pReview: "Review code", pAudit: "Kiểm định cuối", pAuditSub: "SHIP hoặc HOLD",
-    pConductor: "Điều phối — cầm kịch bản, giao và chờ từng chặng, không tự làm",
-    pLoop1: "sửa kế hoạch · tối đa 3 vòng", pLoop2: "sửa code · tối đa 3 vòng",
-    pBoard: "bảng đen chung: plan.v1 → plan.consensus → review.round1 → audit.verdict",
+    pConductor: "Hub — chạy từng chặng, chấm cổng, quay vòng khi chưa đạt, dừng khi hết vòng",
+    pLoop1: "chưa ≥ 90 → sửa kế hoạch · tối đa 3 vòng", pLoop2: "chưa DUYỆT → sửa code · tối đa 3 vòng",
+    pBoard: "kế hoạch nằm trên bảng đen (&lt;lần chạy&gt;.plan); nhận xét của cổng được gửi kèm vào vòng sau",
     l1: "Hội thoại", l2: "Transcript", l3: "Các bước làm", l4: "Kết quả + biên nhận", l5: "Ê-kíp", l6: "Ô soạn",
   },
   en: {
@@ -47,9 +47,9 @@ const L = {
     m1: "① request", m2: "② hand out · bridge_delegate", m3: "③ launches", m4: "④ reports back · bridge_post_result",
     m5: "⑤ result returns · bridge_wait", m6: "⑥ summary report", working: "working",
     pPlan: "Plan", pCritic: "Critic", pCriticSub: "scores ≥ 90", pCode: "Code", pReview: "Review", pAudit: "Audit", pAuditSub: "SHIP or HOLD",
-    pConductor: "Conductor — holds the script, hands out and waits on each stage, does no work itself",
-    pLoop1: "revise the plan · at most 3 rounds", pLoop2: "fix the code · at most 3 rounds",
-    pBoard: "shared blackboard: plan.v1 → plan.consensus → review.round1 → audit.verdict",
+    pConductor: "Hub — runs each stage, checks the gate, loops back on a miss, stops when rounds run out",
+    pLoop1: "under 90 → revise the plan · at most 3 rounds", pLoop2: "not APPROVE → fix the code · at most 3 rounds",
+    pBoard: "the plan lives on the blackboard (&lt;run&gt;.plan); a gate's feedback is passed into the next round",
     l1: "Conversations", l2: "Transcript", l3: "Steps", l4: "Result + receipts", l5: "Crew", l6: "Composer",
   },
 } satisfies Record<Lang, Record<string, string>>;
@@ -164,8 +164,8 @@ function doc(lang: Lang): string {
   const vi = lang === "vi";
   const sec = (id: string, title: string, body: string) => `<section class="gsec" id="g-${id}-${lang}"><h2>${title}</h2>${body}</section>`;
   const toc: Array<[string, string]> = vi
-    ? [["how", "Cách ekip hoạt động"], ["folders", "Làm việc theo folder"], ["life", "Vòng đời một việc"], ["handoff", "Khi agent giao việc cho nhau"], ["crew", "Ê-kíp của bạn"], ["pipeline", "Quy trình mẫu"], ["screens", "Dùng các trang"], ["cost", "Chi phí và token"], ["start", "Bắt đầu dự án mới"], ["trouble", "Khi có gì đó sai"]]
-    : [["how", "How ekip works"], ["folders", "Working by folder"], ["life", "The life of a task"], ["handoff", "When agents hand work to each other"], ["crew", "Your crew"], ["pipeline", "A sample pipeline"], ["screens", "Using the screens"], ["cost", "Cost and tokens"], ["start", "Start a new project"], ["trouble", "When something goes wrong"]];
+    ? [["how", "Cách ekip hoạt động"], ["folders", "Làm việc theo folder"], ["life", "Vòng đời một việc"], ["handoff", "Khi agent giao việc cho nhau"], ["crew", "Ê-kíp của bạn"], ["pipeline", "Quy trình"], ["screens", "Dùng các trang"], ["cost", "Chi phí và token"], ["start", "Bắt đầu dự án mới"], ["trouble", "Khi có gì đó sai"]]
+    : [["how", "How ekip works"], ["folders", "Working by folder"], ["life", "The life of a task"], ["handoff", "When agents hand work to each other"], ["crew", "Your crew"], ["pipeline", "Flows"], ["screens", "Using the screens"], ["cost", "Cost and tokens"], ["start", "Start a new project"], ["trouble", "When something goes wrong"]];
 
   const body = vi
     ? [
@@ -205,10 +205,15 @@ function doc(lang: Lang): string {
         sec("crew", "Ê-kíp của bạn", `
 <p>Đây là các thành viên đang có trong dự án này. Mỗi người có <b>@id</b> để agent gọi nhau, <b>tên</b> để bạn đọc, và <b>việc</b> để cả ê-kíp biết nên nhờ ai. Sửa trong <a href="/settings" data-go="/settings">Cài đặt</a>.</p>
 ${crewSlot()}`),
-        sec("pipeline", "Quy trình mẫu", `
-<p>Với việc lớn, gửi cho Điều phối kèm lời dặn chạy theo quy trình. Mỗi chặng do một vai làm, có nắp vòng lặp để không đốt quota.</p>
-<figure>${pipeline(t, lang)}<figcaption>Kế hoạch phải qua phản biện (≥ 90 điểm) mới được code; code phải qua review mới đến kiểm định cuối. Mỗi vòng sửa tối đa 3 lần. Mọi bàn giao nằm trên bảng đen.</figcaption></figure>
-<p class="muted">Chi phí ước tính: thuận lợi khoảng 6 lượt chạy (2 lượt Opus), chạm hết nắp vòng lặp khoảng 12 lượt. Mẫu đầy đủ ở <code>examples/feature-pipeline.md</code>.</p>`),
+        sec("pipeline", "Quy trình", `
+<p>Quy trình là chuỗi chặng cố định mà <b>hub tự chạy</b>: mỗi chặng giao cho một vai, kết quả được chấm qua <b>cổng</b>, chưa đạt thì hub tự quay lại chặng trước kèm nhận xét, và dừng hẳn khi hết số vòng. Luật nằm trong code của hub, không phụ thuộc agent có nhớ lời dặn hay không.</p>
+<figure>${pipeline(t, lang)}<figcaption>Quy trình "Tính năng lớn": kế hoạch phải qua phản biện (≥ 90 điểm) mới được code; code phải qua review (mở đầu bằng APPROVE hoặc DUYỆT) mới đến kiểm định cuối (SHIP). Mỗi vòng sửa tối đa 3 lần.</figcaption></figure>
+<ul class="facts">
+<li><b>Chạy thế nào:</b> ở hội thoại mới, bấm vào người nhận (hoặc gõ @) rồi chọn trong mục <b>Quy trình</b>; hoặc <code>ekip flow code-review "mô tả việc"</code> ở terminal.</li>
+<li><b>Có sẵn:</b> "Code rồi review" (Lập trình · Claude → Review, 2 vòng) và "Tính năng lớn" (cần đủ các vai Lên kế hoạch, Phản biện, Kiểm định). Quy trình thiếu vai sẽ bị làm mờ kèm lý do.</li>
+<li><b>Tự viết:</b> thêm file JSON vào <code>.ekip/flows/</code> của dự án (hoặc <code>~/.ekip/flows/</code> cho cả máy). Mỗi chặng có <code>agent</code>, <code>prompt</code> (dùng được <code>{{input}}</code>, <code>{{feedback}}</code>, <code>{{prev.&lt;chặng&gt;}}</code>), tuỳ chọn <code>gate</code> và <code>onFail</code>.</li>
+<li><b>Khi nào dùng:</b> việc nhỏ gửi thẳng Lập trình · Claude là rẻ nhất (đo thực tế: 1 lượt chạy). Dùng quy trình khi cần review bắt buộc; Điều phối hợp với việc mơ hồ cần chia nhỏ.</li>
+</ul>`),
         sec("screens", "Dùng các trang", `
 <figure>${screenMap(t)}<figcaption>Trang Trò chuyện, các số khớp với danh sách bên dưới.</figcaption></figure>
 <ol class="legend">
@@ -290,10 +295,15 @@ ${crewSlot()}`),
         sec("crew", "Your crew", `
 <p>These are the members of this project. Each has an <b>@id</b> agents use to address it, a <b>name</b> for you to read, and a <b>job</b> that tells the crew what to ask it for. Edit them in <a href="/settings" data-go="/settings">Settings</a>.</p>
 ${crewSlot()}`),
-        sec("pipeline", "A sample pipeline", `
-<p>For bigger work, send it to the conductor and ask it to follow the pipeline. Each stage is one role, and every loop has a cap so quota isn't burned.</p>
-<figure>${pipeline(t, lang)}<figcaption>A plan must pass the critic (≥ 90) before any code; code must pass review before the final audit. Each loop runs at most 3 times. Every hand-off lives on the blackboard.</figcaption></figure>
-<p class="muted">Budget: about 6 runs when things go well (2 on Opus), about 12 if every loop hits its cap. The full template is <code>examples/feature-pipeline.md</code>.</p>`),
+        sec("pipeline", "Flows", `
+<p>A flow is a fixed chain of stages that <b>the hub runs itself</b>: each stage goes to one role, its result is checked at a <b>gate</b>, a miss sends the work back a stage with the feedback, and the run stops for good when the rounds run out. The rules live in the hub's code, not in whether an agent remembers its instructions.</p>
+<figure>${pipeline(t, lang)}<figcaption>The "Big feature" flow: a plan must pass the critic (≥ 90) before any code; code must pass review (starting with APPROVE) before the final audit (SHIP). Each loop runs at most 3 times.</figcaption></figure>
+<ul class="facts">
+<li><b>Run one:</b> in a new conversation, click the recipient (or type @) and pick from <b>Flows</b>; or run <code>ekip flow code-review "what to build"</code> in a terminal.</li>
+<li><b>Built in:</b> "Code, then review" (Claude coder → reviewer, 2 rounds) and "Big feature" (needs planner, critic and auditor roles). A flow missing a role is greyed out with the reason.</li>
+<li><b>Write your own:</b> drop a JSON file in the project's <code>.ekip/flows/</code> (or <code>~/.ekip/flows/</code> for the whole machine). Each stage has an <code>agent</code>, a <code>prompt</code> (with <code>{{input}}</code>, <code>{{feedback}}</code>, <code>{{prev.&lt;stage&gt;}}</code>), and optionally a <code>gate</code> and <code>onFail</code>.</li>
+<li><b>When to use one:</b> a small task sent straight to the Claude coder is cheapest (measured: one run). Use a flow when review must happen; use the conductor for vague work that needs splitting up.</li>
+</ul>`),
         sec("screens", "Using the screens", `
 <figure>${screenMap(t)}<figcaption>The Chat screen; numbers match the list below.</figcaption></figure>
 <ol class="legend">

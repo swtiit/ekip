@@ -55,7 +55,7 @@ async function cmdRun(follow: boolean): Promise<void> {
     prompt,
     title: rest.join(" ") || undefined,
   });
-  console.log(`${C.dim}task${C.reset} ${task.id}  ${C.dim}→${C.reset} ${agent}  ${C.dim}· dashboard: ${base}/ui${C.reset}\n`);
+  console.log(`${C.dim}task${C.reset} ${task.id}  ${C.dim}→${C.reset} ${agent}  ${C.dim}· chat: ${base}/chat/${task.id}${C.reset}\n`);
   if (!follow) return;
   process.exit(await followTask(base, task.id));
 }
@@ -93,6 +93,40 @@ async function cmdCancel(): Promise<void> {
     return;
   }
   console.log(`${C.magenta}cancelled${C.reset} ${cancelled.length} task(s): ${cancelled.map((id) => id.slice(0, 8)).join(", ")}`);
+}
+
+/** `flow` lists flows; `flow <name> <input|@file>` runs one and follows it. */
+async function cmdFlow(): Promise<void> {
+  const [name, inputArg] = process.argv.slice(3);
+  const base = apiBase();
+  const res = await fetch(`${base}/api/flows`, { headers: authHeaders() }).catch(() => undefined);
+  if (!res) throw new HubDownError(`Cannot reach the hub at ${base} — is \`ekip serve\` running in this project?`);
+  const { flows } = (await res.json()) as { flows: Array<{ name: string; label: string; description: string; steps: Array<{ agent: string; title: string }>; problems: string[] }> };
+  if (!name) {
+    for (const f of flows) {
+      console.log(`${C.bold}${f.name.padEnd(14)}${C.reset} ${f.label}`);
+      console.log(`${" ".repeat(15)}${C.dim}${f.steps.map((s) => `${s.title} (${s.agent})`).join(" → ")}${C.reset}`);
+      if (f.problems.length) console.log(`${" ".repeat(15)}${C.yellow}can't run here: ${f.problems.join("; ")}${C.reset}`);
+    }
+    console.log(`\n${C.dim}Run one: ekip flow <name> "<what to build>"  (or @file)${C.reset}`);
+    return;
+  }
+  if (!inputArg) {
+    console.error('Usage: ekip flow <name> "<what to build>"');
+    process.exit(1);
+  }
+  const started = await fetch(`${base}/api/flows/run`, {
+    method: "POST",
+    headers: authHeaders(true),
+    body: JSON.stringify({ flow: name, input: readPromptArg(inputArg, cwd), cwd }),
+  });
+  const data = (await started.json()) as { task?: { id: string }; error?: string };
+  if (!data.task) {
+    console.error(`${C.red}${data.error ?? "could not start the flow"}${C.reset}`);
+    process.exit(1);
+  }
+  console.log(`${C.dim}flow${C.reset} ${name}  ${C.dim}task ${data.task.id} · ${base}/chat/${data.task.id}${C.reset}\n`);
+  process.exit(await followTask(base, data.task.id));
 }
 
 async function cmdAgents(): Promise<void> {
@@ -456,7 +490,7 @@ async function cmdWatch(): Promise<void> {
 
   const tick = async (): Promise<void> => {
     let state: WatchState = { tasks: [], context: [] };
-    let source = `hub · ${apiBase}/ui`;
+    let source = `hub · ${apiBase}/chat`;
     try {
       const res = await fetch(`${apiBase}/api/state`, { signal: AbortSignal.timeout(900), headers: authHeaders() });
       state = (await res.json()) as WatchState;
@@ -535,6 +569,9 @@ try {
     case "cancel":
       await cmdCancel();
       break;
+    case "flow":
+      await cmdFlow();
+      break;
     case "config":
       await cmdConfig();
       break;
@@ -575,7 +612,7 @@ try {
           "Project:",
           "  init                        scaffold config (+ .mcp.json) from your machine defaults",
           "  init --global               save THIS project's agents + roles as machine defaults",
-          "  serve                       start the hub (MCP + dashboard at /ui)",
+          "  serve                       start the hub (MCP + web app at /chat)",
           "  status                      show config and task/context counts",
           "",
           "Work:",
@@ -583,6 +620,7 @@ try {
           "  delegate <agent> <prompt>   delegate without following",
           "  follow <task-id>            attach to a running task (and children)",
           "  cancel <task-id> [reason]   stop a task and everything delegated from it",
+          "  flow [name] [input|@file]   list flows, or run one (the hub runs every stage and gate)",
           "",
           "Configure:",
           "  config                      interactive picker: agents → model → effort",

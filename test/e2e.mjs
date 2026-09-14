@@ -67,6 +67,8 @@ const config = {
     { name: "echoer", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'printf "%s" "$0" > prompt.txt'],
       label: "Người nhắc lại", description: "Ghi lại đúng prompt nó nhận được." },
     { name: "noisy", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'echo "Error: invalid --model \"X\": model X is not recognized" >&2; exit 1'] },
+    { name: "grader", adapter: "command", spawnable: true, command: process.execPath, args: [MOCK, "{taskId}", "--script=SCORE: 40|SCORE: 95"] },
+    { name: "nayer", adapter: "command", spawnable: true, command: process.execPath, args: [MOCK, "{taskId}", "--script=REVISE: not yet"] },
     { name: "linger", adapter: "command", spawnable: true, command: process.execPath, args: [join(REPO, "test", "mock-linger.mjs"), "{taskId}"], maxConcurrent: 1 },
   ],
   maxDepth: 3,
@@ -162,7 +164,7 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 13 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 15 && state0.hubUrl.endsWith("/mcp"));
   t("state exposes workers", Array.isArray(state0.workers?.running) && Array.isArray(state0.workers?.queued));
   t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
 
@@ -786,6 +788,71 @@ try {
   t("role file falls back to global", rolePath && readFileSync(rolePath, "utf8") === "GLOBAL ROLE");
   delete process.env.EKIP_HOME;
   t("project agents still win over global", (await api("/api/state")).agents.some((a) => a.name === "mock"));
+
+  // ---- flows: the hub runs the pipeline and enforces the gates ----
+  mkdirSync(join(TMP, ".ekip", "flows"), { recursive: true });
+  writeFileSync(join(TMP, ".ekip", "flows", "graded.json"), JSON.stringify({
+    name: "graded", label: "Graded", steps: [
+      { id: "draft", agent: "mock", title: "Draft", prompt: "draft {{input}} round {{round}} fb={{feedback}}" },
+      { id: "grade", agent: "grader", title: "Grade", prompt: "grade {{prev.draft}}", gate: { pattern: "SCORE:\\s*(\\d+)", min: 90 }, onFail: { goto: "draft", maxRounds: 3 } },
+    ],
+  }));
+  writeFileSync(join(TMP, ".ekip", "flows", "stubborn.json"), JSON.stringify({
+    name: "stubborn", steps: [
+      { id: "make", agent: "mock", prompt: "make {{input}}" },
+      { id: "check", agent: "nayer", prompt: "check", gate: { startsWith: ["APPROVE"] }, onFail: { goto: "make", maxRounds: 2 } },
+    ],
+  }));
+  writeFileSync(join(TMP, ".ekip", "flows", "broken.json"), JSON.stringify({
+    name: "broken", steps: [{ id: "a", agent: "nobody-here", prompt: "x", onFail: { goto: "zzz", maxRounds: 1 } }],
+  }));
+  const flowList = (await api("/api/flows")).flows;
+  const graded = flowList.find((f) => f.name === "graded");
+  t("flows: project flow listed with steps", graded && graded.source === "project" && graded.steps.length === 2 && graded.problems.length === 0);
+  t("flows: built-in flows listed", flowList.some((f) => f.name === "feature" && f.source === "built-in"));
+  const broken = flowList.find((f) => f.name === "broken");
+  t("flows: problems reported (agent + goto)", broken && broken.problems.length === 2);
+  t("flows: unknown flow 404", (await post("/api/flows/run", { flow: "nope", input: "x" })).status === 404);
+  t("flows: missing input 400", (await post("/api/flows/run", { flow: "graded", input: " " })).status === 400);
+  t("flows: broken flow refused", (await post("/api/flows/run", { flow: "broken", input: "x" })).status === 400);
+
+  const fr = await (await post("/api/flows/run", { flow: "graded", input: "a slug helper" })).json();
+  t("flows: run returns root task", fr.task && fr.task.to === "flow:graded" && fr.task.status === "claimed");
+  const flowDone = await until(async () => {
+    const x = await taskById(fr.task.id);
+    return x && (x.status === "done" || x.status === "failed") ? x : undefined;
+  }, 20000);
+  t("flows: gate retry then pass → done", flowDone?.status === "done", flowDone?.result);
+  const fState = await api("/api/state");
+  const stages = fState.tasks.filter((x) => x.parentId === fr.task.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  t("flows: stages ran draft, grade, draft, grade", stages.map((x) => x.to).join(",") === "mock,grader,mock,grader", stages.map((x) => x.to).join(","));
+  t("flows: second draft carries the feedback", stages[2] && stages[2].prompt.includes("round 2") && stages[2].prompt.includes("SCORE: 40"));
+  t("flows: stage prompt gets previous result", stages[1] && stages[1].prompt.includes("mock done: Draft"));
+  const fThread = await api(`/api/thread/${fr.task.id}`);
+  const gates = (fThread.messages || []).filter((m) => m.meta && m.meta.gate).map((m) => m.meta.gate);
+  t("flows: gate notices retry then pass", gates.join(",") === "retry,pass", gates.join(","));
+  t("flows: result log shows the loop", /↺ Grade/.test(flowDone?.result ?? "") && /✓ Grade/.test(flowDone?.result ?? ""));
+
+  const fs2 = await (await post("/api/flows/run", { flow: "stubborn", input: "thing" })).json();
+  const stuck = await until(async () => {
+    const x = await taskById(fs2.task.id);
+    return x && (x.status === "done" || x.status === "failed") ? x : undefined;
+  }, 20000);
+  t("flows: stops when rounds run out", stuck?.status === "failed" && /stopped at "check"/.test(stuck?.result ?? ""), stuck?.result);
+  const stuckStages = (await api("/api/state")).tasks.filter((x) => x.parentId === fs2.task.id);
+  t("flows: loop capped at maxRounds", stuckStages.filter((x) => x.to === "mock").length === 2 && stuckStages.length === 4, String(stuckStages.length));
+
+  writeFileSync(join(TMP, ".ekip", "flows", "slow.json"), JSON.stringify({
+    name: "slow", steps: [{ id: "wait", agent: "sleeper", prompt: "wait" }, { id: "after", agent: "mock", prompt: "after" }],
+  }));
+  const fc = await (await post("/api/flows/run", { flow: "slow", input: "cancel me" })).json();
+  await until(async () => (await api("/api/state")).tasks.find((x) => x.parentId === fc.task.id)?.pid);
+  await post("/api/cancel", { task_id: fc.task.id, reason: "enough" });
+  await sleep(1200);
+  const fcStages = (await api("/api/state")).tasks.filter((x) => x.parentId === fc.task.id);
+  t("flows: cancel stops the flow", (await taskById(fc.task.id))?.status === "cancelled" && fcStages.length <= 1, `${(await taskById(fc.task.id))?.status} ${fcStages.map((x) => x.to + ":" + x.status).join(",")}`);
+
+  t("cli flow lists flows", /graded/.test(strip(await cli("flow"))) && /nobody-here/.test(strip(await cli("flow"))));
 } finally {
   await hub.close();
 }

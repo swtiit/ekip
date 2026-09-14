@@ -23,6 +23,7 @@ import {
 import { Dispatcher } from "./dispatcher.js";
 import { buildHub } from "./hub.js";
 import { removeSpawnLog } from "./logs.js";
+import { FlowRunner, loadFlows, validateFlow } from "./flows.js";
 import { assertSafeBinding, checkAccess, hubToken, presentedToken, tokenMatches } from "./access.js";
 import { isTerminal } from "../protocol/index.js";
 import { catalogFor } from "./models.js";
@@ -93,6 +94,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   const store = new Store(stateFilePath(config));
   const dispatcher = new Dispatcher(config, store);
   const watchdog = new Watchdog(config, store, (taskId) => dispatcher.kill(taskId));
+  const flowRunner = new FlowRunner(config, store, dispatcher);
   watchdog.start();
 
   // A hub restart loses process handles: whatever was running is unknowable
@@ -406,6 +408,49 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     sendJson(res, 200, { deleted: removed.length, thread: root });
   }
 
+  function handleFlows(res: ServerResponse): void {
+    sendJson(res, 200, {
+      flows: loadFlows(config).map((f) => ({
+        name: f.name,
+        label: f.label ?? f.name,
+        description: f.description ?? "",
+        source: f.source,
+        steps: f.steps.map((s) => ({ id: s.id, agent: s.agent, title: s.title ?? s.id, gate: s.gate ?? null, onFail: s.onFail ?? null })),
+        problems: validateFlow(f, config),
+      })),
+    });
+  }
+
+  async function handleRunFlow(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const { flow: name, input, cwd, from } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    const flow = loadFlows(config).find((f) => f.name === name);
+    if (!flow) {
+      sendJson(res, 404, { error: `unknown flow "${String(name)}"` });
+      return;
+    }
+    if (typeof input !== "string" || !input.trim()) {
+      sendJson(res, 400, { error: "`input` is required — what should the flow build?" });
+      return;
+    }
+    const problems = validateFlow(flow, config);
+    if (problems.length) {
+      sendJson(res, 400, { error: `flow "${flow.name}" can't run here: ${problems.join("; ")}`, problems });
+      return;
+    }
+    let folder: string | undefined;
+    if (typeof cwd === "string" && cwd.trim()) {
+      const checked = checkFolder(cwd);
+      if (typeof checked !== "string") {
+        sendJson(res, 400, { error: checked.error });
+        return;
+      }
+      folder = checked === config.projectRoot ? undefined : checked;
+      store.touchFolder(checked);
+    }
+    const task = flowRunner.start(flow, input, { cwd: folder, from: typeof from === "string" && from ? from : "human" });
+    sendJson(res, 200, { task });
+  }
+
   /** An absolute, existing directory — or the reason it is not one. */
   function checkFolder(raw: string): string | { error: string } {
     const expanded = raw.trim().replace(/^~(?=$|\/)/, homedir());
@@ -645,6 +690,10 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return handleContext(req, res);
         case "POST /api/cancel":
           return handleCancel(req, res);
+        case "GET /api/flows":
+          return handleFlows(res);
+        case "POST /api/flows/run":
+          return handleRunFlow(req, res);
         case "POST /api/threads/delete":
           return handleDeleteThread(req, res);
         case "GET /api/folders":

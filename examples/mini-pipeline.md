@@ -1,5 +1,10 @@
 # Mini pipeline: plan → code → review (conductor pattern)
 
+> **Prefer the hub-run version.** [`flows/code-review.json`](flows/code-review.json)
+> runs a code → review loop inside the hub, which checks every gate and caps every
+> loop itself (`ekip flow code-review "<task>"`). Use this conductor script
+> when you want an agent to drive and adapt the pipeline.
+
 Field-tested 3-stage pipeline run entirely over the bridge: a `conductor`
 agent (Claude) drives `planner` (Claude) → `agy` (Antigravity) → `reviewer`
 (Claude) via `bridge_delegate` + `bridge_wait`, with all hand-off state on the

@@ -451,6 +451,15 @@ main{flex:1;min-height:0;display:flex}
 .bb-scope{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--muted);max-width:140px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .kv .kf{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--faint);margin-top:2px}
 .bb-form-folder{font-size:11.5px;color:var(--muted)}
+.av.flow{background:var(--ink);color:var(--surface)}
+.av.flow .ico{stroke:var(--surface)}
+.popover .opt.off{opacity:.5;cursor:not-allowed}
+.notice.gate.pass{background:var(--ok-soft);color:var(--ok)}
+.notice.gate.retry{background:var(--warn-soft);color:var(--warn)}
+.notice.gate.stop{background:var(--bad-soft);color:var(--bad)}
+.flowmap{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:4px 0 12px;padding:8px 10px;border:1px dashed var(--line);border-radius:10px;font-size:12px;color:var(--ink-2)}
+.flowmap .fs{display:inline-flex;align-items:center;gap:5px}
+.flowmap > .ico{color:var(--faint)}
 .notice.guard{background:var(--warn-soft);color:var(--warn)}
 .notice.guard code{font-family:var(--mono);font-size:11.5px;background:none;padding:0;overflow-wrap:anywhere}
 .tiles{grid-template-columns:repeat(3,1fr)!important}

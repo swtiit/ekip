@@ -1,5 +1,10 @@
 # Feature pipeline: plan → debate → code → review → audit
 
+> **Prefer the hub-run version.** [`flows/feature.json`](flows/feature.json)
+> runs the same stages inside the hub, which checks every gate and caps every
+> loop itself (`ekip flow feature "<requirement>"`). Use this conductor script
+> when you want an agent to drive and adapt the pipeline.
+
 The full 7-stage flow, generalized from the field-tested
 [mini-pipeline](mini-pipeline.md). One conductor drives everything
 hub-and-spoke (delegation depth stays ≤ 2), all hand-off state lives on the

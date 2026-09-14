@@ -23,6 +23,9 @@ function buildPalette(q){
   items.push({ g:T('actions'), icon:'board', label:T('newTask'), run:function(){ go('/board'); setTimeout(openModal, 60); } });
   items.push({ g:T('actions'), icon:'moon', label:T('theme'), run:toggleTheme });
   items.push({ g:T('actions'), icon:'panel', label:T('toggleCrew'), run:function(){ if (S.view !== 'chat') go('/chat'); toggleCrew(); } });
+  (S.flows || []).filter(function(f){ return !(f.problems && f.problems.length); }).forEach(function(f){
+    items.push({ g:T('flows'), avatar:'flow:' + f.name, label:f.label, sub:f.steps.map(function(x){ return x.title; }).join(' → '), run:function(){ go('/chat'); setTarget('flow:' + f.name); setTimeout(function(){ $('text').focus(); }, 40); } });
+  });
   (S.state ? S.state.agents : []).forEach(function(a){
     items.push({ g:T('msgTo'), avatar:a.name, label:dn(a.name), sub:'@' + a.name + (a.description ? ' · ' + a.description : ''), run:function(){ go('/chat'); setTarget(a.name); setTimeout(function(){ $('text').focus(); }, 40); } });
   });

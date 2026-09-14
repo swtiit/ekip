@@ -67,9 +67,50 @@ depth exceeded, adapter failed to launch — fails the task immediately with
 
 ## Concurrency
 
-`maxConcurrent` caps simultaneously running workers, hub-wide (default 4)
-and optionally per agent. A delegation past the cap is accepted but
+`maxConcurrent` caps simultaneously running workers per folder (default 4)
+and optionally per agent within a folder; `maxConcurrentTotal` caps them
+across all folders (default 8). A delegation past a cap is accepted but
 **queued** (`dispatch.queued: true`); it launches, FIFO, when a slot frees.
+
+## Folders
+
+A task works in a folder (`cwd`, inherited by everything delegated from it;
+the project root when unset). Each folder has its own blackboard. With
+`folderGuard` on (the default) every run is told its folder, and adapters that
+support it enforce the boundary — Claude runs get a PreToolUse hook that
+blocks file, search and shell access outside the folder, and the hub records
+each block as a `system` message with `meta.guard`.
+
+## Flows
+
+A flow is an ordered list of steps the hub runs itself. Starting one
+(`POST /api/flows/run {flow, input, cwd?}`) creates a root task addressed to
+`flow:<name>`, marked `claimed` while it runs. Each step becomes a child task
+for the step's agent, dispatched like any delegation; the hub waits for it,
+then checks its `gate` against the result:
+
+- `{ "pattern": "<regex with one capture group>", "min": N }` — passes when
+  the captured number is ≥ N;
+- `{ "startsWith": ["APPROVE", …] }` — passes when the result opens with one
+  of the words (case-insensitive).
+
+A miss with `onFail: { goto, maxRounds }` runs from step `goto` again, with
+the result available to prompts as `{{feedback}}`, until `goto` has run
+`maxRounds` times; after that — or on a miss with no `onFail`, or a step that
+ends `failed`/`cancelled` — the root task fails with the reason. When every
+step passes the root is `done`, and its result lists each step's verdict
+followed by the last step's result. Gate verdicts are `system` messages on
+the root with `meta.gate` = `pass` | `retry` | `stop`. Cancelling the root
+cancels the running step and ends the flow.
+
+## Access
+
+State-changing requests to `/api/*` and `/mcp` must carry
+`Content-Type: application/json` and, if an `Origin` is sent, match the Host.
+The Host must be one of the hub's addresses. When a token is configured
+(`EKIP_TOKEN` or `token`), every API and MCP request must present it as
+`Authorization: Bearer <token>`, `x-ekip-token`, or the `ekip_token` cookie;
+otherwise the hub answers `401`.
 
 ## Cancellation
 
@@ -114,7 +155,7 @@ duration, turns) from the worker's result event.
 ## Artifacts
 
 `bridge_post_result` accepts a list of artifacts: `{ kind, label?, value }`.
-Standard kinds (consumers — dashboard, CLI — render these; other kinds pass
+Standard kinds (consumers — the web app, CLI — render these; other kinds pass
 through untouched):
 
 | kind | value |

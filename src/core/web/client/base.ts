@@ -75,6 +75,7 @@ function icon(name, cls){ return '<svg class="ico' + (cls ? ' ' + cls : '') + '"
 /* ================= language ================= */
 var DICT = {
   en: {
+    flows:'Flows', flowCantRun:'can’t run here', gatePass:'Gate passed: {s} — {d}', gateRetry:'Not yet: {s} — {d}. Back to {g} (round {r}/{n})', gateStop:'Stopped at {s} — {d}. No rounds left.',
     tokenTitle:'This hub needs a token', tokenBody:'Enter the token set as EKIP_TOKEN (or "token" in ekip.config.json) where the hub runs. This browser remembers it.', signIn:'Sign in', tokenWrong:'That token is not right',
     billing:'How Claude is billed', runTime:'run time today', runTimeTitle:'Total time agents spent running today.', turnsL:'Turns',
     billSub:'Claude {plan} subscription — not billed per token', billUnknown:'Could not tell how Claude is signed in', billSubS:'Runs use your plan’s usage limits. Heavier models (Opus) use them up faster than lighter ones (Sonnet, Haiku).',
@@ -124,6 +125,7 @@ var DICT = {
     t_write:'wrote {f}', t_edit:'edited {f}', t_read:'read {f}', t_run:'ran {c}', t_search:'searched {q}', t_tools:'loaded its tools', t_todo:'updated its checklist', blackboardW:'the blackboard'
   },
   vi: {
+    flows:'Quy trình', flowCantRun:'không chạy được ở đây', gatePass:'Qua cổng: {s} — {d}', gateRetry:'Chưa đạt: {s} — {d}. Quay lại {g} (vòng {r}/{n})', gateStop:'Dừng ở {s} — {d}. Đã hết số vòng.',
     tokenTitle:'Hub này cần token', tokenBody:'Nhập token đã đặt ở EKIP_TOKEN (hoặc "token" trong ekip.config.json) nơi chạy hub. Trình duyệt sẽ nhớ.', signIn:'Đăng nhập', tokenWrong:'Token không đúng',
     billing:'Cách Claude tính phí', runTime:'thời gian chạy hôm nay', runTimeTitle:'Tổng thời gian các agent chạy trong hôm nay.', turnsL:'Số lượt model',
     billSub:'Gói Claude {plan} — không bị tính tiền theo token', billUnknown:'Không xác định được Claude đăng nhập bằng gì', billSubS:'Lượt chạy trừ vào hạn mức của gói. Model nặng (Opus) dùng hết hạn mức nhanh hơn model nhẹ (Sonnet, Haiku).',
@@ -250,8 +252,10 @@ function initials(name){
   return String(name).slice(0, 2);
 }
 function fold(s){ return String(s || '').normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase(); }
+function flowByName(name){ return (S.flows || []).filter(function(f){ return 'flow:' + f.name === name; })[0]; }
 function dn(name){
   if (name === 'human') return LANG === 'vi' ? 'bạn' : 'you';
+  if (String(name).indexOf('flow:') === 0) { var f = flowByName(name); return (f && f.label) || String(name).slice(5); }
   var a = agentByName(name);
   return (a && a.label) || name;
 }
@@ -259,6 +263,7 @@ var ADAPTER_MARK = { claude:'C', antigravity:'G', command:'›' };
 function avatar(name, opts){
   opts = opts || {};
   if (name === 'human' || name === 'you') return '<span class="av you' + (opts.size ? ' ' + opts.size : '') + '">' + (LANG === 'vi' ? 'B' : 'Y') + '</span>';
+  if (String(name).indexOf('flow:') === 0) return '<span class="av flow' + (opts.size ? ' ' + opts.size : '') + (opts.live ? ' live' : '') + '" title="' + esc(dn(name)) + '">' + icon('handoff', opts.size === 'lg' ? '' : 'sm') + '</span>';
   var a = agentByName(name);
   var mark = a ? (ADAPTER_MARK[a.adapter] || '') : '';
   return '<span class="av' + (opts.size ? ' ' + opts.size : '') + (opts.live ? ' live' : '') + '" style="--h:' + hashHue(name) + '" title="' + esc(dn(name) + (dn(name) !== name ? ' · @' + name : '')) + '">' +
@@ -304,6 +309,7 @@ function refresh(){
   busy = true;
   var jobs = [getJSON('/api/state').then(function(s){ if (s) S.state = s; })];
   if (S.view === 'chat' || S.view === 'board') jobs.push(getJSON('/api/folders').then(function(d){ if (d) { S.folders = d.folders; S.home = d.home; } }));
+  if (S.view === 'chat' && !S.flows) { S.flows = []; getJSON('/api/flows').then(function(d){ if (d) { S.flows = d.flows; S.sig = {}; render(); } }); }
   if (S.view === 'chat') {
     jobs.push(getJSON('/api/threads').then(function(d){ if (d) S.threads = d.threads; }));
     if (S.current) {

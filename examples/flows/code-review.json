@@ -1,0 +1,41 @@
+{
+  "name": "code-review",
+  "label": {
+    "en": "Code, then review",
+    "vi": "Code rồi review"
+  },
+  "description": {
+    "en": "The Claude coder builds and runs the tests → the reviewer checks; if it isn't approved, back to the coder to fix exactly the findings, up to 2 rounds. For changes that matter but need no plan.",
+    "vi": "Lập trình · Claude làm và tự chạy test → Review kiểm lại; chưa đạt thì quay lại sửa đúng các lỗi được nêu, tối đa 2 vòng. Dùng cho thay đổi quan trọng không cần lên kế hoạch."
+  },
+  "steps": [
+    {
+      "id": "code",
+      "agent": "claude-coder",
+      "title": {
+        "en": "Code",
+        "vi": "Code"
+      },
+      "prompt": "{{input}}\n\nVerify your work by running the relevant tests or code, and report the files you changed and the output.\n\nReview findings to fix (empty on the first round; fix ONLY these):\n{{feedback}}"
+    },
+    {
+      "id": "review",
+      "agent": "reviewer",
+      "title": {
+        "en": "Review",
+        "vi": "Review"
+      },
+      "prompt": "Review the changes just made for this request:\n{{input}}\n\nImplementation report:\n{{prev.code}}\n\nRead the changed files and run the tests. Your bridge_post_result MUST start with APPROVE or REVISE (DUYỆT or CẦN SỬA also accepted); for REVISE list file:line — problem — fix.",
+      "gate": {
+        "startsWith": [
+          "APPROVE",
+          "DUYỆT"
+        ]
+      },
+      "onFail": {
+        "goto": "code",
+        "maxRounds": 2
+      }
+    }
+  ]
+}

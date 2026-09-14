@@ -55,6 +55,18 @@ if (!payload.task) {
   process.exit(0);
 }
 console.log("claimed", payload.task.id);
+// Optional `--script=a|b|c`: results for successive runs (the last repeats),
+// counted in a file next to the run — lets tests drive flow gates.
+let scripted;
+const script = process.argv.find((a) => a.startsWith("--script="));
+if (script) {
+  const { existsSync, readFileSync, writeFileSync } = await import("node:fs");
+  const counter = `.mock-count-${agent}`;
+  const n = existsSync(counter) ? Number(readFileSync(counter, "utf8")) : 0;
+  writeFileSync(counter, String(n + 1));
+  const lines = script.slice("--script=".length).split("|");
+  scripted = lines[Math.min(n, lines.length - 1)];
+}
 await rpc(
   "tools/call",
   {
@@ -62,7 +74,7 @@ await rpc(
     arguments: {
       task_id: payload.task.id,
       status: "done",
-      result: `mock done: ${payload.task.title}`,
+      result: scripted ?? `mock done: ${payload.task.title}`,
       artifacts: [
         { kind: "note", label: "who", value: agent },
         { kind: "log", label: "run", value: "claimed and posted over raw MCP" },

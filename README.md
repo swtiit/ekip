@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-183_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-219_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -31,14 +31,16 @@ connect them are one-way ("use agent B as a tool inside agent A") or heavy
 
 - **Symmetric peers.** No agent is the boss. Everything flows through one
   hub, so either side can delegate to the other — including you, from the
-  dashboard or CLI.
+  web app or CLI.
 - **A shared blackboard.** Headless runs are one-shot; context survives on a
   key/value blackboard all agents read and write (`plan.v1`,
   `review.round1`, …).
 - **Only sanctioned surfaces.** MCP servers + each vendor's official
   headless CLI (`claude -p`, `agy -p`). No scraping, no automation around
   rate limits.
-- **npm-light.** One package, three dependencies, a single-file dashboard,
+- **Rules the hub enforces.** Flows run stage by stage inside the hub, with
+  gates and capped loops — not instructions an agent may forget.
+- **npm-light.** One package, three dependencies, a web app with no bundler,
   no build steps at runtime.
 
 ```mermaid
@@ -50,7 +52,7 @@ flowchart LR
     end
     CC["Claude Code"] <-- MCP --> hub
     AG["Antigravity"] <-- MCP --> hub
-    YOU(["you · dashboard /ui · CLI"]) --> hub
+    YOU(["you · web app · CLI"]) --> hub
     D -. "spawns headless<br/>claude -p / agy -p / any CLI" .-> W["one-shot worker runs"]
     W -- MCP --> hub
 ```
@@ -62,7 +64,7 @@ npm install -g @swtiit/ekip      # the installed command is `ekip`
 
 cd /any/project
 ekip init      # writes config + prints the MCP snippets to paste
-ekip serve     # hub + dashboard, one terminal tab
+ekip serve     # hub + web app at http://127.0.0.1:4319/chat
 ```
 
 `init` prints exactly what to paste into each agent (Claude Code's
@@ -70,11 +72,12 @@ ekip serve     # hub + dashboard, one terminal tab
 headless runs need). Then, from any connected agent or your own terminal:
 
 ```bash
-ekip run coder "Add input validation to src/api/users.ts"
+ekip run claude-coder "Add input validation to src/api/users.ts"
+ekip flow code-review "Add input validation to src/api/users.ts"   # coder → reviewer, gated
 ```
 
 ```text
-task 54d00e94 → coder · dashboard: http://127.0.0.1:4319/ui
+task 54d00e94 → conductor · chat: http://127.0.0.1:4319/chat/54d00e94…
 
 21:39:00  ● working  conductor  Feature pipeline: slugify
 21:39:57    ✔ done  planner  Plan slugify implementation (51s)
@@ -118,7 +121,8 @@ reporting language, so a crew set to Vietnamese gets a Vietnamese interface.
 | --- | --- |
 | **Chat** `/chat` | Conversations on the left, grouped by the project folder each one works in (pick the folder before you send — recent folders or a built-in folder browser; agents then run inside it and read its `CLAUDE.md`/`AGENTS.md`), a transcript in the middle, the **crew** on the right. The transcript reads like a coding-agent session: your request as a bubble, each agent's words as prose, its tool calls as plain-language steps (open while it works, folded when done, the current step lit), work it **hands to another agent nested under the hand-off**, and a result card with receipts (files, logs) and what the run cost. Type `@` to pick who gets the message. The crew panel shows who is working on what, for how long, with Stop and Message on every member |
 | **Board** `/board` | A kanban by state (queued, working, done, failed and stopped) with per-agent filters and search. Click a card for its request, result, model, tokens, cost, receipts and log. The blackboard sits alongside |
-| **Settings** `/settings` | Reporting language, and each member's model (live lists where the vendor offers one), effort, parallelism and auto-launch — all saved as you change them. Plus the hub's limits and the snippet to connect another agent |
+| **Guide** `/guide` | Diagrams of how the hub works, the life of a task, hand-offs, flows, and how to read cost — with your live crew |
+| **Settings** `/settings` | Reporting language, and each member's name, job, model (live lists where the vendor offers one), effort, parallelism and auto-launch — all saved as you change them. Plus the hub's limits, the folder guard, billing, and the snippet to connect another agent |
 
 An agent that is working lights its tally — the red lamp a camera shows while
 it records — everywhere it appears. `⌘K` jumps to any view, conversation or
@@ -128,23 +132,69 @@ And two more ways in:
 
 | Surface | What you get |
 | --- | --- |
-| **CLI** | `run` (delegate + live-follow the whole task tree), `follow`, `cancel`, `tasks`, `task`, `logs`, `context`, `config`, `watch`, `ui` |
-| **HTTP API** | `GET /api/state`, `GET /api/events` (SSE), `GET /api/threads`, `GET /api/thread/:taskId`, `POST /api/delegate` (with `parent_task_id` to reply into a thread), `POST /api/cancel`, `POST /api/context`, `GET /api/logs/:taskId` |
+| **CLI** | `run` (delegate + live-follow the whole task tree), `delegate`, `follow`, `cancel`, `flow`, `tasks`, `task`, `logs`, `context`, `config`, `agents`, `model`, `watch`, `status`, `ui` |
+| **HTTP API** | `GET /api/state`, `GET /api/events` (SSE), `GET /api/threads`, `GET /api/thread/:taskId`, `POST /api/delegate` (with `parent_task_id` to reply into a thread, or `cwd` to pick the folder), `POST /api/cancel`, `POST /api/threads/delete`, `GET /api/flows`, `POST /api/flows/run`, `POST /api/context`, `GET /api/folders`, `GET /api/logs/:taskId` |
 
-## Multi-agent pipelines
+## Flows: pipelines the hub enforces
 
-The examples ship a field-tested crew and flow:
+A conductor following a written pipeline can skip a gate or loop forever. A
+**flow** moves those rules into the hub: it hands each stage to one role,
+checks the result at a **gate**, sends the work back with the feedback when
+the gate isn't met, and stops for good when the rounds run out.
+
+```json
+{
+  "name": "code-review",
+  "label": { "en": "Code, then review", "vi": "Code rồi review" },
+  "steps": [
+    { "id": "code", "agent": "claude-coder",
+      "prompt": "{{input}}\n\nReview findings to fix (empty on the first round):\n{{feedback}}" },
+    { "id": "review", "agent": "reviewer",
+      "prompt": "Review the changes for: {{input}}\n\nReport: {{prev.code}}",
+      "gate": { "startsWith": ["APPROVE"] },
+      "onFail": { "goto": "code", "maxRounds": 2 } }
+  ]
+}
+```
+
+- Built in: **`code-review`** (above) and **`feature`** — plan → critique
+  (`SCORE ≥ 90`, 3 rounds) → code → review (3 rounds) → audit (`SHIP`).
+- Add your own as JSON in `.ekip/flows/` (project) or `~/.ekip/flows/`
+  (machine). Prompts get `{{input}}`, `{{feedback}}`, `{{prev.<step>}}`,
+  `{{round}}` and `{{run}}` (a per-run key for the blackboard). Gates match a
+  score (`pattern` + `min`) or an opening word (`startsWith`).
+- Run one from the Chat recipient picker, `⌘K`, `ekip flow <name> <input>`, or
+  `POST /api/flows/run`. Every stage is a child task in one conversation, and
+  each gate verdict (passed, back to a stage, stopped) is a line in it. A flow
+  that names a role your crew lacks is listed with the reason and refused.
+
+The role library behind it:
 
 - **[examples/roles/](examples/roles/)** — standing "role skills" (conductor,
   planner, critic, coder, reviewer, auditor). Point an agent's `promptFile`
   at one and every spawn carries its persona, checklists, and output
-  contracts.
-- **[examples/feature-pipeline.md](examples/feature-pipeline.md)** — the full
-  flow: plan → debate (to `SCORE ≥ 90`, capped) → code → review loop
-  (capped) → audit (`SHIP`/`HOLD`) → human-readable report. Hub-and-spoke,
-  so delegation depth stays ≤ 2 no matter how many stages.
-- **[examples/mini-pipeline.md](examples/mini-pipeline.md)** — the 3-stage
-  starter version, plus the hard-won "iron rules" for conductors.
+  contracts. `coder.md` serves both the Claude and the Gemini coder — same
+  craft, different model and permissions.
+- **[examples/feature-pipeline.md](examples/feature-pipeline.md)** and
+  **[examples/mini-pipeline.md](examples/mini-pipeline.md)** — the same
+  pipelines written as conductor scripts, for crews that prefer an agent to
+  drive.
+
+### Who should get the work (measured)
+
+One small task (a `slugify` helper with tests, graded on 8 hidden cases —
+every route passed 8/8):
+
+| Route | Wall time | Runs | Claude list price |
+| --- | --- | --- | --- |
+| Straight to `claude-coder` (Sonnet) | 49s | 1 | $0.27 |
+| `gemini-coder` → `reviewer` (Sonnet) | 122s | 2 | $0.30 + Gemini quota |
+| `conductor` (Sonnet, low effort) → `claude-coder` | 114s | 2 | $0.62 |
+
+Small, clear work is cheapest sent straight to a coder. Having Claude review
+Gemini's work does not save Claude quota — the review costs about as much as
+doing it. A conductor adds a full run; it pays off on vague work that needs
+splitting, while `code-review` is the cheaper way to make review mandatory.
 
 ## Configuration
 
@@ -161,7 +211,7 @@ The examples ship a field-tested crew and flow:
       "description": "Researches the repo and writes the plan. Does not write code.",
       "args": ["--model", "claude-opus-4-8", "--effort", "high"],
       "promptFile": ".ekip/roles/planner.md" },
-    { "name": "coder", "adapter": "antigravity",
+    { "name": "gemini-coder", "adapter": "antigravity",
       "label": "Coder · Gemini",
       "description": "Writes and edits files. Cannot run shell commands.",
       "args": ["--model", "Gemini 3.6 Flash (High)"] },
@@ -223,6 +273,38 @@ The examples ship a field-tested crew and flow:
   native files — `CLAUDE.md` / `.claude/skills/` and `AGENTS.md` — which
   spawned runs pick up automatically.
 
+## Security
+
+Anything that can reach the hub can launch agents that edit files, so:
+
+- The hub listens on `127.0.0.1`. State-changing API and MCP requests must
+  send `Content-Type: application/json` and, when a browser sends an Origin,
+  come from the hub itself — a web page on another site can't drive it. The
+  Host header must be one of the hub's own addresses (DNS rebinding).
+- Set **`EKIP_TOKEN`** (or `"token"` in the config) to require a token on
+  every API and MCP call: `Authorization: Bearer <token>` or `x-ekip-token`.
+  The web app asks once and keeps it in an HttpOnly cookie; `ekip ui` opens
+  it signed in; `ekip init` writes the header into `.mcp.json`; spawned
+  workers get it automatically.
+- A hub told to listen beyond loopback **refuses to start without a token**.
+
+## Cost on a subscription vs an API key
+
+Claude Code reports each run's tokens and `total_cost_usd`; ekip records both
+(the dollar figure is list price × tokens, checked to the micro-dollar). What
+that figure means depends on how `claude` is signed in:
+
+- **Pro/Max subscription** (`claude auth status` says claude.ai): runs draw
+  on your plan's limits and cost nothing per token. ekip detects this and
+  hides dollar amounts — tokens and time stay — unless you switch them on in
+  Settings.
+- **`ANTHROPIC_API_KEY` in the hub's environment**: `claude -p` bills the API
+  for real, and the app shows the money with a warning.
+
+Token counts lead with output tokens; cache reads (0.1× price, often the
+bulk) are shown separately so a run doesn't look ten times bigger than it
+is. Antigravity reports no tokens, only time.
+
 ## Letting spawned agents edit files
 
 Out of the box a spawned run can only talk to the bridge. For real coding
@@ -249,7 +331,7 @@ Spawned agents die silently more often than you'd hope — quota exhaustion
 missing binaries. The hub keeps the worker's process handle: the moment it
 exits without having posted a result, the task fails **within seconds**,
 with the exit code and the *reason* grepped from the spawn log — so the
-dashboard tells you `worker exited (code 0) without claiming the task —
+web app tells you `worker exited (code 0) without claiming the task —
 spawn log hints: "You've hit your session limit…"` instead of hanging.
 
 A watchdog remains as the safety net for workers that are alive but wedged
@@ -264,13 +346,14 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 121 end-to-end cases, no LLMs involved
+npm test   # 219 end-to-end cases, no LLMs involved
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```
 
 Boots a real hub on a scratch port and exercises the HTTP API, all 11 MCP
 tools, the conversation layer (stream-json decoding via a mock `claude`,
-threads, `bridge_say`), the dispatcher, permission/claim edge cases, fail-fast on worker
+threads, `bridge_say`), the dispatcher, permission/claim edge cases, folders and the
+folder guard, access control and tokens, flows (gate retry, round caps, cancel), fail-fast on worker
 exit, watchdog reaping (and worker kill), cancellation with process-tree
 kill and cascade, `maxConcurrent` queueing, retention pruning, loop-guard,
 concurrency (parallel claims), crash-safety (missing binaries), and the CLI
@@ -292,7 +375,7 @@ outputs, or works around rate limits.
 
 **Do both apps have to be open?** No. Only the hub runs persistently. The
 *receiving* agent is spawned headless on demand and exits when done; the
-sender is whatever you're already working in (or the dashboard form).
+sender is whatever you're already working in (or the web app).
 
 **How do I add an agent that isn't Claude or Antigravity?** Usually zero
 code: the `command` adapter + an args template. Bespoke behavior = one
@@ -300,7 +383,7 @@ adapter file implementing `spawn` + `mcpConfigSnippet`.
 
 **What if two agents delegate to each other forever?** Every task carries a
 delegation `depth`; the dispatcher refuses past `maxDepth` (default 6), and
-pipeline templates cap their debate/review loops. `maxConcurrent` bounds the
+flows cap every loop with `maxRounds`. `maxConcurrent` bounds the
 blast radius in the meantime, and `ekip cancel` stops a whole tree.
 
 ## Prior art & positioning

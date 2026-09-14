@@ -1,0 +1,81 @@
+{
+  "name": "feature",
+  "label": {
+    "en": "Big feature",
+    "vi": "Tính năng lớn"
+  },
+  "description": {
+    "en": "Plan → critique (score ≥ 90, up to 3 rounds) → code → review (up to 3 rounds) → final audit (SHIP). The hub checks each gate and loops back itself; it stops for good when the rounds run out.",
+    "vi": "Lên kế hoạch → phản biện (≥ 90 điểm, tối đa 3 vòng) → code → review (tối đa 3 vòng) → kiểm định cuối (SHIP). Hub tự chấm cổng và quay vòng; dừng hẳn khi hết số vòng."
+  },
+  "steps": [
+    {
+      "id": "plan",
+      "agent": "planner",
+      "title": {
+        "en": "Plan",
+        "vi": "Lên kế hoạch"
+      },
+      "prompt": "Write an implementation plan for this requirement:\n{{input}}\n\nResearch the repository first. Store the full plan with bridge_context_set under key {{run}}.plan (overwrite it when revising). Your bridge_post_result is a one-line summary.\n\nCritique of the previous plan to address (empty on the first round):\n{{feedback}}"
+    },
+    {
+      "id": "critique",
+      "agent": "critic",
+      "title": {
+        "en": "Critique",
+        "vi": "Phản biện"
+      },
+      "prompt": "Critique the plan stored under blackboard key {{run}}.plan (read it with bridge_context_get) for this requirement:\n{{input}}\n\nYour bridge_post_result MUST start with \"SCORE: <0-100>\" — 90 or more means the plan is ready to build — followed by the concrete problems, most severe first.",
+      "gate": {
+        "pattern": "SCORE:\\s*(\\d+)",
+        "min": 90
+      },
+      "onFail": {
+        "goto": "plan",
+        "maxRounds": 3
+      }
+    },
+    {
+      "id": "code",
+      "agent": "claude-coder",
+      "title": {
+        "en": "Code",
+        "vi": "Code"
+      },
+      "prompt": "Implement the plan stored under blackboard key {{run}}.plan (read it with bridge_context_get) for this requirement:\n{{input}}\n\nRun the project's tests to verify, and report the files you changed and the test output.\n\nReview findings to fix (empty on the first round; fix ONLY these):\n{{feedback}}"
+    },
+    {
+      "id": "review",
+      "agent": "reviewer",
+      "title": {
+        "en": "Review",
+        "vi": "Review"
+      },
+      "prompt": "Review the changes just made for this requirement:\n{{input}}\n\nPlan: blackboard key {{run}}.plan. Implementation report:\n{{prev.code}}\n\nRead the changed files and run the tests. Your bridge_post_result MUST start with APPROVE or REVISE (DUYỆT or CẦN SỬA also accepted); for REVISE list file:line — problem — fix, most severe first.",
+      "gate": {
+        "startsWith": [
+          "APPROVE",
+          "DUYỆT"
+        ]
+      },
+      "onFail": {
+        "goto": "code",
+        "maxRounds": 3
+      }
+    },
+    {
+      "id": "audit",
+      "agent": "auditor",
+      "title": {
+        "en": "Final audit",
+        "vi": "Kiểm định cuối"
+      },
+      "prompt": "Final audit for this requirement:\n{{input}}\n\nPlan: blackboard key {{run}}.plan. Implementation report:\n{{prev.code}}\n\nReview verdict:\n{{prev.review}}\n\nRe-run the tests yourself and check beyond them. Your bridge_post_result MUST start with SHIP or HOLD, followed by a report for the human: what was built, how it was verified, remaining risks.",
+      "gate": {
+        "startsWith": [
+          "SHIP"
+        ]
+      }
+    }
+  ]
+}

@@ -219,7 +219,14 @@ function renderStage(){
         '<div class="nested">' + turn(k, depth + 1) + '</div>';
     }
 
+    var byTime = String(t.to).indexOf('flow:') === 0;
     msgs.forEach(function(m, idx){
+      if (byTime) {
+        while (pending.length && pending[0].createdAt <= m.at && m.kind !== 'human') {
+          flush(false);
+          body += placeChild(pending[0].title);
+        }
+      }
       if (m.kind === 'human') return;
       if (m.kind === 'tool') {
         var toolName = String((m.meta && m.meta.tool) || '');
@@ -230,6 +237,19 @@ function renderStage(){
       flush(false);
       if (m.kind === 'system') {
         if (/^\S+ started: /.test(m.text)) return;
+        if (m.meta && m.meta.gate) {
+          var g = m.meta.gate, gi = g === 'pass' ? 'check' : g === 'retry' ? 'refresh' : 'stop';
+          var gd = gateDetail(m.meta.detail);
+          var gt = g === 'pass' ? T('gatePass', { s: m.meta.stepTitle, d: gd })
+            : g === 'retry' ? T('gateRetry', { s: m.meta.stepTitle, d: gd, g: m.meta.goto, r: m.meta.round, n: m.meta.max })
+            : T('gateStop', { s: m.meta.stepTitle, d: gd });
+          body += '<div class="notice gate ' + g + '">' + icon(gi, 'sm') + '<span>' + esc(gt) + '</span></div>';
+          return;
+        }
+        if (m.meta && m.meta.flow && m.meta.steps) {
+          body += '<div class="flowmap">' + m.meta.steps.map(function(st, i){ return '<span class="fs">' + avatar(st.agent, { size:'sm' }) + esc(st.title || st.id) + '</span>' + (i < m.meta.steps.length - 1 ? icon('chev', 'sm') : ''); }).join('') + '</div>';
+          return;
+        }
         var bad = /fail|refused|exited|error|cancel|blocked/i.test(m.text);
         if (m.meta && m.meta.guard) {
           body += '<div class="notice guard">' + icon('alert', 'sm') + '<span>' + esc(T('guardBlocked')) + ' <code>' + esc(shortPath(m.meta.path)) + '</code></span></div>';
@@ -486,9 +506,29 @@ function showAgentPopover(query, mode){
     var busy = liveWorkForAgent(a.name).length;
     return '<div class="opt' + (i === 0 ? ' hi' : '') + '" data-pick="' + esc(a.name) + '">' + avatar(a.name, { size:'sm', live: busy > 0 }) + '<span class="who"><b>' + esc(dn(a.name)) + '</b><span>' + esc(a.description || ('@' + a.name)) + '</span></span><span class="sub">' +
       esc(busy ? T('working') : '@' + a.name) + '</span></div>';
-  }).join('') : '<div class="opt">' + esc(T('noResults')) + '</div>');
+  }).join('') : '<div class="opt">' + esc(T('noResults')) + '</div>') + flowOptions(q);
   el.hidden = false;
   el.style.left = '8px'; el.style.bottom = 'calc(100% + 8px)';
+}
+/* The hub words gate verdicts in English; say them in the hub's language. */
+function gateDetail(d){
+  d = String(d || '');
+  if (LANG !== 'vi') return d;
+  return d.replace(/^no score found \(expected (.*)\)$/, 'không thấy điểm (cần $1)')
+    .replace(/^score /, 'điểm ')
+    .replace(/^starts with "(.*)", expected (.*)$/, function(_, a, b){ return 'mở đầu bằng "' + a + '", cần ' + b.replace(/ or /g, ' hoặc '); })
+    .replace(/^starts with /, 'mở đầu bằng ');
+}
+/* Flows are started, not replied to: offer them only for a new conversation. */
+function flowOptions(q){
+  if ((S.current && !S.notFound) || !(S.flows || []).length) return '';
+  var list = S.flows.filter(function(f){ return !q || fold(f.name + ' ' + f.label + ' ' + f.description).indexOf(q) >= 0; });
+  if (!list.length) return '';
+  return '<div class="ttl">' + esc(T('flows')) + '</div>' + list.map(function(f){
+    var broken = f.problems && f.problems.length;
+    return '<div class="opt' + (broken ? ' off' : '') + '"' + (broken ? ' title="' + esc(f.problems.join('; ')) + '"' : ' data-pick="flow:' + esc(f.name) + '"') + '>' + avatar('flow:' + f.name, { size:'sm' }) +
+      '<span class="who"><b>' + esc(f.label) + '</b><span>' + esc(broken ? T('flowCantRun') + ': ' + f.problems[0] : f.steps.map(function(s){ return s.title; }).join(' → ')) + '</span></span></div>';
+  }).join('');
 }
 function hidePopover(){ pop.open = false; $('agent-pop').hidden = true; }
 function pickAgent(name){
@@ -520,14 +560,17 @@ $('send').addEventListener('click', send);
 function send(){
   var ta = $('text'), text = ta.value.trim();
   if (!text || !S.target) return;
-  var body = { to: S.target, prompt: text, from: 'human' };
-  if (S.current && !S.notFound) body.parent_task_id = S.current;
+  var isFlow = S.target.indexOf('flow:') === 0;
+  var body = isFlow ? { flow: S.target.slice(5), input: text, from: 'human' } : { to: S.target, prompt: text, from: 'human' };
+  if (isFlow) { if (currentFolder()) body.cwd = currentFolder(); S.current = null; S.notFound = false; S.thread = null; }
+  else if (S.current && !S.notFound) body.parent_task_id = S.current;
   else if (currentFolder()) body.cwd = currentFolder();
   $('send').disabled = true;
-  post('/api/delegate', body).then(function(d){
+  post(isFlow ? '/api/flows/run' : '/api/delegate', body).then(function(d){
     if (d.error) { $('dock-hint').textContent = d.error; $('dock-hint').className = 'hint err'; $('send').disabled = false; return; }
     ta.value = ''; autosize(); $('dock-hint').className = 'hint';
     if (!S.current || S.notFound) { S.current = d.task.id; S.notFound = false; history.replaceState({}, '', '/chat/' + d.task.id); }
+    if (isFlow) setTarget(defaultTarget());
     S.sig.stage = ''; refresh();
     setTimeout(function(){ var sc = $('scroller'); sc.scrollTop = sc.scrollHeight; }, 250);
   }).catch(function(){ $('dock-hint').textContent = T('offline'); $('dock-hint').className = 'hint err'; $('send').disabled = false; });
