@@ -87,6 +87,7 @@ export function bridgeEnv(req: {
   taskId: string;
   depth: number;
   scope?: string;
+  hubHeaders?: Record<string, string>;
 }): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -95,5 +96,6 @@ export function bridgeEnv(req: {
     EKIP_TASK: req.taskId,
     EKIP_DEPTH: String(req.depth),
     ...(req.scope ? { EKIP_SCOPE: req.scope } : {}),
+    ...(req.hubHeaders?.Authorization ? { EKIP_TOKEN: req.hubHeaders.Authorization.replace(/^Bearer /, "") } : {}),
   };
 }

@@ -12,7 +12,7 @@ blackboard, every loop has a hard cap.
 | conductor | claude | sonnet | examples/roles/conductor.md |
 | planner | claude | opus | examples/roles/planner.md |
 | critic | claude | sonnet (opus for hard problems) | examples/roles/critic.md |
-| coder | antigravity | Gemini flash/pro | examples/roles/coder.md |
+| gemini-coder | antigravity | Gemini flash | examples/roles/coder.md |
 | reviewer | claude | sonnet | examples/roles/reviewer.md |
 | auditor | claude | opus | examples/roles/auditor.md |
 
@@ -20,11 +20,11 @@ Copy `examples/roles/` into the project (e.g. `.ekip/roles/`) and
 point each agent's `promptFile` at its role.
 
 **Cost estimate before you run**: best case 6 spawns (2 opus, 3 sonnet-class,
-1 coder); worst case with all loop caps hit ≈ 12 spawns. Neither vendor
+1 gemini-coder); worst case with all loop caps hit ≈ 12 spawns. Neither vendor
 exposes remaining quota programmatically — budget accordingly and let the
 watchdog surface quota deaths.
 
-**Permissions**: coder needs file-write plus the project's test command (see
+**Permissions**: gemini-coder needs file-write plus the project's test command (see
 README "Letting spawned agents edit files"); reviewer/auditor read-only;
 planner/critic/conductor need nothing beyond the bridge.
 
@@ -69,7 +69,7 @@ STAGE 2 — DEBATE (max 3 rounds). For N = 1..3:
 After 3 rounds without SCORE >= 90: post your own result as failed with
 "debate deadlock" plus the last SCORE line, and STOP.
 
-STAGE 3 — CODE. Delegate to 'coder': read the final plan key, implement it
+STAGE 3 — CODE. Delegate to 'gemini-coder': read the final plan key, implement it
 exactly (code AND tests the plan calls for), self-verify with {TEST_CMD}
 (the only command allowed), final action bridge_post_result with files +
 test outcome. Wait.
@@ -79,7 +79,7 @@ STAGE 4 — REVIEW LOOP (max 3 rounds). For N = 1..3:
   <KEYPREFIX>.review.roundN starting with APPROVE or REVISE; result = the
   verdict + one line. Wait.
   If APPROVE: proceed to STAGE 5.
-  Else delegate to 'coder': read <KEYPREFIX>.review.roundN, fix ONLY the
+  Else delegate to 'gemini-coder': read <KEYPREFIX>.review.roundN, fix ONLY the
   listed issues, re-verify with {TEST_CMD}, post result. Wait.
 After 3 rounds without APPROVE: post failed with "review deadlock" plus the
 last verdict, and STOP.

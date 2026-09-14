@@ -34,7 +34,7 @@ export const claudeAdapter: Adapter = {
     // add minutes of startup and keep the process alive after the task is
     // posted). Extra --mcp-config entries in `args` still compose on top.
     const bridgeMcpConfig = JSON.stringify({
-      mcpServers: { "ekip": { type: "http", url: req.hubUrl } },
+      mcpServers: { "ekip": { type: "http", url: req.hubUrl, ...(req.hubHeaders ? { headers: req.hubHeaders } : {}) } },
     });
     const args = [
       "-p",
@@ -85,11 +85,13 @@ export const claudeAdapter: Adapter = {
     });
   },
 
-  mcpConfigSnippet(hubUrl: string) {
+  mcpConfigSnippet(hubUrl: string, opts?: { tokenEnv?: string }) {
+    // Claude Code expands \${VAR} in .mcp.json, so the secret stays out of the repo.
     return {
       "ekip": {
         type: "http",
         url: hubUrl,
+        ...(opts?.tokenEnv ? { headers: { Authorization: `Bearer \${${opts.tokenEnv}}` } } : {}),
       },
     };
   },

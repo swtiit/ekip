@@ -130,6 +130,11 @@ export function appHtml(): string {
       <p class="lead" id="set-lead"></p>
 
       <div class="section">
+        <div class="section-hd"><h2 data-t="billing">How Claude is billed</h2></div>
+        <div class="panel pad" id="billing-panel"></div>
+      </div>
+
+      <div class="section">
         <div class="section-hd"><h2 data-t="lang">Reporting language</h2></div>
         <div class="panel pad setting-row">
           <select class="field" id="lang-select" style="max-width:240px"></select>

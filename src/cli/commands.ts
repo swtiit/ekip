@@ -34,9 +34,22 @@ export interface HubState {
 
 export class HubDownError extends Error {}
 
+/** Headers for talking to the hub: the token from EKIP_TOKEN or ekip.config.json, when set. */
+export function authHeaders(json = false): Record<string, string> {
+  let token = process.env.EKIP_TOKEN;
+  if (!token) {
+    try {
+      token = (JSON.parse(readFileSync(resolve(process.cwd(), "ekip.config.json"), "utf8")) as { token?: string }).token;
+    } catch {
+      // no config here — no token
+    }
+  }
+  return { ...(json ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+}
+
 export async function apiState(base: string): Promise<HubState> {
   try {
-    const res = await fetch(`${base}/api/state`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`${base}/api/state`, { signal: AbortSignal.timeout(3000), headers: authHeaders() });
     return (await res.json()) as HubState;
   } catch {
     throw new HubDownError(
@@ -52,7 +65,7 @@ export async function apiCancel(
 ): Promise<{ cancelled: string[]; task: Task }> {
   const res = await fetch(`${base}/api/cancel`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(true),
     body: JSON.stringify({ task_id: taskId, by: "human", reason }),
   });
   const data = (await res.json()) as { cancelled?: string[]; task?: Task; error?: string };
@@ -66,7 +79,7 @@ export async function apiDelegate(
 ): Promise<Task> {
   const res = await fetch(`${base}/api/delegate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(true),
     body: JSON.stringify(body),
   });
   const data = (await res.json()) as { task?: Task; error?: string };

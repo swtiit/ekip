@@ -23,6 +23,7 @@ import {
 import { Dispatcher } from "./dispatcher.js";
 import { buildHub } from "./hub.js";
 import { removeSpawnLog } from "./logs.js";
+import { assertSafeBinding, checkAccess, hubToken, presentedToken, tokenMatches } from "./access.js";
 import { isTerminal } from "../protocol/index.js";
 import { catalogFor } from "./models.js";
 import { claudeBilling } from "./billing.js";
@@ -84,6 +85,11 @@ function sendText(res: ServerResponse, status: number, body: string, type = "tex
  * gets its own server+transport pair as the SDK requires.
  */
 export function startServer(config: BridgeConfig): Promise<RunningHub> {
+  try {
+    assertSafeBinding(config);
+  } catch (err) {
+    return Promise.reject(err);
+  }
   const store = new Store(stateFilePath(config));
   const dispatcher = new Dispatcher(config, store);
   const watchdog = new Watchdog(config, store, (taskId) => dispatcher.kill(taskId));
@@ -551,15 +557,47 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     const path = (req.url ?? "/").split("?")[0];
     const route = `${req.method} ${path}`;
 
+    const denied = checkAccess(config, req, path);
+    if (denied) {
+      sendJson(res, denied.status, { error: denied.error, auth: denied.status === 401 });
+      return;
+    }
+    const cookie = (value: string, maxAge: number) =>
+      `ekip_token=${encodeURIComponent(value)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`;
+
+    // A page opened as /chat?token=… signs the browser in and drops the token from the URL.
+    if (req.method === "GET" && !path.startsWith("/api/") && path !== "/mcp" && hubToken(config)) {
+      const t = new URL(req.url ?? "/", "http://x").searchParams.get("token");
+      if (t !== null) {
+        if (tokenMatches(config, t)) {
+          res.writeHead(302, { Location: path, "Set-Cookie": cookie(t, 60 * 60 * 24 * 30) });
+        } else {
+          res.writeHead(302, { Location: path });
+        }
+        res.end();
+        return;
+      }
+    }
+
     const routed = (async (): Promise<void> => {
       if (path === "/mcp") return handleMcp(req, res);
       switch (route) {
         case "GET /health":
+          if (hubToken(config) && !tokenMatches(config, presentedToken(req))) return sendJson(res, 200, { ok: true, auth: true });
           return sendJson(res, 200, {
             ok: true,
             project: config.project,
             sessions: Object.keys(transports).length,
           });
+        case "POST /api/login": {
+          const { token } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+          if (typeof token !== "string" || !hubToken(config) || !tokenMatches(config, token)) {
+            return sendJson(res, 401, { error: "wrong token" });
+          }
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Set-Cookie": cookie(token, 60 * 60 * 24 * 30) });
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
         case "GET /":
         case "GET /ui": // the board's old address
           res.writeHead(302, { Location: path === "/ui" ? "/board" : "/chat" });
@@ -590,7 +628,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
         case "POST /api/config/hub":
           return handleConfigHub(req, res);
         case "GET /api/billing":
-          return claudeBilling().then((b) => sendJson(res, 200, { claude: b.value, plan: b.plan ?? null }));
+          return claudeBilling().then((b) => sendJson(res, 200, { claude: b.value, plan: b.plan ?? null, apiKeyInEnv: b.apiKeyInEnv === true }));
         case "GET /api/limits":
           return sendJson(res, 200, {
             language: config.language ?? null,

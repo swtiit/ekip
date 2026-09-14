@@ -74,6 +74,11 @@ export interface BridgeConfig {
   agents: AgentConfig[];
   maxDepth?: number;
   /**
+   * Shared secret for the hub's API and MCP endpoint (EKIP_TOKEN overrides it).
+   * Optional on 127.0.0.1; required to listen on any other address.
+   */
+  token?: string;
+  /**
    * Language agents should speak in — appended to every bootstrap prompt, e.g.
    * "Vietnamese". Affects what they say and write, not the code they produce.
    */

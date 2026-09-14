@@ -7,6 +7,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
+import { request as httpRequest } from "node:http";
 import { startServer, registerAdapter, launchDetached, bridgeEnv, parseClaudeStreamLine } from "../dist/core/index.js";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -254,6 +255,14 @@ try {
 
   const billing = await api("/api/billing");
   t("billing endpoint says what cost means", ["subscription", "api", "unknown"].includes(billing.claude));
+  {
+    // An API key in the hub's environment means spawned runs bill per token.
+    const saved = process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = "sk-test-not-real";
+    const withKey = await api("/api/billing");
+    if (saved === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = saved;
+    t("an API key in the environment is reported as real billing", withKey.claude === "api" && withKey.apiKeyInEnv === true);
+  }
 
   const limits = await api("/api/limits");
   t("limits endpoint", limits.maxDepth === 3 && limits.watchdog.pendingTtlSeconds === 2 && typeof limits.maxConcurrent === "number");
@@ -540,6 +549,54 @@ try {
     const forced = await (await post("/api/threads/delete", { id: busy.task.id, stop: true })).json();
     await sleep(400);
     t("stop + delete kills the worker and removes it", forced.deleted === 1 && !isAlive(busyPid) && !(await taskById(busy.task.id)));
+  }
+
+  // ---- access: pages from other sites, DNS rebinding, tokens ----
+  {
+    const cross = await fetch(BASE + "/api/delegate", { method: "POST", headers: { "Content-Type": "application/json", Origin: "http://evil.example" }, body: JSON.stringify({ to: "mock", prompt: "pwn" }) });
+    t("a page from another site cannot delegate", cross.status === 403);
+    const plain = await fetch(BASE + "/api/delegate", { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ to: "mock", prompt: "pwn" }) });
+    t("a form-style post without JSON is refused", plain.status === 415);
+    const rebind = await new Promise((resolveReq) => {
+      const r = httpRequest({ host: "127.0.0.1", port: PORT, path: "/api/state", headers: { Host: "attacker.example:" + PORT } }, (res) => { res.resume(); resolveReq(res.statusCode); });
+      r.end();
+    });
+    t("a rebound hostname is refused", rebind === 403);
+    t("same-origin writes still work", (await fetch(BASE + "/api/context", { method: "POST", headers: { "Content-Type": "application/json", Origin: BASE }, body: JSON.stringify({ key: "same.origin", value: 1 }) })).status === 200);
+
+    const TOKEN = "s3cret-token-for-tests";
+    const TPORT = await new Promise((res) => { const probe = createServer(); probe.listen(0, "127.0.0.1", () => { const p = probe.address().port; probe.close(() => res(p)); }); });
+    const TROOT = mkdtempSync(join(tmpdir(), "ekip-token-"));
+    const TB = `http://127.0.0.1:${TPORT}`;
+    const tokenHub = await startServer({ project: "tok", host: "127.0.0.1", port: TPORT, projectRoot: TROOT, token: TOKEN,
+      agents: [{ name: "envdump", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'printf "%s" "$EKIP_TOKEN" > token.txt'] }] });
+    try {
+      t("token hub: API without a token → 401", (await fetch(TB + "/api/state")).status === 401);
+      t("token hub: health says only that it is up", JSON.stringify(await (await fetch(TB + "/health")).json()) === JSON.stringify({ ok: true, auth: true }));
+      t("token hub: Bearer token works", (await fetch(TB + "/api/state", { headers: { Authorization: "Bearer " + TOKEN } })).status === 200);
+      t("token hub: a wrong token is refused", (await fetch(TB + "/api/state", { headers: { Authorization: "Bearer nope" } })).status === 401);
+      const mcpNoToken = await fetch(TB + "/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "x", version: "0" } } }) });
+      t("token hub: MCP without a token → 401", mcpNoToken.status === 401);
+      const link = await fetch(TB + "/chat?token=" + TOKEN, { redirect: "manual" });
+      const setCookie = link.headers.get("set-cookie") ?? "";
+      t("token hub: a sign-in link sets an HttpOnly cookie and drops the token from the URL", link.status === 302 && link.headers.get("location") === "/chat" && /ekip_token=/.test(setCookie) && /HttpOnly/i.test(setCookie));
+      const cookieHeader = setCookie.split(";")[0];
+      t("token hub: the cookie authorises the API", (await fetch(TB + "/api/state", { headers: { Cookie: cookieHeader } })).status === 200);
+      t("token hub: login with a wrong token → 401", (await fetch(TB + "/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "nope" }) })).status === 401);
+      const d = await (await fetch(TB + "/api/delegate", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + TOKEN }, body: JSON.stringify({ to: "envdump", prompt: "x" }) })).json();
+      await until(async () => existsSync(join(TROOT, "token.txt")));
+      t("token hub: spawned workers receive the token", existsSync(join(TROOT, "token.txt")) && readFileSync(join(TROOT, "token.txt"), "utf8") === TOKEN && !!d.task);
+    } finally {
+      await tokenHub.close();
+    }
+    let refused = "";
+    try {
+      const open = await startServer({ project: "open", host: "0.0.0.0", port: TPORT, projectRoot: TROOT, agents: [] });
+      await open.close();
+    } catch (err) {
+      refused = err.message;
+    }
+    t("a hub listening beyond loopback without a token refuses to start", /refuses to listen/.test(refused), refused);
   }
 
   // ---- a task waiting on its hand-offs is not reaped ----

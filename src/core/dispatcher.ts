@@ -6,6 +6,7 @@ import type { WorkerEvent, WorkerExit } from "../adapters/index.js";
 import type { AgentConfig, BridgeConfig } from "./config.js";
 import { DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_CONCURRENT_TOTAL, hubUrl, resolveRoleFile } from "./config.js";
 import { checkToolCall } from "../guard/scope.js";
+import { hubToken } from "./access.js";
 import { spawnLogHint, spawnLogPath } from "./logs.js";
 import { recordSeenModel } from "./models.js";
 import type { Store } from "./store.js";
@@ -260,6 +261,7 @@ export class Dispatcher {
       extraArgs: agent.args,
       command: agent.command,
       scope: this.guardOn() ? this.folderOf(task) : undefined,
+      hubHeaders: hubToken(this.config) ? { Authorization: `Bearer ${hubToken(this.config)}` } : undefined,
       onExit: (exit) => this.onWorkerExit(task.id, agent.name, exit),
       onEvent: (event) => this.onWorkerEvent(task.id, agent.name, event),
     });

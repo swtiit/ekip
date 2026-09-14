@@ -31,6 +31,8 @@ export interface SpawnRequest {
   logFile?: string;
   /** folder the run must stay inside; adapters that can enforce it should */
   scope?: string;
+  /** headers a spawned agent must send to the hub (the token, when one is set) */
+  hubHeaders?: Record<string, string>;
   /** called once when the spawned process ends (or fails to start) */
   onExit?: (exit: WorkerExit) => void;
   /** called as the worker speaks / acts, when the adapter can decode its output */
@@ -71,7 +73,7 @@ export interface Adapter {
    * The JSON snippet a user pastes into this tool's MCP config so it can reach
    * the hub. Returned as a plain object keyed by server name.
    */
-  mcpConfigSnippet(hubUrl: string): Record<string, unknown>;
+  mcpConfigSnippet(hubUrl: string, opts?: { tokenEnv?: string }): Record<string, unknown>;
   /** where that snippet belongs, shown during `init` */
   mcpConfigLocation(): string;
 }

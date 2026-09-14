@@ -590,6 +590,15 @@ html[lang="vi"] .guide-doc[data-lang="en"],html:not([lang="vi"]) .guide-doc[data
 .agent-card .ctl label{font-size:12.5px;color:var(--muted)}
 .agent-card .saved{font-size:11.5px;color:var(--ok);opacity:0;transition:opacity .2s}
 .agent-card .saved.on{opacity:1}
+.bill{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.bill > .ico{margin-top:2px}
+.bill.sub > .ico{color:var(--ok)}
+.bill.api > .ico{color:var(--bad)}
+.bill > div{flex:1;min-width:240px}
+.bill b{display:block;font-size:13.5px;font-weight:600}
+.bill span{display:block;font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.5}
+.bill.api b{color:var(--bad)}
+.chk-row{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink-2);flex-basis:100%;margin-top:6px;cursor:pointer}
 .setting-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .setting-row p{margin:0;font-size:12.5px;flex:1;min-width:240px}
 .explain{margin-bottom:12px}

@@ -4,8 +4,7 @@
   "description": "Assemble an ekip (ê-kíp — a tight-knit working crew) of coding agents: Claude Code, Antigravity, and any headless CLI delegate tasks and share context over MCP.",
   "type": "module",
   "bin": {
-    "ekip": "dist/cli/index.js",
-    "agent-bridge": "dist/cli/index.js"
+    "ekip": "dist/cli/index.js"
   },
   "exports": {
     ".": "./dist/core/index.js",

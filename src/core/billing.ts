@@ -10,7 +10,11 @@ let cached: { at: number; value: ClaudeBilling; plan?: string } | undefined;
  * claude.ai subscription that number is a reference, and the real limit is
  * the plan's usage allowance. Cached for an hour.
  */
-export function claudeBilling(): Promise<{ value: ClaudeBilling; plan?: string }> {
+export function claudeBilling(): Promise<{ value: ClaudeBilling; plan?: string; apiKeyInEnv?: boolean }> {
+  // Spawned runs inherit the hub's environment, and the CLI prefers an API key
+  // over the subscription login when one is set — so that decides billing.
+  const apiKeyInEnv = Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
+  if (apiKeyInEnv) return Promise.resolve({ value: "api", apiKeyInEnv: true });
   if (cached && Date.now() - cached.at < 3_600_000) return Promise.resolve(cached);
   return new Promise((resolve) => {
     execFile("claude", ["auth", "status"], { timeout: 15_000 }, (err, stdout) => {

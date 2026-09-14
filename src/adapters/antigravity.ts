@@ -65,12 +65,15 @@ export const antigravityAdapter: Adapter = {
     });
   },
 
-  mcpConfigSnippet(hubUrl: string) {
+  mcpConfigSnippet(hubUrl: string, opts?: { tokenEnv?: string }) {
     // Antigravity's schema is strict: remote Streamable HTTP servers use
-    // `serverUrl`. Legacy `url` / `httpUrl` keys are NOT supported.
+    // `serverUrl`. Legacy `url` / `httpUrl` keys are NOT supported. Whether it
+    // forwards custom headers is unverified — with a token set, check that
+    // agy runs can still claim tasks.
     return {
       "ekip": {
         serverUrl: hubUrl,
+        ...(opts?.tokenEnv ? { headers: { Authorization: "Bearer <your EKIP_TOKEN>" } } : {}),
       },
     };
   },
