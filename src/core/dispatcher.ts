@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { Task } from "../protocol/index.js";
 import { DEFAULT_MAX_DEPTH, isTerminal } from "../protocol/index.js";
 import { getAdapter } from "../adapters/index.js";
-import type { WorkerExit } from "../adapters/index.js";
+import type { WorkerEvent, WorkerExit } from "../adapters/index.js";
 import type { AgentConfig, BridgeConfig } from "./config.js";
 import { DEFAULT_MAX_CONCURRENT, hubUrl, resolveRoleFile } from "./config.js";
 import { spawnLogHint } from "./logs.js";
@@ -77,6 +77,7 @@ export class Dispatcher {
       `2. Carry out the task in this repository.`,
       `3. When finished, call \`bridge_post_result\` with { task_id: "${task.id}", status: "done", result: "<summary>" }. Use status "failed" if you could not complete it.`,
       `You may read/write shared context with \`bridge_context_get\` / \`bridge_context_set\`, and delegate sub-tasks with \`bridge_delegate\`.`,
+      `Talk as you go: \`bridge_say\` posts a short note (a finding, a question for a peer, a decision) to this task's conversation, and \`bridge_thread\` reads what others said. Keep notes brief; the final answer still goes through bridge_post_result.`,
       ``,
       `Task (id ${task.id}): ${task.title}`,
       ``,
@@ -90,7 +91,24 @@ export class Dispatcher {
   /** Reject outright: the task can never run, so say so on the task itself. */
   private refuse(task: Task, reason: string): DispatchOutcome {
     this.store.updateTask(task.id, { status: "failed", result: `dispatch refused: ${reason}` });
+    this.store.addMessage({ taskId: task.id, from: "hub", kind: "system", text: `dispatch refused: ${reason}` });
     return { spawned: false, reason };
+  }
+
+  private onWorkerEvent(taskId: string, agent: string, event: WorkerEvent): void {
+    if (event.kind === "text") {
+      this.store.addMessage({ taskId, from: agent, kind: "agent", text: event.text });
+    } else if (event.kind === "tool") {
+      this.store.addMessage({
+        taskId,
+        from: agent,
+        kind: "tool",
+        text: summarizeToolInput(event.name, event.input),
+        meta: { tool: event.name, input: event.input },
+      });
+    } else if (event.kind === "usage") {
+      this.store.updateTask(taskId, { usage: event.usage }, { touch: false });
+    }
   }
 
   private runningFor(agent: string): number {
@@ -126,6 +144,12 @@ export class Dispatcher {
 
     if (!this.hasSlot(agent)) {
       this.queue.push(task);
+      this.store.addMessage({
+        taskId: task.id,
+        from: "hub",
+        kind: "system",
+        text: `queued for ${agent.name} (${this.running.size} worker(s) running, position ${this.queue.length})`,
+      });
       return {
         spawned: false,
         queued: true,
@@ -147,6 +171,7 @@ export class Dispatcher {
       extraArgs: agent.args,
       command: agent.command,
       onExit: (exit) => this.onWorkerExit(task.id, agent.name, exit),
+      onEvent: (event) => this.onWorkerEvent(task.id, agent.name, event),
     });
 
     if (!result.launched) {
@@ -182,6 +207,7 @@ export class Dispatcher {
         const hint = spawnLogHint(this.config.projectRoot, agent, taskId);
         patch.status = "failed";
         patch.result = `${how}${hint ? ` — spawn log hints: ${hint}` : ""}`;
+        this.store.addMessage({ taskId, from: "hub", kind: "system", text: patch.result });
       }
       this.store.updateTask(taskId, patch);
     };
@@ -250,17 +276,24 @@ export class Dispatcher {
         this.running.delete(id);
         killTree(worker.pid);
       }
-      this.store.updateTask(id, {
-        status: "cancelled",
-        result: `cancelled by ${by}${reason ? `: ${reason}` : ""}`,
-        pid: undefined,
-      });
+      const result = `cancelled by ${by}${reason ? `: ${reason}` : ""}`;
+      this.store.updateTask(id, { status: "cancelled", result, pid: undefined });
+      this.store.addMessage({ taskId: id, from: by, kind: "system", text: `${task.title}: ${result}` });
       cancelled.push(id);
     };
     visit(taskId);
     void this.drain();
     return cancelled;
   }
+}
+
+/** One line for the "what is it doing" view: the tool name plus its most telling argument. */
+function summarizeToolInput(name: string, input: unknown): string {
+  const obj = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const pick =
+    obj.command ?? obj.file_path ?? obj.path ?? obj.pattern ?? obj.query ?? obj.url ?? obj.task_id ?? obj.key ?? obj.prompt ?? obj.text;
+  const detail = typeof pick === "string" ? pick : pick !== undefined ? JSON.stringify(pick) : "";
+  return `${name}${detail ? `  ${detail.replace(/\s+/g, " ").slice(0, 160)}` : ""}`;
 }
 
 /** SIGTERM the process group (the worker was spawned detached), falling back to the pid. */

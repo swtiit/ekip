@@ -12,6 +12,7 @@ import { buildHub } from "./hub.js";
 import { removeSpawnLog } from "./logs.js";
 import { Store } from "./store.js";
 import { dashboardHtml } from "./ui.js";
+import { chatHtml } from "./chat.js";
 import { Watchdog } from "./watchdog.js";
 
 export interface RunningHub {
@@ -152,7 +153,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   }
 
   async function handleDelegate(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const { to, prompt, title, from } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    const { to, prompt, title, from, parent_task_id } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
     if (typeof to !== "string" || !to || typeof prompt !== "string" || !prompt) {
       sendJson(res, 400, { error: "`to` and `prompt` are required" });
       return;
@@ -163,13 +164,21 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       });
       return;
     }
+    const parent = typeof parent_task_id === "string" ? store.getTask(parent_task_id) : undefined;
+    if (typeof parent_task_id === "string" && parent_task_id && !parent) {
+      sendJson(res, 404, { error: `unknown parent task ${parent_task_id}` });
+      return;
+    }
+    const sender = typeof from === "string" && from ? from : "human";
     const task = store.createTask({
-      from: typeof from === "string" && from ? from : "human",
+      from: sender,
       to,
       title: typeof title === "string" && title ? title : prompt.slice(0, 60),
       prompt,
-      depth: 1,
+      depth: (parent?.depth ?? 0) + 1,
+      parentId: parent?.id,
     });
+    store.addMessage({ taskId: task.id, from: sender, to, kind: "human", text: prompt });
     const outcome = await dispatcher.dispatch(task);
     sendJson(res, 200, { task: store.getTask(task.id), dispatch: outcome });
   }
@@ -295,6 +304,31 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     promptFile: a.promptFile ?? null,
   });
 
+  function handleThreads(res: ServerResponse): void {
+    sendJson(res, 200, {
+      threads: store.listThreads().map(({ task, messages, lastAt }) => ({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        from: task.from,
+        to: task.to,
+        createdAt: task.createdAt,
+        lastAt,
+        messages,
+      })),
+    });
+  }
+
+  function handleThread(res: ServerResponse, taskId: string): void {
+    if (!/^[A-Za-z0-9-]{1,64}$/.test(taskId) || !store.getTask(taskId)) {
+      sendJson(res, 404, { error: "unknown task" });
+      return;
+    }
+    const threadId = store.threadOf(taskId);
+    const family = store.listTasks().filter((t) => store.threadOf(t.id) === threadId);
+    sendJson(res, 200, { thread: threadId, tasks: family, messages: store.listMessages(threadId) });
+  }
+
   function handleLogs(res: ServerResponse, taskId: string): void {
     if (!/^[A-Za-z0-9-]{1,64}$/.test(taskId)) {
       sendText(res, 400, "Invalid task id.");
@@ -327,11 +361,15 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
             sessions: Object.keys(transports).length,
           });
         case "GET /":
-          res.writeHead(302, { Location: "/ui" });
+          res.writeHead(302, { Location: "/chat" });
           res.end();
           return;
+        case "GET /chat":
+          return sendText(res, 200, chatHtml(), "text/html");
         case "GET /ui":
           return sendText(res, 200, dashboardHtml(), "text/html");
+        case "GET /api/threads":
+          return handleThreads(res);
         case "GET /api/state":
           return sendJson(res, 200, {
             project: config.project,
@@ -356,6 +394,9 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
         default:
           if (req.method === "GET" && path.startsWith("/api/logs/")) {
             return handleLogs(res, decodeURIComponent(path.slice("/api/logs/".length)));
+          }
+          if (req.method === "GET" && path.startsWith("/api/thread/")) {
+            return handleThread(res, decodeURIComponent(path.slice("/api/thread/".length)));
           }
           return sendText(res, 404, "Not found");
       }

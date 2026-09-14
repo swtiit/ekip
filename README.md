@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-83_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-99_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -104,18 +104,19 @@ sequenceDiagram
     H-->>A: final task state
 ```
 
-Nine MCP tools cover the whole protocol: `bridge_delegate`, `bridge_claim`,
-`bridge_post_result`, `bridge_wait`, `bridge_cancel`, `bridge_task_get`,
-`bridge_list_tasks`, `bridge_context_set`, `bridge_context_get`. Full
-contract in [PROTOCOL.md](PROTOCOL.md).
+Eleven MCP tools cover the whole protocol: `bridge_delegate`, `bridge_claim`,
+`bridge_post_result`, `bridge_wait`, `bridge_cancel`, `bridge_say`,
+`bridge_thread`, `bridge_task_get`, `bridge_list_tasks`, `bridge_context_set`,
+`bridge_context_get`. Full contract in [PROTOCOL.md](PROTOCOL.md).
 
-## Three ways to watch and drive it
+## Four ways to watch and drive it
 
 | Surface | What you get |
 | --- | --- |
-| **Dashboard** `http://127.0.0.1:4319/ui` | Live task board (SSE), blackboard viewer/editor, per-task logs, artifact viewer, and a form to delegate work yourself — the human is one more peer |
+| **Chat** `http://127.0.0.1:4319/chat` | A transcript per conversation, Claude Code style: your ask, each agent's words as it works (decoded live from `claude -p`'s stream), its tool calls (click to expand), hand-offs between agents, results with token/cost, and a composer to talk to the crew or reply into a running thread |
+| **Board** `http://127.0.0.1:4319/ui` | Live task board (SSE), blackboard viewer/editor, per-task logs, artifact viewer, agent model settings, and a form to delegate work yourself — the human is one more peer |
 | **CLI** | `run` (delegate + live-follow the whole task tree), `follow`, `cancel`, `tasks`, `task`, `logs`, `context`, `watch`, `ui` |
-| **HTTP API** | `GET /api/state`, `GET /api/events` (SSE), `POST /api/delegate`, `POST /api/cancel`, `POST /api/context`, `GET /api/logs/:taskId` |
+| **HTTP API** | `GET /api/state`, `GET /api/events` (SSE), `GET /api/threads`, `GET /api/thread/:taskId`, `POST /api/delegate` (with `parent_task_id` to reply into a thread), `POST /api/cancel`, `POST /api/context`, `GET /api/logs/:taskId` |
 
 ## Multi-agent pipelines
 
@@ -223,8 +224,9 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 npm test   # 83 end-to-end cases, no LLMs involved
 ```
 
-Boots a real hub on a scratch port and exercises the HTTP API, all 9 MCP
-tools, the dispatcher, permission/claim edge cases, fail-fast on worker
+Boots a real hub on a scratch port and exercises the HTTP API, all 11 MCP
+tools, the conversation layer (stream-json decoding via a mock `claude`,
+threads, `bridge_say`), the dispatcher, permission/claim edge cases, fail-fast on worker
 exit, watchdog reaping (and worker kill), cancellation with process-tree
 kill and cascade, `maxConcurrent` queueing, retention pruning, loop-guard,
 concurrency (parallel claims), crash-safety (missing binaries), and the CLI

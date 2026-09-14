@@ -22,4 +22,6 @@ export {
   getAdapter,
   listAdapters,
 } from "../adapters/index.js";
-export type { Adapter, SpawnRequest, SpawnResult } from "../adapters/index.js";
+export type { Adapter, SpawnRequest, SpawnResult, WorkerEvent, WorkerExit } from "../adapters/index.js";
+export { launchDetached, bridgeEnv } from "../adapters/spawn.js";
+export { parseClaudeStreamLine } from "../adapters/claude.js";

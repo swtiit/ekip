@@ -43,14 +43,23 @@ export const antigravityAdapter: Adapter = {
     // headless run in an untrusted folder ignores cwd and writes files into
     // agy's own scratch directory (field-tested).
     const args = ["-p", req.prompt, "--add-dir", req.cwd, ...(req.extraArgs ?? [])];
+    // agy prints its final answer to stdout at the end of the run; there is
+    // no structured stream. Collect it and surface it as one agent message
+    // when the process ends (capped — the full text is in the log).
+    const lines: string[] = [];
     return launchDetached({
       command: "agy",
       args,
       cwd: req.cwd,
       env: bridgeEnv(req),
       logFile,
-      onExit: req.onExit,
       label: "agy -p",
+      onLine: req.onEvent ? (line) => void lines.push(line) : undefined,
+      onExit: (exit) => {
+        const text = lines.join("\n").trim();
+        if (text && req.onEvent) req.onEvent({ kind: "text", text: text.slice(0, 4000) });
+        req.onExit?.(exit);
+      },
     });
   },
 

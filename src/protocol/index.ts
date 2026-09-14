@@ -51,6 +51,42 @@ export interface Task {
   pid?: number;
   /** exit code of the spawned worker once it ended (null = killed by signal) */
   exitCode?: number | null;
+  /** what the run cost, when the adapter can tell (Claude's stream-json result) */
+  usage?: TaskUsage;
+}
+
+export interface TaskUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+  durationMs?: number;
+  turns?: number;
+}
+
+/**
+ * One line of the conversation. Threads are keyed by the root task of a
+ * delegation tree, so everything a pipeline says — the human's ask, each
+ * agent's words, tool calls, hand-offs — reads as one transcript.
+ */
+export type MessageKind =
+  | "human" // typed by a person (dashboard / CLI)
+  | "agent" // an agent speaking: bridge_say, streamed assistant text, or its result
+  | "tool" // a tool call the agent made (name + short input), for the "what is it doing" view
+  | "system"; // hub narration: delegated, started, done, failed, cancelled, queued
+
+export interface Message {
+  id: string;
+  /** root task id of the delegation tree this belongs to */
+  threadId: string;
+  /** the specific task the line belongs to */
+  taskId: string;
+  from: string;
+  to?: string;
+  kind: MessageKind;
+  text: string;
+  /** free-form extras: tool name/input, result status, usage */
+  meta?: Record<string, unknown>;
+  at: string;
 }
 
 export interface ContextEntry {
@@ -65,6 +101,7 @@ export interface ContextEntry {
 export interface BridgeState {
   tasks: Task[];
   context: ContextEntry[];
+  messages?: Message[];
 }
 
 export const PROTOCOL_VERSION = "0.5.0";

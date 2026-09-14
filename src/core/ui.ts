@@ -88,7 +88,7 @@ button:hover{border-color:var(--muted);}
 <header>
   <div><h1 style="display:inline">ekip · <span id="project"></span></h1><code class="endpoint" id="endpoint"></code></div>
   <div class="chips" id="agents"></div>
-  <span class="pill" id="conn">connecting</span>
+  <a href="/chat" style="font-size:12px;margin-right:10px">chat</a><span class="pill" id="conn">connecting</span>
 </header>
 <section class="metrics" id="metrics"></section>
 <main class="cols">

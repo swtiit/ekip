@@ -7,7 +7,7 @@ import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
-import { startServer } from "../dist/core/index.js";
+import { startServer, registerAdapter, launchDetached, bridgeEnv, parseClaudeStreamLine } from "../dist/core/index.js";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TMP = mkdtempSync(join(tmpdir(), "ekip-e2e-"));
@@ -22,6 +22,28 @@ const PORT = await new Promise((res) => {
 });
 const BASE = `http://127.0.0.1:${PORT}`;
 const MOCK = join(REPO, "test", "mock-agent.mjs");
+const MOCK_CLAUDE = join(REPO, "test", "mock-claude.mjs");
+
+// A stand-in for the claude adapter: same stream-json decoding, but runs our
+// mock instead of the real binary (which needs a login and burns quota).
+registerAdapter({
+  id: "fakeclaude",
+  description: "test double for the claude adapter",
+  async spawn(req) {
+    return launchDetached({
+      command: process.execPath,
+      args: [MOCK_CLAUDE, req.taskId],
+      cwd: req.cwd,
+      env: bridgeEnv(req),
+      logFile: join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`),
+      label: "fake claude",
+      onExit: req.onExit,
+      onLine: (l) => { for (const ev of parseClaudeStreamLine(l)) req.onEvent?.(ev); },
+    });
+  },
+  mcpConfigSnippet: () => ({}),
+  mcpConfigLocation: () => "nowhere",
+});
 
 const config = {
   project: "e2e",
@@ -40,6 +62,7 @@ const config = {
     { name: "hang", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 30"] },
     { name: "sleeper", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 30"] },
     { name: "serial", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 0.7"], maxConcurrent: 1 },
+    { name: "talker", adapter: "fakeclaude", spawnable: true },
   ],
   maxDepth: 3,
   watchdog: { pendingTtlSeconds: 2, claimedTtlSeconds: 3, sweepIntervalSeconds: 1 },
@@ -116,7 +139,7 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 9 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 10 && state0.hubUrl.endsWith("/mcp"));
   t("state exposes workers", Array.isArray(state0.workers?.running) && Array.isArray(state0.workers?.queued));
   t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
 
@@ -162,7 +185,10 @@ try {
   t("ui served", uiRes.status === 200 && uiHtml.includes("<!doctype html>") && uiHtml.length > 8000);
   t("ui has escaping + artifact viewer", uiHtml.includes("function esc(") && uiHtml.includes("closest('.artifact')"));
   const rootRes = await fetch(BASE + "/", { redirect: "manual" });
-  t("/ redirects to /ui", rootRes.status === 302 && rootRes.headers.get("location") === "/ui");
+  t("/ redirects to /chat", rootRes.status === 302 && rootRes.headers.get("location") === "/chat");
+  const chatRes = await fetch(`${BASE}/chat`);
+  const chatHtml = await chatRes.text();
+  t("chat served", chatRes.status === 200 && chatHtml.includes("EventSource") && chatHtml.includes("/api/thread/"));
 
   // ---- MCP surface ----
   await mcp("initialize", {
@@ -180,7 +206,7 @@ try {
     body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
   });
   const tools = (await mcp("tools/list", {})).result.tools.map((x) => x.name).sort();
-  t("9 bridge tools", tools.length === 9 && tools.includes("bridge_cancel") && tools.every((n) => n.startsWith("bridge_")), tools.join(","));
+  t("11 bridge tools", tools.length === 11 && tools.includes("bridge_cancel") && tools.includes("bridge_say") && tools.includes("bridge_thread") && tools.every((n) => n.startsWith("bridge_")), tools.join(","));
 
   const setr = await tool("bridge_context_set", { key: "e2e.mcp", value: 42, by: "e2e" });
   const getr = await tool("bridge_context_get", { key: "e2e.mcp" });
@@ -239,7 +265,8 @@ try {
     return x?.status === "failed" ? x : undefined;
   });
   t("exit-0 without claim fails fast", /worker exited \(code 0\) without claiming/.test(sinkDead?.result ?? ""), sinkDead?.result);
-  t("fail-fast beats the watchdog TTL", Date.now() - t0 < 1900, `${Date.now() - t0}ms`);
+  // The result text proves which path won: the watchdog would write "watchdog: no claim".
+  t("fail-fast beats the watchdog", !/watchdog/.test(sinkDead?.result ?? "") && Date.now() - t0 < 5000, `${Date.now() - t0}ms · ${sinkDead?.result}`);
   t("fail-fast keeps the empty-log hint", /silent exit/.test(sinkDead?.result ?? ""), sinkDead?.result);
   t("exit code recorded, pid cleared", sinkDead?.exitCode === 0 && sinkDead?.pid === undefined);
 
@@ -289,6 +316,42 @@ try {
   t("cancel of finished task is a no-op", (await tool("bridge_cancel", { task_id: sink.task.id, by: "e2e" })).cancelled.length === 0);
   t("cancel unknown id", (await tool("bridge_cancel", { task_id: "nope", by: "e2e" })).error?.includes("unknown"));
 
+  // ---- conversation: messages, bridge_say, threads, stream-json narration ----
+  const conv = await (await post("/api/delegate", { to: "talker", prompt: "tell me something", title: "conv-1" })).json();
+  const convDone = await until(async () => {
+    const x = await taskById(conv.task.id);
+    return x?.status === "done" ? x : undefined;
+  });
+  t("fake claude completes", !!convDone, convDone?.result);
+  t("usage parsed from result event", convDone?.usage?.costUsd === 0.0123 && convDone.usage.inputTokens === 1000 && convDone.usage.outputTokens === 50 && convDone.usage.turns === 3, JSON.stringify(convDone?.usage));
+  const th = await api(`/api/thread/${conv.task.id}`);
+  const kinds = th.messages.map((m) => m.kind + ":" + (m.meta?.tool || m.meta?.result || m.from));
+  t("thread narrates human → agent text → tool → result", 
+    kinds[0] === "human:human" && kinds.includes("agent:talker") && kinds.includes("tool:Bash") && kinds.some((k) => k === "agent:done") && kinds.some((k) => k.startsWith("system:")),
+    kinds.join(" | "));
+  const toolMsg = th.messages.find((m) => m.kind === "tool");
+  t("tool line summarizes the command", /^Bash\s+echo probe-ok/.test(toolMsg?.text ?? "") && toolMsg.meta.input.command === "echo probe-ok", toolMsg?.text);
+  t("non-json stdout lines are ignored", !th.messages.some((m) => /hook chatter/.test(m.text)));
+  t("stdout still lands in the log", (await (await fetch(`${BASE}/api/logs/${conv.task.id}`)).text()).includes("hook chatter"));
+
+  const say = await tool("bridge_say", { task_id: conv.task.id, from: "critic", to: "talker", text: "SCORE:93 — ship it" });
+  t("bridge_say posts to the thread", say.ok === true && say.message.threadId === conv.task.id && say.message.to === "talker");
+  t("bridge_say unknown task", (await tool("bridge_say", { task_id: "nope", from: "x", text: "y" })).error?.includes("unknown"));
+  const thr = await tool("bridge_thread", { task_id: conv.task.id });
+  t("bridge_thread reads it back", thr.thread_id === conv.task.id && thr.messages.some((m) => m.text.includes("SCORE:93")));
+
+  // a reply into the thread becomes a child task of the root
+  const reply = await (await post("/api/delegate", { to: "mock", prompt: "follow-up", title: "conv-1-reply", parent_task_id: conv.task.id })).json();
+  t("reply nests under the thread root", reply.task.parentId === conv.task.id && reply.task.depth === 2);
+  await until(async () => (await taskById(reply.task.id))?.status === "done");
+  const th2 = await api(`/api/thread/${reply.task.id}`);
+  t("child task resolves to the same thread", th2.thread === conv.task.id && th2.tasks.length === 2 && th2.messages.some((m) => m.taskId === reply.task.id && m.kind === "human"));
+  t("bad parent → 404", (await post("/api/delegate", { to: "mock", prompt: "x", parent_task_id: "nope" })).status === 404);
+  const threadsList = await api("/api/threads");
+  const head = threadsList.threads.find((x) => x.id === conv.task.id);
+  t("threads lists roots only", !!head && !threadsList.threads.some((x) => x.id === reply.task.id) && head.messages >= 8, JSON.stringify(head));
+  t("parse ignores garbage", parseClaudeStreamLine("{{not json").length === 0 && parseClaudeStreamLine('{"type":"system","subtype":"init"}').length === 0);
+
   // ---- maxConcurrent: per-agent cap queues the overflow ----
   const serial = await Promise.all(
     [1, 2, 3].map((i) => post("/api/delegate", { to: "serial", prompt: "p", title: `serial-${i}` }).then((r) => r.json())),
@@ -306,7 +369,11 @@ try {
     return mine.every((x) => x?.status === "failed") ? mine : undefined;
   }, 12000);
   t("queued tasks eventually run", !!serialDone && serialDone.every((x) => x.dispatchedAt));
-  const byCreation = (serialDone ?? []).slice().sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  // Order by what the hub said at dispatch: the launched one, then queue position 1, 2.
+  // (createdAt can tie at millisecond resolution when requests arrive together.)
+  const rank = (d) => (d.dispatch.spawned ? 0 : Number(/position (\d+)/.exec(d.dispatch.reason)?.[1] ?? 99));
+  const order = serial.slice().sort((a, b) => rank(a) - rank(b)).map((d) => d.task.id);
+  const byCreation = order.map((id) => (serialDone ?? []).find((x) => x.id === id)).filter(Boolean);
   const gaps = byCreation.slice(1).map((x, i) => Date.parse(x.dispatchedAt) - Date.parse(byCreation[i].dispatchedAt));
   t("queue is FIFO and serialized", gaps.length === 2 && gaps.every((g) => g >= 600), `gaps ${gaps.join(", ")}ms`);
 
@@ -340,7 +407,7 @@ try {
       );
     });
   const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
-  t("cli tasks lists", strip(await cli("tasks")).includes("api-mock-1"));
+  t("cli tasks lists", strip(await cli("tasks")).includes("conv-1-reply"));
   t("cli tasks filter", !strip(await cli("tasks", "failed")).includes("api-mock-1"));
   const detail = strip(await cli("task", d1.task.id.slice(0, 8)));
   t("cli task detail by prefix", detail.includes("Prompt") && detail.includes("mock done: api-mock-1"));
@@ -428,6 +495,7 @@ try {
 {
   const state = JSON.parse(readFileSync(join(TMP, ".ekip", "state.json"), "utf8"));
   t("state persisted to disk", state.tasks.length >= 8 && state.context.some((c) => c.key === "e2e.mcp"));
+  t("messages persisted to disk", Array.isArray(state.messages) && state.messages.some((m) => m.kind === "tool"));
 }
 
 const failed = results.filter((r) => !r.ok);

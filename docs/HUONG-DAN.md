@@ -21,6 +21,10 @@ một thành viên ngang hàng trong ê-kíp đó.
   quota, thiếu quyền, thiếu binary) thì task `failed` **trong vài giây**,
   kèm mã thoát và lý do moi từ log. Watchdog vẫn còn làm lưới cuối cho
   worker sống mà treo.
+- **Chat** — `http://127.0.0.1:4319/chat` là khung hội thoại kiểu Claude
+  Code: bạn gõ yêu cầu ở dưới, phía trên hiện từng agent nói gì, gọi tool
+  gì, giao việc cho ai, kết quả và chi phí. Agent "nói" bằng tool
+  `bridge_say`, đọc lại bằng `bridge_thread`. Bảng công việc cũ vẫn ở `/ui`.
 - **Cancel + giới hạn song song** — `ekip cancel <id>` dừng cả cây task và
   giết tiến trình; `maxConcurrent` (mặc định 4) xếp hàng các task thừa thay
   vì bật thêm process đốt quota.

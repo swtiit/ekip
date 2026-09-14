@@ -6,6 +6,8 @@ import type {
   Artifact,
   BridgeState,
   ContextEntry,
+  Message,
+  MessageKind,
   Task,
   TaskStatus,
 } from "../protocol/index.js";
@@ -22,6 +24,8 @@ import { isTerminal } from "../protocol/index.js";
 export class Store extends EventEmitter {
   private tasks = new Map<string, Task>();
   private context = new Map<string, ContextEntry>();
+  /** conversation lines, keyed by thread (root task) id, in arrival order */
+  private messages = new Map<string, Message[]>();
 
   constructor(private readonly filePath?: string) {
     super();
@@ -37,6 +41,7 @@ export class Store extends EventEmitter {
       const data = JSON.parse(readFileSync(path, "utf8")) as BridgeState;
       for (const t of data.tasks ?? []) this.tasks.set(t.id, t);
       for (const c of data.context ?? []) this.context.set(c.key, c);
+      for (const m of data.messages ?? []) this.threadMessages(m.threadId).push(m);
     } catch {
       // Corrupt or partial state file — start clean rather than crash.
     }
@@ -47,6 +52,7 @@ export class Store extends EventEmitter {
     const snapshot: BridgeState = {
       tasks: [...this.tasks.values()],
       context: [...this.context.values()],
+      messages: [...this.messages.values()].flat(),
     };
     try {
       mkdirSync(dirname(this.filePath), { recursive: true });
@@ -83,6 +89,61 @@ export class Store extends EventEmitter {
     return this.tasks.get(id);
   }
 
+  /** Root of the delegation tree a task belongs to (itself when it has no parent). */
+  threadOf(taskId: string): string {
+    let cur = this.tasks.get(taskId);
+    const seen = new Set<string>();
+    while (cur?.parentId && this.tasks.has(cur.parentId) && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      cur = this.tasks.get(cur.parentId);
+    }
+    return cur?.id ?? taskId;
+  }
+
+  private threadMessages(threadId: string): Message[] {
+    let list = this.messages.get(threadId);
+    if (!list) {
+      list = [];
+      this.messages.set(threadId, list);
+    }
+    return list;
+  }
+
+  addMessage(input: {
+    taskId: string;
+    from: string;
+    to?: string;
+    kind: MessageKind;
+    text: string;
+    meta?: Record<string, unknown>;
+  }): Message {
+    const message: Message = {
+      id: randomUUID(),
+      threadId: this.threadOf(input.taskId),
+      at: new Date().toISOString(),
+      ...input,
+    };
+    this.threadMessages(message.threadId).push(message);
+    this.persist();
+    this.emit("change", { kind: "message", id: message.id, threadId: message.threadId, taskId: message.taskId });
+    return message;
+  }
+
+  listMessages(threadId: string): Message[] {
+    return [...(this.messages.get(threadId) ?? [])];
+  }
+
+  /** Root tasks (thread heads), newest first, with a line count each. */
+  listThreads(): Array<{ task: Task; messages: number; lastAt: string }> {
+    return [...this.tasks.values()]
+      .filter((t) => !t.parentId || !this.tasks.has(t.parentId))
+      .map((t) => {
+        const msgs = this.messages.get(t.id) ?? [];
+        return { task: t, messages: msgs.length, lastAt: msgs[msgs.length - 1]?.at ?? t.updatedAt };
+      })
+      .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  }
+
   /** Oldest pending task addressed to `agent`, or undefined. */
   nextPending(agent: string): Task | undefined {
     return [...this.tasks.values()]
@@ -99,7 +160,7 @@ export class Store extends EventEmitter {
 
   updateTask(
     id: string,
-    patch: Partial<Pick<Task, "status" | "result" | "artifacts" | "dispatchedAt" | "pid" | "exitCode">>,
+    patch: Partial<Pick<Task, "status" | "result" | "artifacts" | "dispatchedAt" | "pid" | "exitCode" | "usage">>,
     /** `touch: false` records bookkeeping (pid, exit code) without moving `updatedAt` */
     opts: { touch?: boolean } = {},
   ): Task | undefined {
@@ -125,7 +186,11 @@ export class Store extends EventEmitter {
       if (isTerminal(task.status) && task.updatedAt < cutoff) removed.push(task);
     }
     if (removed.length === 0) return removed;
-    for (const t of removed) this.tasks.delete(t.id);
+    for (const t of removed) {
+      this.tasks.delete(t.id);
+      // A thread's transcript goes with its root task.
+      this.messages.delete(t.id);
+    }
     this.persist();
     this.emit("change", { kind: "prune", count: removed.length });
     return removed;

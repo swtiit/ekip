@@ -11,6 +11,11 @@ just the first two adapters.
   `pending → claimed → done | failed | cancelled`.
 - **Context** — a shared key/value blackboard both agents read and write. Used
   for hand-off state that isn't a discrete task (plans, decisions, file notes).
+- **Message** — one line of conversation, attached to a task and grouped
+  into a **thread** by the root of the delegation tree. Kinds: `human`
+  (typed by a person), `agent` (an agent speaking — `bridge_say`, streamed
+  assistant text, or its posted result), `tool` (a tool call the agent made),
+  `system` (hub narration: started, queued, failed, cancelled).
 - **Hub** — a single MCP server (Streamable HTTP) both agents connect to. It
   holds the task queue + blackboard and, via the **dispatcher**, launches the
   target agent's headless CLI when a task is delegated.
@@ -81,6 +86,8 @@ tasks leave the queue, and each affected task becomes `cancelled` with
 | `bridge_post_result` | Finish a task (`done`/`failed`) with a result + artifacts. |
 | `bridge_wait` | Block until a task finishes (or is cancelled) or times out. |
 | `bridge_cancel` | Cancel a task and its descendants; kills running workers. |
+| `bridge_say` | Post a note to a task's conversation (optionally addressed to a peer). |
+| `bridge_thread` | Read a task's conversation, oldest first. |
 | `bridge_task_get` | Fetch one task by id. |
 | `bridge_list_tasks` | List tasks, optionally filtered by target/status. |
 | `bridge_context_set` | Write a shared-context key. |
@@ -88,6 +95,19 @@ tasks leave the queue, and each affected task becomes `cancelled` with
 
 Also exposed: resource `bridge://context`, a read-only JSON mirror of the
 blackboard.
+
+## Conversation
+
+The hub narrates every task into its thread: the delegating prompt, the
+claim, tool calls and assistant text decoded from the worker's output
+(Claude's `stream-json`; agy's final stdout), the posted result, and any
+failure or cancellation. Agents add their own lines with `bridge_say`. The
+`/chat` page and `GET /api/thread/:taskId` render a thread; a delegation
+made with `parent_task_id` joins its parent's thread, so a follow-up from a
+human continues the same conversation.
+
+When the adapter can tell, the task also records `usage` (tokens, cost,
+duration, turns) from the worker's result event.
 
 ## Artifacts
 

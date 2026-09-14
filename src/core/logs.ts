@@ -25,7 +25,7 @@ export function spawnLogHint(projectRoot: string, agent: string, taskId: string)
   }
   if (!text.trim()) return "spawn log is empty (silent exit — often quota exhaustion)";
   const signature =
-    /^.*(session limit|rate.?limit|quota|429|resource.?exhausted|auto-denied|permission|spawn error|ENOENT).*$/im;
+    /^.*(session limit|rate.?limit|quota|429|resource.?exhausted|auto-denied|permission|spawn error|ENOENT|authenticat|OAuth|not logged in).*$/im;
   const match = text.match(signature);
   if (match) return JSON.stringify(match[0].trim().slice(0, 200));
   return undefined;

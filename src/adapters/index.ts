@@ -26,7 +26,14 @@ export interface SpawnRequest {
   command?: string;
   /** called once when the spawned process ends (or fails to start) */
   onExit?: (exit: WorkerExit) => void;
+  /** called as the worker speaks / acts, when the adapter can decode its output */
+  onEvent?: (event: WorkerEvent) => void;
 }
+
+export type WorkerEvent =
+  | { kind: "text"; text: string }
+  | { kind: "tool"; name: string; input: unknown }
+  | { kind: "usage"; usage: import("../protocol/index.js").TaskUsage; isError?: boolean };
 
 export interface WorkerExit {
   code: number | null;

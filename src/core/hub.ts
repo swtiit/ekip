@@ -57,6 +57,7 @@ export function buildHub(
         depth: (parent?.depth ?? 0) + 1,
         parentId: parent_task_id,
       });
+      store.addMessage({ taskId: task.id, from, to, kind: "agent", text: prompt, meta: { delegation: true, title } });
       const outcome = await dispatcher.dispatch(task);
       return jsonText({ task_id: task.id, status: task.status, dispatch: outcome });
     },
@@ -93,6 +94,7 @@ export function buildHub(
       }
       if (!task) return jsonText({ task: null });
       store.updateTask(task.id, { status: "claimed" });
+      store.addMessage({ taskId: task.id, from: as, kind: "system", text: `${as} started: ${task.title}` });
       return jsonText({ task: store.getTask(task.id) });
     },
   );
@@ -127,6 +129,14 @@ export function buildHub(
         status: status as TaskStatus,
         result,
         artifacts,
+      });
+      store.addMessage({
+        taskId: task_id,
+        from: existing.to,
+        to: existing.from,
+        kind: "agent",
+        text: result,
+        meta: { result: status, artifacts: artifacts?.length ?? 0 },
       });
       return jsonText({ ok: true, task: updated });
     },
@@ -200,6 +210,40 @@ export function buildHub(
       if (!store.getTask(task_id)) return jsonText({ error: `unknown task ${task_id}` });
       const cancelled = dispatcher.cancel(task_id, by, reason);
       return jsonText({ cancelled, task: store.getTask(task_id) });
+    },
+  );
+
+  server.registerTool(
+    "bridge_say",
+    {
+      title: "Say something in the task's conversation",
+      description:
+        "Post a message to the thread of a task — a progress note, a question for a peer, a decision. Everyone watching the thread (agents via bridge_task_get/thread, humans in /chat) sees it. Not a substitute for bridge_post_result.",
+      inputSchema: {
+        task_id: z.string().describe("the task you are working on (or replying about)"),
+        from: z.string().describe("your own agent name"),
+        text: z.string(),
+        to: z.string().optional().describe("peer agent name, when addressing someone specific"),
+      },
+    },
+    async ({ task_id, from, text, to }) => {
+      if (!store.getTask(task_id)) return jsonText({ error: `unknown task ${task_id}` });
+      const message = store.addMessage({ taskId: task_id, from, to, kind: "agent", text });
+      return jsonText({ ok: true, message });
+    },
+  );
+
+  server.registerTool(
+    "bridge_thread",
+    {
+      title: "Read a task's conversation",
+      description: "Everything said in the delegation tree the task belongs to, oldest first.",
+      inputSchema: { task_id: z.string(), limit: z.number().min(1).max(500).default(100) },
+    },
+    async ({ task_id, limit }) => {
+      if (!store.getTask(task_id)) return jsonText({ error: `unknown task ${task_id}` });
+      const all = store.listMessages(store.threadOf(task_id));
+      return jsonText({ thread_id: store.threadOf(task_id), messages: all.slice(-limit) });
     },
   );
 
