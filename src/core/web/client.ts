@@ -60,7 +60,7 @@ function icon(name, cls){ return '<svg class="ico' + (cls ? ' ' + cls : '') + '"
 /* ================= language ================= */
 var DICT = {
   en: {
-    chat:'Chat', board:'Board', settings:'Settings', search:'Search chats, agents, actions', newChat:'New conversation', filter:'Filter conversations',
+    chat:'Chat', board:'Board', guide:'Guide', noJob:'No job description yet — add one in Settings.', guideLink:'New here? Read the guide', settings:'Settings', search:'Search chats, agents, actions', newChat:'New conversation', filter:'Filter conversations',
     live:'Running', today:'Today', earlier:'Earlier', working:'working', queued:'queued', idle:'idle', done:'done', failed:'failed', cancelled:'stopped', pending:'queued', claimed:'working',
     stop:'Stop', message:'Message', crew:'Crew', helloT:'Put your crew to work', helloS:'Pick who gets it and say what you need. You will see what each agent says, the tools it runs, who it hands work to, and what it costs.',
     ph:'Ask the crew…  (@ to pick who)', hintEnter:'Enter to send · Shift+Enter for a new line', hintReply:'Replying in this conversation', to:'To',
@@ -91,7 +91,7 @@ var DICT = {
     t_write:'wrote {f}', t_edit:'edited {f}', t_read:'read {f}', t_run:'ran {c}', t_search:'searched {q}', t_tools:'loaded its tools', t_todo:'updated its checklist', blackboardW:'the blackboard'
   },
   vi: {
-    chat:'Trò chuyện', board:'Bảng việc', settings:'Cài đặt', search:'Tìm hội thoại, agent, thao tác', newChat:'Hội thoại mới', filter:'Lọc hội thoại',
+    chat:'Trò chuyện', board:'Bảng việc', guide:'Hướng dẫn', noJob:'Chưa có mô tả việc — thêm trong Cài đặt.', guideLink:'Lần đầu dùng? Xem hướng dẫn', settings:'Cài đặt', search:'Tìm hội thoại, agent, thao tác', newChat:'Hội thoại mới', filter:'Lọc hội thoại',
     live:'Đang chạy', today:'Hôm nay', earlier:'Trước đó', working:'đang làm', queued:'đang chờ', idle:'rảnh', done:'xong', failed:'lỗi', cancelled:'đã dừng', pending:'đang chờ', claimed:'đang làm',
     stop:'Dừng', message:'Nhắn', crew:'Ê-kíp', helloT:'Giao việc cho ê-kíp', helloS:'Chọn người nhận rồi nói bạn cần gì. Bạn sẽ thấy từng agent nói gì, chạy công cụ nào, giao việc cho ai, và tốn bao nhiêu.',
     ph:'Nhờ ê-kíp làm gì đó…  (gõ @ để chọn người)', hintEnter:'Enter để gửi · Shift+Enter xuống dòng', hintReply:'Đang trả lời trong hội thoại này', to:'Gửi',
@@ -205,11 +205,11 @@ function liveWorkForAgent(name){
 
 /* ================= router ================= */
 function go(path, push){
-  var m = /^\/(chat|board|settings)(?:\/([A-Za-z0-9-]+))?/.exec(path) || [];
+  var m = /^\/(chat|board|guide|settings)(?:\/([A-Za-z0-9-]+))?/.exec(path) || [];
   S.view = m[1] || 'chat';
   if (S.view === 'chat') { var next = m[2] || null; if (next !== S.current) { S.current = next; S.thread = null; S.notFound = false; S.sig.thread = ''; } }
   if (push !== false && location.pathname !== path) history.pushState({}, '', path);
-  ['chat', 'board', 'settings'].forEach(function(v){ $('v-' + v).classList.toggle('on', v === S.view); });
+  ['chat', 'board', 'guide', 'settings'].forEach(function(v){ $('v-' + v).classList.toggle('on', v === S.view); });
   document.querySelectorAll('nav.tabs a').forEach(function(a){ a.classList.toggle('on', a.getAttribute('data-view') === S.view); });
   if (S.view === 'settings' && !S.catalogs) loadCatalogs();
   S.sig = {};
@@ -259,6 +259,7 @@ function render(){
   badge.textContent = working; badge.classList.toggle('show', working > 0);
   if (S.view === 'chat') { renderSide(); renderStage(); renderCrew(); }
   else if (S.view === 'board') renderBoard();
+  else if (S.view === 'guide') renderGuide();
   else renderSettings();
   if (S.selectedTask) renderDrawer();
 }
@@ -362,7 +363,7 @@ function renderStage(){
     } else {
       var spawnable = S.state.agents.filter(function(a){ return a.spawnable; });
       log.innerHTML = '<div class="hello"><div class="crew-row">' + spawnable.slice(0, 6).map(function(a){ return avatar(a.name, { size:'lg' }); }).join('') + '</div>' +
-        '<h1>' + esc(T('helloT')) + '</h1><p>' + esc(T('helloS')) + '</p><div class="starters">' +
+        '<h1>' + esc(T('helloT')) + '</h1><p>' + esc(T('helloS')) + ' <a href="/guide" data-go-guide="1">' + esc(T('guideLink')) + ' →</a></p><div class="starters">' +
         [['s1', 'pencil'], ['s2', 'eye'], ['s3', 'sparkle'], ['s4', 'handoff']].map(function(s){
           return '<div class="starter" data-starter="' + s[0] + '"><div class="k">' + icon(s[1], 'sm') + esc(T(s[0] + 'k')) + '</div><div class="v">' + esc(T(s[0] + 'v')) + '</div></div>';
         }).join('') + '</div></div>';
@@ -520,6 +521,8 @@ document.addEventListener('click', function(e){
   if (cp) { var node = document.querySelector('[data-text="' + cp.getAttribute('data-copy') + '"]'); copyText(node ? node.innerText : ''); return; }
   var art = e.target.closest('[data-art]');
   if (art) { var parts = art.getAttribute('data-art').split(':'); openArtifact(parts[0], +parts[1]); return; }
+  var gl = e.target.closest('[data-go-guide]');
+  if (gl) { e.preventDefault(); go('/guide'); return; }
   var starter = e.target.closest('[data-starter]');
   if (starter) { var ta = $('text'); ta.value = T(starter.getAttribute('data-starter') + 'v'); autosize(); ta.focus(); return; }
   if (e.target.closest('#crew-toggle')) { toggleCrew(); return; }
@@ -726,6 +729,29 @@ $('bb-toggle').addEventListener('click', function(){
 });
 if (store('ekip.bb') === 'hidden') $('board-body').classList.add('no-bb');
 
+/* ================= guide ================= */
+function renderGuide(){
+  var st = S.state;
+  var sig = JSON.stringify([LANG, st.agents]);
+  if (sig === S.sig.guide) return;
+  S.sig.guide = sig;
+  var html = '<div class="gcrew">' + st.agents.map(function(a){
+    return '<div class="gmember">' + avatar(a.name, { size:'lg', live: liveWorkForAgent(a.name).length > 0 }) +
+      '<div class="gm-body"><div class="gm-top"><b>' + esc(dn(a.name)) + '</b><span class="handle">@' + esc(a.name) + '</span></div>' +
+      '<p>' + esc(a.description || T('noJob')) + '</p>' +
+      '<div class="gm-meta"><span class="chip">' + esc(shortModel(a.model) || a.adapter) + '</span>' + (a.effort ? '<span class="chip">' + esc(a.effort) + '</span>' : '') + (a.spawnable ? '' : '<span class="chip">' + esc(T('autoOff')) + '</span>') + '</div></div></div>';
+  }).join('') + '</div>';
+  document.querySelectorAll('.guide-crew').forEach(function(el){ el.innerHTML = html; });
+}
+$('guide-root').addEventListener('click', function(e){
+  var anchor = e.target.closest('[data-anchor]');
+  if (anchor) { e.preventDefault(); var target = document.getElementById(anchor.getAttribute('data-anchor')); if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  var goLink = e.target.closest('[data-go]');
+  if (goLink) { e.preventDefault(); go(goLink.getAttribute('data-go')); return; }
+  var cp = e.target.closest('[data-copy-text]');
+  if (cp) copyText(cp.getAttribute('data-copy-text'));
+});
+
 /* ================= drawer ================= */
 function openDrawer(){ renderDrawer(); $('scrim').classList.add('on'); $('drawer').classList.add('on'); }
 function closeDrawer(){ S.selectedTask = null; $('scrim').classList.remove('on'); $('drawer').classList.remove('on'); S.sig.board = ''; if (S.view === 'board') renderBoard(); }
@@ -909,6 +935,7 @@ function buildPalette(q){
   var items = [];
   items.push({ g:T('goTo'), icon:'chat', label:T('chat'), run:function(){ go('/chat'); } });
   items.push({ g:T('goTo'), icon:'board', label:T('board'), run:function(){ go('/board'); } });
+  items.push({ g:T('goTo'), icon:'note', label:T('guide'), run:function(){ go('/guide'); } });
   items.push({ g:T('goTo'), icon:'settings', label:T('settings'), run:function(){ go('/settings'); } });
   items.push({ g:T('actions'), icon:'plus', label:T('newChat'), run:function(){ go('/chat'); setTimeout(function(){ $('text').focus(); }, 40); } });
   items.push({ g:T('actions'), icon:'board', label:T('newTask'), run:function(){ go('/board'); setTimeout(openModal, 60); } });

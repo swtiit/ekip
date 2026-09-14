@@ -411,6 +411,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return;
         case "GET /chat":
         case "GET /board":
+        case "GET /guide":
         case "GET /settings":
           return sendText(res, 200, appHtml(), "text/html");
         case "GET /api/threads":

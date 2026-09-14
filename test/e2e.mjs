@@ -250,6 +250,15 @@ try {
     t("client speaks Vietnamese and English", js.includes("Giao việc cho ê-kíp") && js.includes("Put your crew to work"));
   }
   t("same app at /settings", (await (await fetch(`${BASE}/settings`)).text()) === appHtml);
+  t("same app at /guide", (await (await fetch(`${BASE}/guide`)).text()) === appHtml);
+  t("guide ships both languages", appHtml.includes('data-lang="vi"') && appHtml.includes('data-lang="en"') && appHtml.includes("Làm việc với ê-kíp agent"));
+  t("guide has its five diagrams per language", (appHtml.match(/<svg class="dg"/g) ?? []).length === 10);
+  t("guide diagrams are labelled for screen readers", (appHtml.match(/<svg class="dg"[^>]*role="img"[^>]*aria-label=/g) ?? []).length === 10);
+  {
+    const ids = [...appHtml.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+    const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+    t("page has no duplicate ids", dupes.length === 0, [...new Set(dupes)].join(", "));
+  }
   t("deep link serves the app", (await (await fetch(`${BASE}/chat/${d1.task.id}`)).text()) === appHtml);
   const uiRedirect = await fetch(`${BASE}/ui`, { redirect: "manual" });
   t("/ui redirects to /board", uiRedirect.status === 302 && uiRedirect.headers.get("location") === "/board");

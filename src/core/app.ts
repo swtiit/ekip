@@ -23,6 +23,7 @@
  */
 import { CLIENT } from "./web/client.js";
 import { STYLES } from "./web/styles.js";
+import { guideHtml } from "./web/guide.js";
 
 export function appHtml(): string {
   return `<!doctype html>
@@ -40,6 +41,7 @@ export function appHtml(): string {
   <nav class="tabs">
     <a href="/chat" data-view="chat"><svg class="ico sm" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span data-t="chat">Chat</span></a>
     <a href="/board" data-view="board"><svg class="ico sm" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg><span data-t="board">Board</span><span class="count" id="board-count"></span></a>
+    <a href="/guide" data-view="guide"><svg class="ico sm" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8 7h8M8 11h6"/></svg><span data-t="guide">Guide</span></a>
     <a href="/settings" data-view="settings"><svg class="ico sm" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span data-t="settings">Settings</span></a>
   </nav>
   <div class="right">
@@ -110,6 +112,11 @@ export function appHtml(): string {
         </aside>
       </div>
     </div>
+  </section>
+
+  <!-- ============ GUIDE ============ -->
+  <section class="view" id="v-guide">
+    <div class="guide" id="guide-root">${guideHtml()}</div>
   </section>
 
   <!-- ============ SETTINGS ============ -->
