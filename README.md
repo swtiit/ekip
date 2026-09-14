@@ -9,7 +9,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 — droppable into any project.
 
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
-![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
+![node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 ![tests](https://img.shields.io/badge/e2e_tests-234_cases-brightgreen)
 
@@ -368,7 +368,7 @@ folder guard, access control and tokens, flows (gate retry, round caps, cancel),
 exit, watchdog reaping (and worker kill), cancellation with process-tree
 kill and cascade, `maxConcurrent` queueing, retention pruning, loop-guard,
 concurrency (parallel claims), crash-safety (missing binaries), and the CLI
-as a subprocess. The same suite runs in CI on Linux and macOS, Node 20 and 22.
+as a subprocess. The same suite runs in CI on Linux and macOS with Node 22 and 24, plus Node 26 on Linux.
 
 `npm run soak` is the stability harness: rounds of mixed work (healthy, slow,
 crashing, missing-binary and hanging workers) fired in bursts, cancels
