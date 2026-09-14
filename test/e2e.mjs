@@ -63,6 +63,7 @@ const config = {
     { name: "sleeper", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 30"] },
     { name: "serial", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 0.7"], maxConcurrent: 1 },
     { name: "talker", adapter: "fakeclaude", spawnable: true },
+    { name: "echoer", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'printf "%s" "$0" > prompt.txt'] },
     { name: "noisy", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'echo "Error: invalid --model \"X\": model X is not recognized" >&2; exit 1'] },
     { name: "linger", adapter: "command", spawnable: true, command: process.execPath, args: [join(REPO, "test", "mock-linger.mjs"), "{taskId}"], maxConcurrent: 1 },
   ],
@@ -141,7 +142,7 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 12 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 13 && state0.hubUrl.endsWith("/mcp"));
   t("state exposes workers", Array.isArray(state0.workers?.running) && Array.isArray(state0.workers?.queued));
   t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
 
@@ -163,6 +164,24 @@ try {
   const cc = claudeCatalog();
   t("claude catalog always offers the aliases", ["fable", "opus", "sonnet", "haiku"].every((a) => cc.models.some((m) => m.value === a)));
   t("claude catalog explains itself", /no list-models command/.test(cc.note ?? ""));
+
+  // language: agents are told to write in it, and it persists
+  const langSet = await (await post("/api/config/hub", { language: "Vietnamese" })).json();
+  t("hub language set", langSet.language === "Vietnamese");
+  t("language persisted", JSON.parse(readFileSync(join(TMP, "ekip.config.json"), "utf8")).language === "Vietnamese");
+  t("language reported in limits", (await api("/api/limits")).language === "Vietnamese");
+  t("language rejects non-strings", (await post("/api/config/hub", { language: 42 })).status === 400);
+  {
+    // The instruction must actually reach the spawned worker's prompt: the
+    // echoer agent writes the prompt it was handed to a file.
+    const probe = await (await post("/api/delegate", { to: "echoer", prompt: "p", title: "lang-probe" })).json();
+    await until(async () => existsSync(join(TMP, "prompt.txt")));
+    const promptSeen = existsSync(join(TMP, "prompt.txt")) ? readFileSync(join(TMP, "prompt.txt"), "utf8") : "";
+    t("worker prompt carries the language instruction", /Write in Vietnamese/.test(promptSeen), promptSeen.slice(0, 120));
+    t("worker prompt still carries the task", /lang-probe|p$/m.test(promptSeen));
+  }
+  const langOff = await (await post("/api/config/hub", { language: "" })).json();
+  t("language can be cleared", langOff.language === null && !("language" in JSON.parse(readFileSync(join(TMP, "ekip.config.json"), "utf8"))));
 
   const limits = await api("/api/limits");
   t("limits endpoint", limits.maxDepth === 3 && limits.watchdog.pendingTtlSeconds === 2 && typeof limits.maxConcurrent === "number");

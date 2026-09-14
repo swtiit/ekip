@@ -24,7 +24,8 @@
     "typecheck": "tsc --noEmit",
     "serve": "node dist/cli/index.js serve",
     "test": "node test/e2e.mjs",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "soak": "node test/soak.mjs"
   },
   "keywords": [
     "mcp",

@@ -291,6 +291,34 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     sendJson(res, 200, { agent: describeAgent(agent) });
   }
 
+  /** Hub-wide settings the UI can change: language for now. */
+  async function handleConfigHub(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    if ("language" in body) {
+      if (typeof body.language !== "string") {
+        sendJson(res, 400, { error: "`language` must be a string (empty to unset)" });
+        return;
+      }
+      const value = body.language.trim();
+      if (value.length > 40) {
+        sendJson(res, 400, { error: "`language` is too long" });
+        return;
+      }
+      config.language = value || undefined;
+      try {
+        const path = join(config.projectRoot, CONFIG_FILENAME);
+        const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+        if (value) raw.language = value;
+        else delete raw.language;
+        writeFileSync(path, JSON.stringify(raw, null, 2) + "\n");
+      } catch {
+        // In-memory setting still applies; a missing file shouldn't 500.
+      }
+      store.emit("change", { kind: "config", hub: true });
+    }
+    sendJson(res, 200, { language: config.language ?? null });
+  }
+
   const describeAgent = (a: BridgeConfig["agents"][number]) => ({
     name: a.name,
     adapter: a.adapter,
@@ -382,8 +410,11 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return handleEvents(req, res);
         case "GET /api/models":
           return handleModels(res);
+        case "POST /api/config/hub":
+          return handleConfigHub(req, res);
         case "GET /api/limits":
           return sendJson(res, 200, {
+            language: config.language ?? null,
             maxConcurrent: config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT,
             maxDepth: config.maxDepth ?? 6,
             watchdog: { ...WATCHDOG_DEFAULTS, ...config.watchdog },

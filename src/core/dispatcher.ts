@@ -87,6 +87,11 @@ export class Dispatcher {
       `2. Carry out the task in this repository.`,
       `3. When finished, call \`bridge_post_result\` with { task_id: "${task.id}", status: "done", result: "<summary>" }. Use status "failed" if you could not complete it.`,
       `You may read/write shared context with \`bridge_context_get\` / \`bridge_context_set\`, and delegate sub-tasks with \`bridge_delegate\`.`,
+      ...(this.config.language
+        ? [
+            `Write in ${this.config.language}: everything you say, every bridge_say note, and your bridge_post_result summary. Code, file names, commands and identifiers stay as they are.`,
+          ]
+        : []),
       `Talk as you go: \`bridge_say\` posts a short note (a finding, a question for a peer, a decision) to this task's conversation, and \`bridge_thread\` reads what others said. Keep notes brief; the final answer still goes through bridge_post_result.`,
       ``,
       `Task (id ${task.id}): ${task.title}`,

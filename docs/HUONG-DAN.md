@@ -28,6 +28,9 @@ một thành viên ngang hàng trong ê-kíp đó.
   (chọn model/effort/số việc song song cho từng agent; danh sách model của
   agy đọc trực tiếp từ `agy models`). Agent "nói" bằng `bridge_say`, đọc lại
   bằng `bridge_thread`.
+- **Tiếng Việt** — đặt `"language": "Vietnamese"` trong `ekip.config.json`
+  (hoặc chọn trong Settings) là mọi agent sẽ viết ghi chú, bàn giao và kết
+  quả bằng tiếng Việt; code, tên file, câu lệnh giữ nguyên.
 - **Cancel + giới hạn song song** — `ekip cancel <id>` dừng cả cây task và
   giết tiến trình; `maxConcurrent` (mặc định 4) xếp hàng các task thừa thay
   vì bật thêm process đốt quota.

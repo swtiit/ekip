@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-99_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-121_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -115,7 +115,7 @@ The hub serves one web app at `http://127.0.0.1:4319` with three views:
 
 | View | What you get |
 | --- | --- |
-| **Chat** `/chat` | A transcript per conversation, Claude Code style: your ask, each agent's words as it works (decoded live from `claude -p`'s stream), its tool calls (click to expand), hand-offs between agents, results with model/token/cost, and a composer to talk to the crew or reply into a running thread |
+| **Chat** `/chat` | A transcript per conversation, in the shape a coding-agent transcript has taught people to read: one block per task, the agent's words as prose, its tool calls as one-liners you can open (`wrote greet.js`, `ran node greet.js`), and **work it hands to another agent nested underneath**, with that run's model, tokens and cost on its header. A composer at the bottom talks to the crew or replies into a running thread |
 | **Board** `/board` | Live task board (SSE), blackboard viewer/editor, per-task logs and artifacts, cancel, and a form to delegate work yourself — the human is one more peer |
 | **Settings** `/settings` | Per-agent model, effort, parallelism and auto-spawn, with model lists read live where the vendor offers one (see below), plus the hub's current limits |
 
@@ -189,6 +189,9 @@ The examples ship a field-tested crew and flow:
   fork ten Opus runs into your quota.
 - **`retention.days`** drops finished tasks and their spawn logs after that
   many days (default 14; `0` keeps everything).
+- **`language`** (e.g. `"Vietnamese"`) tells every spawned agent to write its
+  notes, hand-offs and results in that language — code, paths and commands
+  are untouched. Settings has a picker for it.
 - `promptFile` prepends a markdown role to every spawn of that agent.
 - The **`command` adapter** plugs in any CLI with `{prompt}`, `{hubUrl}`,
   `{taskId}`, `{agent}`, `{depth}` templating — no code required.
@@ -237,7 +240,8 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 83 end-to-end cases, no LLMs involved
+npm test   # 121 end-to-end cases, no LLMs involved
+npm run soak   # stability: bursts of work, cancels, a hub restart
 ```
 
 Boots a real hub on a scratch port and exercises the HTTP API, all 11 MCP
@@ -247,6 +251,13 @@ exit, watchdog reaping (and worker kill), cancellation with process-tree
 kill and cascade, `maxConcurrent` queueing, retention pruning, loop-guard,
 concurrency (parallel claims), crash-safety (missing binaries), and the CLI
 as a subprocess. The same suite runs in CI on Linux and macOS, Node 20 and 22.
+
+`npm run soak` is the stability harness: rounds of mixed work (healthy, slow,
+crashing, missing-binary and hanging workers) fired in bursts, cancels
+mid-flight, and a hub restart — asserting that every task reaches a terminal
+state, the concurrency cap holds, state and conversations survive the
+restart, and no worker process is left behind. `SOAK_ROUNDS` and `SOAK_BURST`
+turn up the pressure.
 
 ## FAQ
 

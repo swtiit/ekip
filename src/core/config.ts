@@ -61,6 +61,11 @@ export interface BridgeConfig {
   projectRoot: string;
   agents: AgentConfig[];
   maxDepth?: number;
+  /**
+   * Language agents should speak in — appended to every bootstrap prompt, e.g.
+   * "Vietnamese". Affects what they say and write, not the code they produce.
+   */
+  language?: string;
   /** hub-wide cap on simultaneously running workers (default 4); extra tasks queue */
   maxConcurrent?: number;
   watchdog?: WatchdogConfig;
