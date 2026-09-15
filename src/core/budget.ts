@@ -13,7 +13,9 @@ import type { Store } from "./store.js";
  *
  * Runs and time are enforced before anything starts (and time also stops
  * work in flight); output tokens are only known once a run reports, so a
- * token budget stops the *next* run, not the one that crossed it.
+ * token budget stops the *next* run, not the one that crossed it. Minutes
+ * count from the first run launched for the request, not from when it was
+ * made, so time spent queued or waiting for a person is free.
  */
 
 export const BUDGET_DEFAULTS: Required<TaskBudget> = { runs: 20, outputTokens: 0, minutes: 120 };
@@ -86,19 +88,23 @@ export function budgetLimit(config: BridgeConfig, root: Task): Required<TaskBudg
 
 export function budgetUsage(store: Store, rootId: string, extraRuns = 0): BudgetUsage {
   const scope = budgetScope(store, rootId);
-  const root = store.getTask(rootId);
   let runs = extraRuns;
   let outputTokens = 0;
-  let end = root ? Date.parse(root.createdAt) : Date.now();
+  let end = 0;
+  // The clock starts when work first launches: waiting in a queue, or for a
+  // person or polling agent to pick the task up, doesn't spend the budget.
+  let start = Number.POSITIVE_INFINITY;
   let live = false;
   for (const t of scope) {
-    if (t.dispatchedAt) runs++;
+    if (t.dispatchedAt) {
+      runs++;
+      start = Math.min(start, Date.parse(t.dispatchedAt));
+    }
     outputTokens += t.usage?.outputTokens ?? 0;
     if (!TERMINAL.has(t.status)) live = true;
     end = Math.max(end, Date.parse(t.updatedAt));
   }
-  const start = root ? Date.parse(root.createdAt) : Date.now();
-  const minutes = ((live ? Date.now() : end) - start) / 60_000;
+  const minutes = Number.isFinite(start) ? Math.max(0, (live ? Date.now() : end) - start) / 60_000 : 0;
   return { runs, outputTokens, minutes };
 }
 

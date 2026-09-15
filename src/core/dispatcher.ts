@@ -12,6 +12,7 @@ import { spawnLogHint, spawnLogPath } from "./logs.js";
 import { recordSeenModel } from "./models.js";
 import type { Store } from "./store.js";
 import { budgetLimit, budgetRoot, budgetScope, budgetUsage, checkBudget, describeBreach } from "./budget.js";
+import { hubWords } from "./words.js";
 
 export interface DispatchOutcome {
   spawned: boolean;
@@ -189,8 +190,9 @@ export class Dispatcher {
 
   /** Reject outright: the task can never run, so say so on the task itself. */
   private refuse(task: Task, reason: string, meta?: Record<string, unknown>): DispatchOutcome {
-    this.store.updateTask(task.id, { status: "failed", result: `dispatch refused: ${reason}` });
-    this.store.addMessage({ taskId: task.id, from: "hub", kind: "system", text: `dispatch refused: ${reason}`, meta });
+    const text = this.words().refused(reason);
+    this.store.updateTask(task.id, { status: "failed", result: text });
+    this.store.addMessage({ taskId: task.id, from: "hub", kind: "system", text, meta: { refused: true, ...meta } });
     return { spawned: false, reason };
   }
 
@@ -214,7 +216,7 @@ export class Dispatcher {
             taskId,
             from: "hub",
             kind: "system",
-            text: `blocked outside the folder: ${event.name} → ${verdict.path}`,
+            text: this.words().blockedOutside(event.name, verdict.path ?? ""),
             meta: { guard: true, path: verdict.path, folder },
           });
         }
@@ -240,10 +242,16 @@ export class Dispatcher {
     return this.slotBlocker(agent, task) === undefined;
   }
 
+  /** The hub's sentences, in its reporting language (read live: Settings can change it). */
+  private words() {
+    return hubWords(this.config.language);
+  }
+
   /** Why this task can't start yet, or undefined when it can. */
-  private slotBlocker(agent: AgentConfig, task: Task): string | undefined {
+  private slotBlocker(agent: AgentConfig, task: Task): { reason: string; editor?: boolean } | undefined {
+    const w = this.words();
     const total = this.config.maxConcurrentTotal ?? DEFAULT_MAX_CONCURRENT_TOTAL;
-    if (this.running.size >= total) return `${this.running.size} worker(s) running across all folders`;
+    if (this.running.size >= total) return { reason: w.blockAllFolders(this.running.size) };
     const folder = this.folderOf(task);
     let inFolder = 0;
     let agentInFolder = 0;
@@ -254,11 +262,11 @@ export class Dispatcher {
       if (w.agent === agent.name) agentInFolder++;
       if (w.writer) writers.push(w.agent);
     }
-    if (inFolder >= (this.config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT)) return `${inFolder} worker(s) running in this folder`;
-    if (agent.maxConcurrent !== undefined && agentInFolder >= agent.maxConcurrent) return `${agentInFolder} ${agent.name} run(s) already going`;
+    if (inFolder >= (this.config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT)) return { reason: w.blockFolder(inFolder) };
+    if (agent.maxConcurrent !== undefined && agentInFolder >= agent.maxConcurrent) return { reason: w.blockAgent(agentInFolder, agent.name) };
     const writerCap = this.config.writersPerFolder ?? 1;
     if (writerCap > 0 && isWriter(agent) && writers.length >= writerCap) {
-      return `another agent is editing this folder (${writers.join(", ")})`;
+      return { reason: w.blockEditor(writers.join(", ")), editor: true };
     }
     return undefined;
   }
@@ -266,7 +274,7 @@ export class Dispatcher {
   async dispatch(task: Task): Promise<DispatchOutcome> {
     const maxDepth = this.config.maxDepth ?? DEFAULT_MAX_DEPTH;
     if (task.depth > maxDepth) {
-      return this.refuse(task, `max delegation depth ${maxDepth} exceeded (loop guard)`);
+      return this.refuse(task, this.words().depthExceeded(maxDepth));
     }
 
     const root = budgetRoot(this.store, task.id);
@@ -277,7 +285,7 @@ export class Dispatcher {
     }
 
     const agent = this.config.agents.find((a) => a.name === task.to);
-    if (!agent) return this.refuse(task, `unknown agent "${task.to}"`);
+    if (!agent) return this.refuse(task, this.words().unknownAgent(task.to));
     if (agent.spawnable === false) {
       return {
         spawned: false,
@@ -295,13 +303,13 @@ export class Dispatcher {
         taskId: task.id,
         from: "hub",
         kind: "system",
-        text: `queued for ${agent.name}: ${blocker} (position ${this.queue.length})`,
-        meta: { queued: true, writerWait: blocker.startsWith("another agent is editing") },
+        text: this.words().queued(agent.name, blocker.reason, this.queue.length),
+        meta: { queued: true, writerWait: blocker.editor === true },
       });
       return {
         spawned: false,
         queued: true,
-        reason: `queued: ${blocker} (position ${this.queue.length})`,
+        reason: `queued: ${blocker.reason} (position ${this.queue.length})`,
       };
     }
     return this.launch(task, agent);
@@ -313,7 +321,7 @@ export class Dispatcher {
     } catch (err) {
       // e.g. the log folder can't be created, or the process table / fd limit is full.
       // Fail the task with the reason instead of leaving it pending with nobody coming.
-      return this.refuse(task, `could not start the worker: ${(err as Error).message}`);
+      return this.refuse(task, this.words().couldNotStart((err as Error).message));
     }
   }
 
@@ -381,15 +389,14 @@ export class Dispatcher {
         return;
       }
       {
+        const w = this.words();
         const how = exit.error
-          ? `worker failed to start: ${exit.error}`
-          : `worker exited (${exit.signal ? `signal ${exit.signal}` : `code ${exit.code}`}) ${
-              task.status === "pending" ? "without claiming the task" : "before posting a result"
-            }`;
+          ? w.failedToStart(exit.error)
+          : w.exited(exit.signal ? w.signal(exit.signal) : w.code(exit.code), task.status !== "pending");
         const hint = spawnLogHint(this.config.projectRoot, agent, taskId);
         patch.status = "failed";
-        patch.result = `${how}${hint ? ` — spawn log hints: ${hint}` : ""}`;
-        this.store.addMessage({ taskId, from: "hub", kind: "system", text: patch.result });
+        patch.result = `${how}${hint ? w.hints(hint) : ""}`;
+        this.store.addMessage({ taskId, from: "hub", kind: "system", text: patch.result, meta: { workerExit: true } });
       }
       this.store.updateTask(taskId, patch);
     };
@@ -474,7 +481,7 @@ export class Dispatcher {
    * with the reason, so nothing keeps editing files with nobody to report to.
    * Queued tasks stay pending — the next hub launches them.
    */
-  shutdown(reason = "the hub stopped while this was running"): string[] {
+  shutdown(reason = this.words().hubStopped): string[] {
     const stopped: string[] = [];
     for (const [taskId, worker] of [...this.running, ...this.lingering]) {
       killTree(worker.pid);
@@ -525,9 +532,9 @@ export class Dispatcher {
         killTree(worker.pid);
       }
       this.runKeys.delete(id);
-      const result = `cancelled by ${by}${reason ? `: ${reason}` : ""}`;
+      const result = this.words().cancelledBy(by, reason);
       this.store.updateTask(id, { status: "cancelled", result, pid: undefined });
-      this.store.addMessage({ taskId: id, from: by, kind: "system", text: `${task.title}: ${result}` });
+      this.store.addMessage({ taskId: id, from: by, kind: "system", text: `${task.title}: ${result}`, meta: { cancelled: true } });
       cancelled.push(id);
     };
     visit(taskId);

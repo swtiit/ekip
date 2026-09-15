@@ -88,7 +88,8 @@ A **request** is a task a person made (`from: "human"`), a flow root, or a
 task with no parent. Every task below it spends from its budget, except a
 nested request (a person's follow-up starts its own). The budget counts
 worker **runs** launched, **output tokens** reported, and **minutes** since the
-request was made; limits come from the request's `budget`, then the hub's
+first run for the request was launched (time queued, or waiting for a person
+or a polling agent, is not counted); limits come from the request's `budget`, then the hub's
 `budget`, then the defaults (20 runs, no token cap, 120 minutes), and `0`
 means no limit.
 
@@ -237,3 +238,32 @@ are the routing addresses.
 Every task has a `depth`; delegating from within a task increments it. The
 dispatcher refuses to spawn past `maxDepth` (default 6), so a delegate-back
 cycle terminates instead of forking agents forever.
+
+## HTTP API
+
+Every `/api/*` route and `/mcp` follow the access rules above. Bodies are JSON.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /health` | Liveness; says only `{ ok, auth }` without a valid token on a token hub |
+| `POST /api/login` | `{ token }` → sets the `ekip_token` cookie |
+| `GET /api/state` | Tasks, agents, blackboard, workers |
+| `GET /api/events` | Server-sent change events |
+| `GET /api/threads` | Conversations with counts and folder |
+| `GET /api/thread/:taskId` | One conversation: tasks, messages, `budgets` |
+| `POST /api/threads/delete` | `{ id, stop? }` delete a conversation (409 while running unless `stop`) |
+| `POST /api/delegate` | `{ to, prompt, title?, from?, parent_task_id?, cwd?, budget? }` |
+| `POST /api/cancel` | `{ task_id, by?, reason? }` cancel a task and its descendants |
+| `POST /api/context` | `{ key, value, by?, folder? }` write the blackboard |
+| `GET /api/logs/:taskId` | Last 32 KB of a run's spawn log |
+| `GET /api/flows` · `POST /api/flows/run` | List flows (with problems) · `{ flow, input, cwd?, from? }` start one |
+| `GET /api/folders` · `POST /api/folders` | Recent folders · remember one |
+| `GET /api/browse?path=` | Sub-folders of a folder, for the folder picker |
+| `GET /api/models` | Model lists per adapter |
+| `GET /api/limits` | Effective limits: concurrency, guard, budget, watchdog, retention, language |
+| `GET /api/billing` | How `claude` bills: subscription or API key |
+| `GET /api/role/:agent` | A member's role file |
+| `POST /api/config/agent` | Edit a member (label, description, model, effort, parallelism, auto-launch) |
+| `POST /api/config/hub` | `{ language?, budget? }` hub settings |
+| `GET /chat`, `/board`, `/guide`, `/settings` | The web app (`/ui` redirects to `/board`) |
+

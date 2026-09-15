@@ -299,11 +299,15 @@ async function cmdContext(): Promise<void> {
     } catch {
       // keep as plain string
     }
-    await fetch(`${base}/api/context`, {
+    const res = await fetch(`${base}/api/context`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(true),
       body: JSON.stringify({ key, value, by: "human" }),
     });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      throw new Error(`could not set ${key}: ${body.error ?? res.status}`);
+    }
     console.log(`${C.green}set${C.reset} ${key}`);
     return;
   }
@@ -325,13 +329,9 @@ function cmdInitGlobal(): void {
   const config = loadConfig(cwd);
   const dir = globalDir();
   mkdirSync(join(dir, "roles"), { recursive: true });
-  const defaults = {
-    host: config.host,
-    port: config.port,
-    agents: config.agents,
-    maxDepth: config.maxDepth,
-    watchdog: config.watchdog,
-  };
+  // Everything a new project should inherit — not this project's identity,
+  // and never the token (a secret belongs to one hub, not to every project).
+  const { project: _project, projectRoot: _root, token: _token, ...defaults } = config;
   writeFileSync(join(dir, "config.json"), JSON.stringify(defaults, null, 2) + "\n");
   let copied = 0;
   const rolesDir = resolve(cwd, ".ekip", "roles");
@@ -411,7 +411,7 @@ async function cmdServe(): Promise<void> {
   const hub = await startServer(config);
   const url = hubUrl(config);
   console.log(`ekip serving "${config.project}" at ${url}`);
-  console.log(`Web app:   ${url.replace(/\/mcp$/, "/chat")}  (Chat · Board · Settings)`);
+  console.log(`Web app:   ${url.replace(/\/mcp$/, "/chat")}  (Chat · Board · Guide · Settings)`);
   console.log(`Agents: ${config.agents.map((a) => a.name).join(", ")}`);
   console.log("Press Ctrl+C to stop.");
   const shutdown = async () => {

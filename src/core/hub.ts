@@ -195,7 +195,8 @@ export function buildHub(
     "bridge_post_result",
     {
       title: "Report the result of a task",
-      description: "Marks a task done or failed and stores its result/artifacts.",
+      description:
+        "Marks a task done or failed and stores its result/artifacts. Only the run that claimed the task can report it, and a reported result is final.",
       inputSchema: {
         task_id: z.string(),
         status: z.enum(["done", "failed"]).default("done"),
@@ -258,7 +259,7 @@ export function buildHub(
     {
       title: "Wait for a task to finish",
       description:
-        "Polls until the task is done/failed or the timeout elapses. Returns the final task state.",
+        "Waits until the task is done, failed or cancelled, or the timeout elapses. Returns the task's state at that point.",
       inputSchema: {
         task_id: z.string(),
         timeout_seconds: z.number().min(1).max(600).default(120),
@@ -286,6 +287,7 @@ export function buildHub(
     "bridge_task_get",
     {
       title: "Get a task by id",
+      description: "Returns one task — status, result, artifacts, usage — or null if the id is unknown.",
       inputSchema: { task_id: z.string() },
     },
     async ({ task_id }) => jsonText({ task: store.getTask(task_id) ?? null }),

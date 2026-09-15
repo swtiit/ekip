@@ -106,6 +106,13 @@ export interface BridgeConfig {
    * access outside it.
    */
   folderGuard?: boolean;
+  /**
+   * MCP sessions the hub keeps (each agent run opens one): at most `max`
+   * (default 256; the least recently used is closed to make room), and a
+   * session silent for `idleMinutes` (default 30) is closed. A closed
+   * session's client gets 404 and simply opens a new one.
+   */
+  mcpSessions?: { max?: number; idleMinutes?: number };
   /** how many file-editing agents may run in one folder at once (default 1; 0 = no limit) */
   writersPerFolder?: number;
   /**

@@ -32,6 +32,7 @@ import { Store } from "./store.js";
 import { appHtml } from "./app.js";
 import { Watchdog } from "./watchdog.js";
 import { BUDGET_DEFAULTS, budgetReport, parseBudget, startsRequest } from "./budget.js";
+import { isVietnamese } from "./words.js";
 
 export interface RunningHub {
   store: Store;
@@ -124,12 +125,30 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   budgetTimer.unref();
 
   const transports: Record<string, StreamableHTTPServerTransport> = {};
+  // When each session was last used, so abandoned ones can be closed.
+  const lastSeen = new Map<string, number>();
+  const maxSessions = Math.max(1, config.mcpSessions?.max ?? 256);
+  const idleMs = Math.max(1, config.mcpSessions?.idleMinutes ?? 30) * 60_000;
+  const MAX_EVENT_STREAMS = 64;
+  const closeSession = (sid: string): void => {
+    const t = transports[sid];
+    lastSeen.delete(sid);
+    if (!t) return;
+    delete transports[sid];
+    void t.close().catch(() => {});
+  };
+  const sessionSweep = setInterval(() => {
+    const now = Date.now();
+    for (const [sid, at] of lastSeen) if (now - at > idleMs) closeSession(sid);
+  }, Math.min(idleMs, 60_000));
+  sessionSweep.unref();
   const sessions: HubSessions = { claims: new Map(), live: new Set() };
   const sseClients = new Set<ServerResponse>();
 
   async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
     let transport = sessionId ? transports[sessionId] : undefined;
+    if (transport && sessionId) lastSeen.set(sessionId, Date.now());
 
     if (req.method === "POST") {
       const body = await readJsonBody(req);
@@ -152,17 +171,28 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           });
           return;
         }
+        // Make room: close the least recently used session when at the cap.
+        while (Object.keys(transports).length >= maxSessions) {
+          const oldest = [...lastSeen.entries()].sort((a, b) => a[1] - b[1])[0]?.[0] ?? Object.keys(transports)[0];
+          if (!oldest) break;
+          closeSession(oldest);
+        }
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
             transports[sid] = transport!;
+            lastSeen.set(sid, Date.now());
           },
         });
         const run = randomUUID();
         sessions.live.add(run);
-        transport.onclose = () => {
+        const opened = transport;
+        opened.onclose = () => {
           sessions.live.delete(run);
-          if (transport!.sessionId) delete transports[transport!.sessionId];
+          if (opened.sessionId) {
+            delete transports[opened.sessionId];
+            lastSeen.delete(opened.sessionId);
+          }
         };
         const runHeader = req.headers["x-ekip-run"];
         const server = buildHub(config, store, dispatcher, {
@@ -196,6 +226,14 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     };
     store.on("change", onChange);
     const ping = setInterval(() => res.write(": ping\n\n"), 25_000);
+    // Keep the number of live-update streams bounded: drop the oldest tab's stream.
+    if (sseClients.size >= MAX_EVENT_STREAMS) {
+      const oldest = sseClients.values().next().value;
+      if (oldest) {
+        sseClients.delete(oldest);
+        oldest.end();
+      }
+    }
     sseClients.add(res);
     req.on("close", () => {
       clearInterval(ping);
@@ -829,6 +867,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
             dispatcher.shutdown();
             clearInterval(pruneTimer);
             clearInterval(budgetTimer);
+            clearInterval(sessionSweep);
+            for (const sid of Object.keys(transports)) closeSession(sid);
             for (const res of sseClients) res.end();
             sseClients.clear();
             httpServer.close(() => done());
@@ -849,8 +889,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
  */
 export function recoverAfterRestart(config: BridgeConfig, store: Store): Task[] {
   const relaunch: Task[] = [];
-  const vi = /^vi|việt/i.test((config.language ?? "").trim());
-  const reason = vi
+  const reason = isVietnamese(config.language)
     ? "hub đã khởi động lại khi quy trình này đang chạy; hãy chạy lại"
     : "the hub restarted while this flow was running; run it again";
   for (const t of store.listTasks()) {

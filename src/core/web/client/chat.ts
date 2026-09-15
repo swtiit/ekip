@@ -248,19 +248,20 @@ function renderStage(){
           return;
         }
         if (m.meta && m.meta.budget) {
-          body += '<div class="notice bad budget">' + icon('alert', 'sm') + '<span>' + esc(String(m.text).replace(/^dispatch refused: /, '')) + '</span></div>';
+          body += '<div class="notice bad budget">' + icon('alert', 'sm') + '<span>' + esc(String(m.text).replace(/^(dispatch refused|không chạy được): /, '')) + '</span></div>';
           return;
         }
         if (m.meta && m.meta.flow && m.meta.steps) {
           body += '<div class="flowmap">' + m.meta.steps.map(function(st, i){ return '<span class="fs">' + avatar(st.agent, { size:'sm' }) + esc(st.title || st.id) + '</span>' + (i < m.meta.steps.length - 1 ? icon('chev', 'sm') : ''); }).join('') + '</div>';
           return;
         }
-        var bad = /fail|refused|exited|error|cancel|blocked/i.test(m.text);
+        var mm = m.meta || {};
+        var bad = !!(mm.refused || mm.workerExit || mm.cancelled || mm.hubStopped || mm.hubRestarted) || /fail|refused|exited|error|cancel|blocked/i.test(m.text);
         if (m.meta && m.meta.guard) {
           body += '<div class="notice guard">' + icon('alert', 'sm') + '<span>' + esc(T('guardBlocked')) + ' <code>' + esc(shortPath(m.meta.path)) + '</code></span></div>';
           return;
         }
-        body += '<div class="notice' + (bad ? ' bad' : /queued/i.test(m.text) ? ' warn' : '') + '">' + icon(bad ? 'alert' : 'clock', 'sm') + '<span>' + esc(m.text) + '</span></div>';
+        body += '<div class="notice' + (bad ? ' bad' : (mm.queued || /queued/i.test(m.text)) ? ' warn' : '') + '">' + icon(bad ? 'alert' : 'clock', 'sm') + '<span>' + esc(m.text) + '</span></div>';
         return;
       }
       if (m.meta && m.meta.delegation) {

@@ -2,6 +2,7 @@ import type { BridgeConfig, WatchdogConfig } from "./config.js";
 import { WATCHDOG_DEFAULTS } from "./config.js";
 import { spawnLogHint } from "./logs.js";
 import type { Store } from "./store.js";
+import { hubWords } from "./words.js";
 
 /**
  * Sweeps orphaned tasks so a dead agent can't wedge the queue forever.
@@ -48,7 +49,7 @@ export class Watchdog {
       if (task.status === "pending" && task.dispatchedAt) {
         const age = (now - Date.parse(task.dispatchedAt)) / 1000;
         if (age > cfg.pendingTtlSeconds) {
-          this.fail(task.id, task.to, `no claim within ${cfg.pendingTtlSeconds}s of delegation`);
+          this.fail(task.id, task.to, hubWords(this.config.language).noClaimWithin(cfg.pendingTtlSeconds));
         }
       } else if (task.status === "claimed") {
         // A task that handed work out is waiting, not wedged: while any of its
@@ -56,7 +57,7 @@ export class Watchdog {
         if (this.hasLiveDescendant(task.id)) continue;
         const idle = (now - Date.parse(this.lastActivity(task.id, task.updatedAt))) / 1000;
         if (idle > cfg.claimedTtlSeconds) {
-          this.fail(task.id, task.to, `claimed but no result within ${cfg.claimedTtlSeconds}s`);
+          this.fail(task.id, task.to, hubWords(this.config.language).noResultWithin(cfg.claimedTtlSeconds));
         }
       }
     }
@@ -91,9 +92,10 @@ export class Watchdog {
 
   private fail(taskId: string, agent: string, reason: string): void {
     const hint = spawnLogHint(this.config.projectRoot, agent, taskId);
+    const w = hubWords(this.config.language);
     this.store.updateTask(taskId, {
       status: "failed",
-      result: `watchdog: ${reason}${hint ? ` — spawn log hints: ${hint}` : ""}`,
+      result: `${w.watchdog(reason)}${hint ? w.hints(hint) : ""}`,
       pid: undefined,
     });
     this.onFail?.(taskId);

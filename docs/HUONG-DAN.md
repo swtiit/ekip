@@ -66,7 +66,7 @@ giao diện tiếng Việt).
 | **Trò chuyện** `/chat` | Gõ yêu cầu, bấm vào người nhận (hoặc gõ `@`) để chọn agent hay quy trình. Khung giữa hiện từng agent nói gì, dùng tool gì (viết bằng lời thường), giao việc cho ai (khối lồng bên dưới), kết quả và biên nhận (file, log). Thanh bên trái gom hội thoại **theo folder**, mỗi folder hiện 10 cái, bấm "Xem thêm" để hiện hết; xoá hội thoại bằng nút thùng rác. Bảng bên phải là ê-kíp: ai đang làm gì, bao lâu, nút Dừng và Nhắn. |
 | **Bảng việc** `/board` | Kanban theo trạng thái, lọc theo agent, tìm kiếm. Bấm thẻ để xem yêu cầu, kết quả, model, token, log. Bảng đen nằm cạnh. |
 | **Hướng dẫn** `/guide` | Sơ đồ cách hệ thống chạy, vòng đời một việc, quy trình, cách đọc chi phí. |
-| **Cài đặt** `/settings` | Ngôn ngữ báo cáo, giới hạn song song, chặn ngoài folder; từng thành viên: tên hiển thị, việc, model (danh sách lấy trực tiếp khi hãng có), effort, số việc song song, tự bật. Lưu ngay khi đổi. |
+| **Cài đặt** `/settings` | Cách Claude tính phí, ngôn ngữ báo cáo, ngân sách mỗi yêu cầu, xem các giới hạn của hub (sửa trong `ekip.config.json`); từng thành viên: tên hiển thị, việc, model (danh sách lấy trực tiếp khi hãng có), effort, số việc song song, tự bật. Lưu ngay khi đổi. |
 
 `⌘K` mở bảng lệnh: nhảy tới hội thoại, agent, quy trình, trang bất kỳ.
 
@@ -206,6 +206,23 @@ người theo việc chứ không đoán theo tên.
 - **Thứ tự ưu tiên** (được ghi rõ trong prompt của mọi run): giới hạn của hub
   (folder, độ sâu, song song) > chỉ dẫn vai > nội dung task > mặc định.
 
+Các field khác trong `ekip.config.json` (đều có mặc định):
+
+| Field | Ý nghĩa |
+|---|---|
+| `language` | Ngôn ngữ agent viết kết quả, và hub dùng cho thông báo của nó (xếp hàng, dừng, lỗi, cổng, ngân sách) |
+| `budget` | Trần mỗi yêu cầu: `{ runs: 20, outputTokens: 0, minutes: 120 }` |
+| `maxConcurrent` / `maxConcurrentTotal` | Số worker cùng lúc mỗi folder (4) / toàn hub (8) |
+| `writersPerFolder` | Số agent sửa file cùng lúc trong một folder (1) |
+| `folderGuard` | Báo và chặn thao tác ngoài folder (bật) |
+| `retention.days` | Xoá hội thoại đã xong sau N ngày (14); chỉ xoá khi cả hội thoại đều cũ |
+| `watchdog` | `pendingTtlSeconds` (600), `claimedTtlSeconds` (3600), `sweepIntervalSeconds` (30), `enabled` |
+| `mcpSessions` | `max` (256) phiên MCP, đóng phiên im lặng sau `idleMinutes` (30) |
+| `token` | Token của hub (hoặc biến môi trường `EKIP_TOKEN`) |
+| `agents[].sandbox` / `writer` / `cwd` | Sandbox hệ điều hành · có sửa file không · folder cố định |
+
+`ekip init --global` lưu mọi field trên làm chuẩn máy, trừ `token` và tên dự án.
+
 Chỉnh đội hình ở một dự án cho ưng rồi `ekip init --global` để lưu làm chuẩn
 máy (`~/.ekip/`). Mọi `ekip init` sau tự có nguyên đội hình; file của dự án
 luôn thắng chuẩn máy theo từng field.
@@ -230,7 +247,8 @@ yêu cầu** đặt trần cho mỗi tin bạn gửi (kèm mọi việc agent gi
 và mỗi lần chạy quy trình:
 
 - **Lượt chạy** (mặc định 20), **token ra** (mặc định không giới hạn),
-  **phút** (mặc định 120). Đặt 0 là không giới hạn.
+  **phút** (mặc định 120). Đặt 0 là không giới hạn. Phút chỉ tính từ khi lượt
+  chạy đầu tiên được bật, nên thời gian xếp hàng hay chờ người không bị tính.
 - Chạm trần thì hub không bật thêm lượt nào, ghi "hết ngân sách của yêu cầu
   này" vào hội thoại; hết giờ thì dừng luôn việc đang chạy. Quy trình dừng
   trước chặng không đủ ngân sách và trả kết quả gần nhất.

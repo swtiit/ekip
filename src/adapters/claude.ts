@@ -1,3 +1,6 @@
+import { randomBytes } from "node:crypto";
+import { rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GUARDED_TOOLS } from "../guard/scope.js";
@@ -36,16 +39,25 @@ export const claudeAdapter: Adapter = {
     // The run key rides along as a header too, so the claim is recognised even
     // if the model leaves `run_key` out of its bridge_claim call.
     const headers = { ...req.hubHeaders, ...(req.runKey ? { "x-ekip-run": req.runKey } : {}) };
-    const bridgeMcpConfig = JSON.stringify({
-      mcpServers: { "ekip": { type: "http", url: req.hubUrl, ...(Object.keys(headers).length ? { headers } : {}) } },
-    });
+    // The config carries secrets (the hub token, the run key), and a process's
+    // arguments are visible to every account on the machine (`ps`), so it goes
+    // in a file only you can read, removed when the run ends.
+    const mcpConfigFile = join(tmpdir(), `ekip-mcp-${req.taskId}-${randomBytes(6).toString("hex")}.json`);
+    writeFileSync(
+      mcpConfigFile,
+      JSON.stringify({
+        mcpServers: { "ekip": { type: "http", url: req.hubUrl, ...(Object.keys(headers).length ? { headers } : {}) } },
+      }),
+      { mode: 0o600 },
+    );
+    const forget = () => rmSync(mcpConfigFile, { force: true });
     const args = [
       "-p",
       req.prompt,
       "--allowedTools",
       "mcp__ekip",
       "--mcp-config",
-      bridgeMcpConfig,
+      mcpConfigFile,
       "--strict-mcp-config",
       // stream-json needs --verbose in print mode; user args come after so
       // they can override either.
@@ -72,21 +84,29 @@ export const claudeAdapter: Adapter = {
         : []),
       ...(req.extraArgs ?? []),
     ];
-    return launchDetached({
-      command: "claude",
-      args,
-      cwd: req.cwd,
-      env: bridgeEnv(req),
-      logFile,
-      confineTo: req.sandbox ? req.scope : undefined,
-      label: "claude -p",
-      onExit: req.onExit,
-      onLine: req.onEvent
-        ? (line) => {
-            for (const ev of parseClaudeStreamLine(line)) req.onEvent!(ev);
-          }
-        : undefined,
-    });
+    try {
+      return launchDetached({
+        command: "claude",
+        args,
+        cwd: req.cwd,
+        env: bridgeEnv(req),
+        logFile,
+        confineTo: req.sandbox ? req.scope : undefined,
+        label: "claude -p",
+        onExit: (exit) => {
+          forget();
+          req.onExit?.(exit);
+        },
+        onLine: req.onEvent
+          ? (line) => {
+              for (const ev of parseClaudeStreamLine(line)) req.onEvent!(ev);
+            }
+          : undefined,
+      });
+    } catch (err) {
+      forget();
+      throw err;
+    }
   },
 
   mcpConfigSnippet(hubUrl: string, opts?: { tokenEnv?: string }) {

@@ -241,16 +241,23 @@ export class Store extends EventEmitter {
    * was removed so the caller can clean up their spawn logs too.
    */
   prune(cutoff: string): Task[] {
-    const removed: Task[] = [];
+    // A conversation goes as a whole, and only once every task in it is
+    // finished and older than the cutoff — a recent follow-up keeps it all.
+    const byThread = new Map<string, Task[]>();
     for (const task of this.tasks.values()) {
-      if (isTerminal(task.status) && task.updatedAt < cutoff) removed.push(task);
+      const root = this.threadOf(task.id);
+      const family = byThread.get(root) ?? [];
+      family.push(task);
+      byThread.set(root, family);
+    }
+    const removed: Task[] = [];
+    for (const [root, family] of byThread) {
+      if (!family.every((t) => isTerminal(t.status) && t.updatedAt < cutoff)) continue;
+      removed.push(...family);
+      this.messages.delete(root);
     }
     if (removed.length === 0) return removed;
-    for (const t of removed) {
-      this.tasks.delete(t.id);
-      // A thread's transcript goes with its root task.
-      this.messages.delete(t.id);
-    }
+    for (const t of removed) this.tasks.delete(t.id);
     this.persist();
     this.emit("change", { kind: "prune", count: removed.length });
     return removed;

@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-273_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-287_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -40,7 +40,7 @@ connect them are one-way ("use agent B as a tool inside agent A") or heavy
   rate limits.
 - **Rules the hub enforces.** Flows run stage by stage inside the hub, with
   gates and capped loops — not instructions an agent may forget.
-- **npm-light.** One package, three dependencies, a web app with no bundler,
+- **npm-light.** One package, two dependencies, a web app with no bundler,
   no build steps at runtime.
 
 ```mermaid
@@ -283,17 +283,30 @@ splitting, while `code-review` is the cheaper way to make review mandatory.
 - **`budget`** caps what one *request* may spend — a message you send (with
   everything agents hand out from it), a flow run, or a top-level delegation —
   in worker **runs**, **output tokens** and **minutes** (defaults: 20 runs, no
-  token cap, 120 minutes; `0` turns a limit off). On a subscription these are
+  token cap, 120 minutes; `0` turns a limit off). Minutes count from the first
+  run launched, so time queued or waiting for a person is free. The built-in
+  flows carry their own (`code-review` 4 runs/45 min, `feature` 13/90). On a
+  subscription these are
   what drain your plan. At a limit the hub refuses the next run with the reason
   in the conversation; running out of minutes also stops work in flight.
   Tokens are known only once a run reports, so a token cap stops the *next*
   run. A person's follow-up starts a fresh budget. A flow file may carry its
   own `budget`, and `POST /api/delegate` accepts one per request. Settings
   edits the hub default; the conversation header shows used/limit.
-- **`retention.days`** drops finished tasks and their spawn logs after that
-  many days (default 14; `0` keeps everything).
+- **`retention.days`** drops finished conversations and their spawn logs after
+  that many days (default 14; `0` keeps everything). A conversation goes as a
+  whole, only when every task in it is finished and older than that — a
+  recent follow-up keeps its history.
+- **`mcpSessions`** bounds the MCP sessions the hub keeps (each run opens
+  one): `max` (default 256; the least recently used closes to make room) and
+  `idleMinutes` (default 30). A closed session's client gets 404 and opens a
+  new one.
+- **`agents[].cwd`** runs a member in a fixed folder when a conversation
+  doesn't pick one. **`watchdog`** takes `pendingTtlSeconds` (600),
+  `claimedTtlSeconds` (3600), `sweepIntervalSeconds` (30) and `enabled`.
 - **`language`** (e.g. `"Vietnamese"`) tells every spawned agent to write its
-  notes, hand-offs and results in that language — code, paths and commands
+  notes, hand-offs and results in that language, and the hub writes its own
+  notices (queued, stopped, failed, gates, budgets) in it too — code, paths and commands
   are untouched. Settings has a picker for it.
 - `promptFile` prepends a markdown role to every spawn of that agent.
 - The **`command` adapter** plugs in any CLI with `{prompt}`, `{hubUrl}`,
@@ -396,7 +409,7 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 273 end-to-end cases, no LLMs involved
+npm test   # 287 end-to-end cases, no LLMs involved
 npm run test:ui   # 17 browser checks in headless Chrome (uses the installed Chrome)
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```

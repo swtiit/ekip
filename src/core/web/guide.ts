@@ -211,14 +211,14 @@ ${crewSlot()}`),
 <figure>${pipeline(t, lang)}<figcaption>Quy trình "Tính năng lớn": kế hoạch phải qua phản biện (≥ 90 điểm) mới được code; code phải qua review (mở đầu bằng APPROVE hoặc DUYỆT) mới đến kiểm định cuối (SHIP). Mỗi vòng sửa tối đa 3 lần.</figcaption></figure>
 <ul class="facts">
 <li><b>Chạy thế nào:</b> ở hội thoại mới, bấm vào người nhận (hoặc gõ @) rồi chọn trong mục <b>Quy trình</b>; hoặc <code>ekip flow code-review "mô tả việc"</code> ở terminal.</li>
-<li><b>Có sẵn:</b> "Code rồi review" (Lập trình · Claude → Review, 2 vòng) và "Tính năng lớn" (cần đủ các vai Lên kế hoạch, Phản biện, Kiểm định). Quy trình thiếu vai sẽ bị làm mờ kèm lý do.</li>
+<li><b>Có sẵn:</b> "Code rồi review" (Lập trình · Claude → Review, 2 vòng) và "Tính năng lớn" (cần đủ các vai planner, critic, claude-coder, reviewer, auditor). Quy trình thiếu vai sẽ bị làm mờ kèm lý do.</li>
 <li><b>Tự viết:</b> thêm file JSON vào <code>.ekip/flows/</code> của dự án (hoặc <code>~/.ekip/flows/</code> cho cả máy). Mỗi chặng có <code>agent</code>, <code>prompt</code> (dùng được <code>{{input}}</code>, <code>{{feedback}}</code>, <code>{{prev.&lt;chặng&gt;}}</code>), tuỳ chọn <code>gate</code> và <code>onFail</code>.</li>
 <li><b>Khi nào dùng:</b> việc nhỏ gửi thẳng Lập trình · Claude là rẻ nhất (đo thực tế: 1 lượt chạy). Dùng quy trình khi cần review bắt buộc; Điều phối hợp với việc mơ hồ cần chia nhỏ.</li>
 </ul>`),
         sec("screens", "Dùng các trang", `
 <figure>${screenMap(t)}<figcaption>Trang Trò chuyện, các số khớp với danh sách bên dưới.</figcaption></figure>
 <ol class="legend">
-<li><b>Hội thoại</b> — nhóm theo Đang chạy, Hôm nay, Trước đó. Ô lọc tìm được cả khi gõ không dấu.</li>
+<li><b>Hội thoại</b> — gom theo folder, mỗi folder hiện 10 cái (bấm "Xem thêm" để hiện hết). Ô lọc tìm được cả khi gõ không dấu.</li>
 <li><b>Transcript</b> — yêu cầu của bạn, lời agent, và các khối việc được giao lồng bên dưới.</li>
 <li><b>Các bước làm</b> — tự mở khi agent đang làm, tự gập khi xong. Bấm từng bước để xem chi tiết.</li>
 <li><b>Kết quả</b> — thẻ xanh (hoặc đỏ nếu lỗi) kèm biên nhận: file đã đổi, log kiểm tra, nút sao chép.</li>
@@ -238,7 +238,7 @@ ${crewSlot()}`),
 <li>Mỗi lượt chạy mới phải <b>ghi cache</b> phần khởi đầu, nên việc nhỏ vẫn có giá sàn: đo thực tế khoảng 0,10–0,28 đô với Sonnet, 0,04–0,11 đô với Haiku, trên 0,5 đô với Opus.</li>
 <li>Số liệu đến <b>chậm khoảng hai phút</b> sau khi việc xong ("đang chờ số liệu…"), vì tiến trình Claude còn chạy nốt bước kết thúc.</li>
 <li><b>Không có số liệu</b> cho Gemini (Antigravity không báo token) và cho lượt bị dừng hoặc lỗi giữa chừng; tổng của hội thoại ghi rõ bao nhiêu lượt bị thiếu.</li>
-<li><b>Ngân sách mỗi yêu cầu</b> (Cài đặt): mỗi tin bạn gửi — cùng mọi việc agent giao tiếp từ nó — mỗi lần chạy quy trình, được tối đa bao nhiêu <b>lượt chạy</b>, <b>token ra</b> và <b>phút</b> (mặc định 20 lượt, 120 phút). Chạm giới hạn thì hub không bật thêm lượt nào và ghi lý do vào hội thoại; hết giờ thì dừng cả việc đang chạy. Token chỉ biết sau khi lượt chạy báo về, nên giới hạn token chặn từ lượt kế tiếp. Tin nhắn tiếp theo của bạn trong cùng hội thoại có ngân sách mới. Đầu hội thoại hiện <b>đã dùng/giới hạn</b>, chuyển màu cam khi quá 80%.</li>
+<li><b>Ngân sách mỗi yêu cầu</b> (Cài đặt): mỗi tin bạn gửi — cùng mọi việc agent giao tiếp từ nó — mỗi lần chạy quy trình, được tối đa bao nhiêu <b>lượt chạy</b>, <b>token ra</b> và <b>phút</b> (mặc định 20 lượt, 120 phút). Phút chỉ bắt đầu tính khi lượt chạy đầu tiên được bật, nên thời gian xếp hàng hay chờ người không bị tính. Chạm giới hạn thì hub không bật thêm lượt nào và ghi lý do vào hội thoại; hết giờ thì dừng cả việc đang chạy. Token chỉ biết sau khi lượt chạy báo về, nên giới hạn token chặn từ lượt kế tiếp. Tin nhắn tiếp theo của bạn trong cùng hội thoại có ngân sách mới. Đầu hội thoại hiện <b>đã dùng/giới hạn</b>, chuyển màu cam khi quá 80%.</li>
 </ul>`),
         sec("start", "Bắt đầu dự án mới", `
 <ol class="steps">
@@ -255,7 +255,7 @@ ${crewSlot()}`),
 <tr><td>Lỗi "not recognized as a known model"</td><td>Tên model đã đổi theo bản cập nhật</td><td>Chọn lại model trong Cài đặt — danh sách Gemini đọc trực tiếp</td></tr>
 <tr><td>Lỗi có "session limit", "quota", "429"</td><td>Hết quota gói</td><td>Chờ reset, hoặc giao cho vai dùng model rẻ hơn</td></tr>
 <tr><td>Gemini lỗi "auto-denied"</td><td>Thiếu quyền cho thao tác đó</td><td>Thêm quyền tương ứng trong <code>~/.gemini/config/config.json</code></td></tr>
-<tr><td>Việc nằm "đang chờ" rất lâu</td><td>Hết slot song song</td><td>Tăng "Song song" trong Cài đặt, hoặc dừng bớt việc</td></tr>
+<tr><td>Việc nằm "đang chờ" rất lâu</td><td>Hết slot song song</td><td>Dừng bớt việc; muốn chạy nhiều hơn thì tăng <code>maxConcurrent</code> trong <code>ekip.config.json</code>. Nếu lý do là "một agent khác đang sửa file" thì chỉ cần chờ agent đó xong</td></tr>
 <tr><td>Agent trả lời tiếng Anh</td><td>Chưa đặt ngôn ngữ báo cáo</td><td>Cài đặt → Ngôn ngữ báo cáo → Tiếng Việt</td></tr>
 <tr><td>Không mở được web app</td><td>Hub chưa chạy</td><td>Chạy <code>ekip serve</code> trong thư mục dự án</td></tr>
 </tbody></table></div>`),
@@ -303,14 +303,14 @@ ${crewSlot()}`),
 <figure>${pipeline(t, lang)}<figcaption>The "Big feature" flow: a plan must pass the critic (≥ 90) before any code; code must pass review (starting with APPROVE) before the final audit (SHIP). Each loop runs at most 3 times.</figcaption></figure>
 <ul class="facts">
 <li><b>Run one:</b> in a new conversation, click the recipient (or type @) and pick from <b>Flows</b>; or run <code>ekip flow code-review "what to build"</code> in a terminal.</li>
-<li><b>Built in:</b> "Code, then review" (Claude coder → reviewer, 2 rounds) and "Big feature" (needs planner, critic and auditor roles). A flow missing a role is greyed out with the reason.</li>
+<li><b>Built in:</b> "Code, then review" (Claude coder → reviewer, 2 rounds) and "Big feature" (needs the planner, critic, claude-coder, reviewer and auditor roles). A flow missing a role is greyed out with the reason.</li>
 <li><b>Write your own:</b> drop a JSON file in the project's <code>.ekip/flows/</code> (or <code>~/.ekip/flows/</code> for the whole machine). Each stage has an <code>agent</code>, a <code>prompt</code> (with <code>{{input}}</code>, <code>{{feedback}}</code>, <code>{{prev.&lt;stage&gt;}}</code>), and optionally a <code>gate</code> and <code>onFail</code>.</li>
 <li><b>When to use one:</b> a small task sent straight to the Claude coder is cheapest (measured: one run). Use a flow when review must happen; use the conductor for vague work that needs splitting up.</li>
 </ul>`),
         sec("screens", "Using the screens", `
 <figure>${screenMap(t)}<figcaption>The Chat screen; numbers match the list below.</figcaption></figure>
 <ol class="legend">
-<li><b>Conversations</b> — grouped Running, Today, Earlier. The filter matches with or without diacritics.</li>
+<li><b>Conversations</b> — grouped by folder, 10 per folder ("Show more" lists the rest). The filter matches with or without diacritics.</li>
 <li><b>Transcript</b> — your request, the agents' words, and handed-out work nested underneath.</li>
 <li><b>Steps</b> — open while an agent works, folded when done. Click a step for its details.</li>
 <li><b>Result</b> — a green (or red) card with receipts: changed files, check logs, a copy button.</li>
@@ -330,7 +330,7 @@ ${crewSlot()}`),
 <li>Every new run has to <b>write its opening context to cache</b>, so even tiny tasks have a floor: measured at roughly $0.10–0.28 on Sonnet, $0.04–0.11 on Haiku, and over $0.50 on Opus.</li>
 <li>Figures arrive <b>about two minutes after</b> the work is done ("tallying…"), because the Claude process finishes its shutdown first.</li>
 <li><b>No data</b> for Gemini (Antigravity reports no usage) or for runs that were stopped or crashed; a conversation's total says how many runs are missing.</li>
-<li><b>Budget per request</b> (Settings): each message you send — with everything agents hand out from it — and each flow run may use at most so many <b>runs</b>, <b>output tokens</b> and <b>minutes</b> (default 20 runs, 120 minutes). At a limit the hub starts nothing more for it and says why in the conversation; running out of time also stops work in flight. Tokens are only known once a run reports, so a token limit stops the next run. Your next message in the conversation gets a fresh budget. The conversation header shows <b>used/limit</b>, turning amber past 80%.</li>
+<li><b>Budget per request</b> (Settings): each message you send — with everything agents hand out from it — and each flow run may use at most so many <b>runs</b>, <b>output tokens</b> and <b>minutes</b> (default 20 runs, 120 minutes). Minutes count from the first run launched, so time spent queued or waiting for a person is free. At a limit the hub starts nothing more for it and says why in the conversation; running out of time also stops work in flight. Tokens are only known once a run reports, so a token limit stops the next run. Your next message in the conversation gets a fresh budget. The conversation header shows <b>used/limit</b>, turning amber past 80%.</li>
 </ul>`),
         sec("start", "Start a new project", `
 <ol class="steps">
@@ -347,7 +347,7 @@ ${crewSlot()}`),
 <tr><td>"not recognized as a known model"</td><td>The model name changed in an update</td><td>Pick the model again in Settings — Gemini's list is read live</td></tr>
 <tr><td>"session limit", "quota" or "429"</td><td>Your plan's quota ran out</td><td>Wait for the reset, or hand it to a role on a cheaper model</td></tr>
 <tr><td>Gemini "auto-denied"</td><td>A permission is missing</td><td>Add the grant in <code>~/.gemini/config/config.json</code></td></tr>
-<tr><td>A task sits "queued" for long</td><td>Every parallel slot is busy</td><td>Raise "Parallel" in Settings, or stop some work</td></tr>
+<tr><td>A task sits "queued" for long</td><td>Every parallel slot is busy</td><td>Stop some work, or raise <code>maxConcurrent</code> in <code>ekip.config.json</code>. If the reason is "another agent is editing this folder", it just waits for that agent</td></tr>
 <tr><td>Agents answer in the wrong language</td><td>No reporting language set</td><td>Settings → Reporting language</td></tr>
 <tr><td>The web app won't open</td><td>The hub isn't running</td><td>Run <code>ekip serve</code> in the project folder</td></tr>
 </tbody></table></div>`),

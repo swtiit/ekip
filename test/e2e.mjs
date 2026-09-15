@@ -88,6 +88,7 @@ const config = {
     { name: "boxed", adapter: "command", spawnable: true, command: "sh", sandbox: true,
       args: ["-c", 'echo in > boxed-in.txt; cat "$HOME/.ekip-e2e-none" >/dev/null 2>&1; echo leak > "$HOME/ekip-e2e-leak.txt" 2>/dev/null && echo yes > boxed-leaked.flag; true'] },
     { name: "breaks", adapter: "thrower", spawnable: true },
+    { name: "argvcheck", adapter: "claude", spawnable: true },
     { name: "parenting", adapter: "command", spawnable: true, command: process.execPath, args: [MOCK, "{taskId}", "--delegate-to=sink"] },
     { name: "linger", adapter: "command", spawnable: true, command: process.execPath, args: [join(REPO, "test", "mock-linger.mjs"), "{taskId}"], maxConcurrent: 1 },
   ],
@@ -184,7 +185,7 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 20 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 21 && state0.hubUrl.endsWith("/mcp"));
   t("state exposes workers", Array.isArray(state0.workers?.running) && Array.isArray(state0.workers?.queued));
   t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
 
@@ -606,6 +607,10 @@ try {
       t("token hub: the cookie authorises the API", (await fetch(TB + "/api/state", { headers: { Cookie: cookieHeader } })).status === 200);
       t("token hub: a malformed cookie is refused, not fatal", (await fetch(TB + "/api/state", { headers: { Cookie: "ekip_token=%" } })).status === 401);
       t("token hub: still up after a malformed cookie", (await fetch(TB + "/health")).status === 200);
+      writeFileSync(join(TROOT, "ekip.config.json"), JSON.stringify({ project: "tok", host: "127.0.0.1", port: TPORT, agents: [] }));
+      const ctxOut = await new Promise((r) => execFile(process.execPath, [join(REPO, "dist/cli/index.js"), "context", "cli.tok", "42"], { cwd: TROOT, env: { ...process.env, EKIP_TOKEN: TOKEN } }, (err, stdout, stderr) => r(`${err ? "EXIT" : ""}${stdout}${stderr}`)));
+      const ctxState = await (await fetch(TB + "/api/state", { headers: { Authorization: "Bearer " + TOKEN } })).json();
+      t("token hub: `ekip context key value` sends the token", !/EXIT/.test(ctxOut) && ctxState.context.some((c) => c.key === "cli.tok" && c.value === 42), ctxOut);
       t("token hub: login with a wrong token → 401", (await fetch(TB + "/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "nope" }) })).status === 401);
       const d = await (await fetch(TB + "/api/delegate", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + TOKEN }, body: JSON.stringify({ to: "envdump", prompt: "x" }) })).json();
       await until(async () => existsSync(join(TROOT, "token.txt")));
@@ -798,6 +803,15 @@ try {
     ),
   );
   const freshCfg = JSON.parse(readFileSync(join(FRESH, "ekip.config.json"), "utf8"));
+  {
+    const G2 = mkdtempSync(join(tmpdir(), "ekip-g2-"));
+    const P2 = mkdtempSync(join(tmpdir(), "ekip-p2-"));
+    writeFileSync(join(P2, "ekip.config.json"), JSON.stringify({ project: "p2", port: 4555, token: "do-not-share", language: "Vietnamese", budget: { runs: 9 }, retention: { days: 3 }, writersPerFolder: 2, agents: [{ name: "x", adapter: "command", command: "true" }] }));
+    await new Promise((r) => execFile(process.execPath, [join(REPO, "dist/cli/index.js"), "init", "--global"], { cwd: P2, env: { ...process.env, EKIP_HOME: G2 } }, r));
+    const saved = JSON.parse(readFileSync(join(G2, "config.json"), "utf8"));
+    t("init --global saves budget, language, retention and limits", saved.budget?.runs === 9 && saved.language === "Vietnamese" && saved.retention?.days === 3 && saved.writersPerFolder === 2 && saved.agents?.[0]?.name === "x");
+    t("init --global never saves the token or project identity", !("token" in saved) && !("project" in saved) && !("projectRoot" in saved));
+  }
   t(
     "init materializes global agents",
     freshCfg.agents?.[0]?.name === "gdefault" && freshCfg.port === 4444 && freshCfg.project !== "IGNORED",
@@ -1010,6 +1024,93 @@ try {
     t("restart: an unreadable state file is kept aside, not overwritten", aside.length === 1 && readFileSync(join(RROOT, ".ekip", aside[0]), "utf8") === "{ torn write");
     t("restart: the hub still starts on unreadable state", (await fetch(RB + "/health")).status === 200);
     await rhub.close();
+  }
+
+  // ---- policy: the minutes budget starts when work launches ----
+  const waiting = await (await post("/api/delegate", { to: "manual", prompt: "for a person", title: "waits-for-person", budget: { minutes: 0.01 } })).json();
+  await sleep(2200);
+  t("budget: waiting for a person doesn't spend minutes", (await taskById(waiting.task.id))?.status === "pending");
+
+  // ---- policy: retention removes whole conversations only ----
+  {
+    const { Store } = await import("../dist/core/store.js");
+    const st = new Store();
+    const old = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const root = st.createTask({ from: "human", to: "mock", title: "old root", prompt: "x", depth: 1 });
+    st.addMessage({ taskId: root.id, from: "human", kind: "human", text: "the original ask" });
+    st.updateTask(root.id, { status: "done" });
+    st.getTask(root.id).updatedAt = old;
+    const follow = st.createTask({ from: "human", to: "mock", title: "recent follow-up", prompt: "y", depth: 2, parentId: root.id });
+    st.updateTask(follow.id, { status: "done" });
+    const lone = st.createTask({ from: "human", to: "mock", title: "old alone", prompt: "z", depth: 1 });
+    st.updateTask(lone.id, { status: "done" });
+    st.getTask(lone.id).updatedAt = old;
+    const cutoff = new Date(Date.now() - 14 * 86_400_000).toISOString();
+    const gone = st.prune(cutoff).map((x) => x.id);
+    t("retention: a conversation with a recent follow-up keeps its root and transcript", !!st.getTask(root.id) && st.listMessages(root.id).length === 1);
+    t("retention: an old finished conversation is removed", gone.includes(lone.id) && !gone.includes(root.id));
+  }
+
+  // ---- the hub speaks the reporting language ----
+  {
+    const { hubWords } = await import("../dist/core/words.js");
+    t("hub words: English unchanged", hubWords().exited("code 0", false) === "worker exited (code 0) without claiming the task");
+    t("hub words: Vietnamese", hubWords("Vietnamese").exited("mã 0", false) === "worker đã thoát (mã 0) mà chưa nhận việc");
+    await post("/api/config/hub", { language: "Vietnamese" });
+    const vg = await (await post("/api/delegate", { to: "ghost", prompt: "x", title: "vi-ghost" })).json();
+    const vgDead = await until(async () => {
+      const x = await taskById(vg.task.id);
+      return x?.status === "failed" ? x : undefined;
+    });
+    t("hub narration follows the language setting", /^worker không khởi động được/.test(vgDead?.result ?? ""), vgDead?.result);
+    await post("/api/config/hub", { language: "" });
+  }
+
+  // ---- the real claude adapter keeps secrets out of argv ----
+  {
+    const SHIM = join(TMP, "shim");
+    mkdirSync(SHIM, { recursive: true });
+    // Stands in for the claude binary: records its arguments and the MCP config it was given.
+    writeFileSync(join(SHIM, "claude"), `#!/bin/sh
+printf '%s\\n' "$@" > argv.txt
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--mcp-config" ]; then cp "$a" mcp-config.json; stat -f %Lp "$a" > mcp-mode.txt 2>/dev/null || stat -c %a "$a" > mcp-mode.txt; echo "$a" > mcp-path.txt; fi
+  prev="$a"
+done
+`, { mode: 0o755 });
+    const savedPath = process.env.PATH;
+    process.env.PATH = `${SHIM}:${savedPath}`;
+    const ac = await (await post("/api/delegate", { to: "argvcheck", prompt: "argv probe", title: "argv" })).json();
+    await until(async () => existsSync(join(TMP, "mcp-config.json")) && existsSync(join(TMP, "mcp-mode.txt")));
+    process.env.PATH = savedPath;
+    const argv = existsSync(join(TMP, "argv.txt")) ? readFileSync(join(TMP, "argv.txt"), "utf8") : "";
+    const cfgText = existsSync(join(TMP, "mcp-config.json")) ? readFileSync(join(TMP, "mcp-config.json"), "utf8") : "{}";
+    t("claude adapter: the MCP config is a file, not an argument", /ekip-mcp-/.test(argv) && !/mcpServers/.test(argv), argv.slice(0, 200));
+    t("claude adapter: the config file carries the run key header and is private", /x-ekip-run/.test(cfgText) && readFileSync(join(TMP, "mcp-mode.txt"), "utf8").trim() === "600");
+    const cfgPath = readFileSync(join(TMP, "mcp-path.txt"), "utf8").trim();
+    await until(async () => !existsSync(cfgPath), 6000);
+    t("claude adapter: the config file is removed when the run ends", !existsSync(cfgPath));
+    await post("/api/cancel", { task_id: ac.task.id });
+  }
+
+  // ---- MCP sessions are bounded ----
+  {
+    const SROOT = mkdtempSync(join(tmpdir(), "ekip-sess-"));
+    const SPORT = await new Promise((res) => { const probe = createServer(); probe.listen(0, "127.0.0.1", () => { const p = probe.address().port; probe.close(() => res(p)); }); });
+    const SB = `http://127.0.0.1:${SPORT}`;
+    const shub = await startServer({ project: "sess", host: "127.0.0.1", port: SPORT, projectRoot: SROOT, agents: [], mcpSessions: { max: 2 } });
+    const hdr = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+    const init = async () => (await fetch(SB + "/mcp", { method: "POST", headers: hdr, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "s", version: "0" } } }) })).headers.get("mcp-session-id");
+    const list = async (sid) => (await fetch(SB + "/mcp", { method: "POST", headers: { ...hdr, "mcp-session-id": sid }, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) })).status;
+    const s1 = await init();
+    await sleep(20);
+    const s2 = await init();
+    await list(s2);
+    const s3 = await init();
+    t("sessions: past the cap the least recently used is closed", (await list(s1)) === 404 && (await list(s2)) === 200 && (await list(s3)) === 200);
+    t("sessions: the count stays at the cap", (await (await fetch(SB + "/health")).json()).sessions === 2);
+    await shub.close();
   }
 
   // ---- budgets: one request may only spend so much ----
