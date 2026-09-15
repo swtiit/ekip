@@ -46,6 +46,16 @@ terminal (`done`, `failed`, or `cancelled`), or when its timeout elapses.
 
 ## Worker tracking
 
+Stopping the hub kills the workers it launched and fails their tasks with the
+reason. On start the hub launches again tasks that were queued (pending,
+never launched, for a member it launches) and fails a flow root still running
+(its runner was in the old process), cancelling its unstarted stages. An MCP
+request carrying an unknown session id gets `404`, which tells the client to
+initialize a new session. The state file is replaced atomically; an
+unreadable one is renamed `state.json.corrupt-<time>`. The watchdog's idle
+clock counts messages a run produces (tool calls, notes), not only task
+updates.
+
 When the dispatcher launches a worker it records `dispatchedAt` and the
 worker's `pid` on the task, and keeps the process handle. If the process
 ends while the task is still `pending`/`claimed`, the task becomes `failed`
@@ -126,11 +136,23 @@ cancels the running step and ends the flow.
 
 ## Ownership
 
-A run that claims a task over MCP owns it. While that session is connected,
-`bridge_post_result` for the task from any other session is refused. A task
-the hub launched a worker for can't be reported before it is claimed. A
-`done` result is final; a `failed` one can be replaced only by the run that
-claimed it (a late report after the watchdog gave up).
+When the dispatcher launches a worker it issues a **run key** for that task —
+a random secret passed only to that worker (bootstrap prompt, `EKIP_RUN_KEY`,
+and for Claude an `x-ekip-run` MCP header). `bridge_claim` with a `task_id`
+the hub launched a worker for must present the key (`run_key`, or the session
+header). A task queued for a member the hub launches can't be claimed before
+its run starts, and a claim without `task_id` never returns such tasks —
+polling is for members with `spawnable: false`. Keys are forgotten when the
+task reports, its worker exits, or it is cancelled.
+
+A run that claims a task owns it. While that session is connected,
+`bridge_post_result` for the task from any other session is refused. A `done`
+result is final; a `failed` one can be replaced only by the run that claimed
+it (a late report after the watchdog gave up).
+
+For a session that claimed with a valid run key, `bridge_delegate` defaults
+`parent_task_id` to that task and refuses a parent that isn't the task or one
+of its descendants. An unknown `parent_task_id` is an error.
 
 ## Editors
 
@@ -162,7 +184,7 @@ tasks leave the queue, and each affected task becomes `cancelled` with
 | Tool | Purpose |
 | --- | --- |
 | `bridge_delegate` | Create a task for a peer; the hub launches (or the peer polls for) it. |
-| `bridge_claim` | Claim a `pending` task addressed to you (a specific `task_id`, or the oldest one); marks it `claimed`. |
+| `bridge_claim` | Claim a `pending` task addressed to you: a specific `task_id` (with the `run_key` the hub issued, for launched runs), or the oldest one (polling members only); marks it `claimed`. |
 | `bridge_post_result` | Finish a task (`done`/`failed`) with a result + artifacts. |
 | `bridge_wait` | Block until a task finishes (or is cancelled) or times out. |
 | `bridge_cancel` | Cancel a task and its descendants; kills running workers. |

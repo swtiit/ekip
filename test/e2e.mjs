@@ -1,7 +1,7 @@
 // End-to-end suite: boots a real hub on a scratch port and exercises the
 // HTTP API, the MCP tool surface, the dispatcher, the watchdog, and the CLI.
 // No LLMs involved — agents are scripted mocks. Run with `npm test`.
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,6 +49,17 @@ registerAdapter({
   mcpConfigLocation: () => "nowhere",
 });
 
+// An adapter whose launch throws, as when the log folder can't be created or fds run out.
+registerAdapter({
+  id: "thrower",
+  description: "test double that fails to launch",
+  async spawn() {
+    throw new Error("disk full (simulated)");
+  },
+  mcpConfigSnippet: () => ({}),
+  mcpConfigLocation: () => "nowhere",
+});
+
 const config = {
   project: "e2e",
   host: "127.0.0.1",
@@ -76,6 +87,8 @@ const config = {
     { name: "scribe-b", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 0.2"], writer: true },
     { name: "boxed", adapter: "command", spawnable: true, command: "sh", sandbox: true,
       args: ["-c", 'echo in > boxed-in.txt; cat "$HOME/.ekip-e2e-none" >/dev/null 2>&1; echo leak > "$HOME/ekip-e2e-leak.txt" 2>/dev/null && echo yes > boxed-leaked.flag; true'] },
+    { name: "breaks", adapter: "thrower", spawnable: true },
+    { name: "parenting", adapter: "command", spawnable: true, command: process.execPath, args: [MOCK, "{taskId}", "--delegate-to=sink"] },
     { name: "linger", adapter: "command", spawnable: true, command: process.execPath, args: [join(REPO, "test", "mock-linger.mjs"), "{taskId}"], maxConcurrent: 1 },
   ],
   maxDepth: 3,
@@ -171,7 +184,7 @@ try {
   t("health", health.ok === true && health.project === "e2e");
 
   const state0 = await api("/api/state");
-  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 18 && state0.hubUrl.endsWith("/mcp"));
+  t("state shape", Array.isArray(state0.tasks) && state0.agents.length === 20 && state0.hubUrl.endsWith("/mcp"));
   t("state exposes workers", Array.isArray(state0.workers?.running) && Array.isArray(state0.workers?.queued));
   t("state exposes models", state0.agents.find((a) => a.name === "modeled")?.model === "m0");
 
@@ -591,6 +604,8 @@ try {
       t("token hub: a sign-in link sets an HttpOnly cookie and drops the token from the URL", link.status === 302 && link.headers.get("location") === "/chat" && /ekip_token=/.test(setCookie) && /HttpOnly/i.test(setCookie));
       const cookieHeader = setCookie.split(";")[0];
       t("token hub: the cookie authorises the API", (await fetch(TB + "/api/state", { headers: { Cookie: cookieHeader } })).status === 200);
+      t("token hub: a malformed cookie is refused, not fatal", (await fetch(TB + "/api/state", { headers: { Cookie: "ekip_token=%" } })).status === 401);
+      t("token hub: still up after a malformed cookie", (await fetch(TB + "/health")).status === 200);
       t("token hub: login with a wrong token → 401", (await fetch(TB + "/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "nope" }) })).status === 401);
       const d = await (await fetch(TB + "/api/delegate", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + TOKEN }, body: JSON.stringify({ to: "envdump", prompt: "x" }) })).json();
       await until(async () => existsSync(join(TROOT, "token.txt")));
@@ -892,6 +907,8 @@ try {
     const { sandboxProfile } = await import("../dist/guard/sandbox.js");
     const prof = sandboxProfile(TMP);
     t("sandbox: profile denies home, allows the folder last", prof.indexOf("(deny file-write* (subpath") < prof.lastIndexOf("(allow file-read* file-write* (subpath"));
+    t("sandbox: credentials are never readable", /deny file-read\* file-write\* \(subpath "[^"]*\/\.npmrc"\)/.test(prof) && /Application Support\/Google\/Chrome/.test(prof));
+    t("sandbox: writes in home are an allowlist, not every dot-folder", !/allow file-write\* \(regex/.test(prof) && /allow file-write\* \(subpath "[^"]*\/\.gemini"\)/.test(prof));
     const bx = await (await post("/api/delegate", { to: "boxed", prompt: "probe", title: "sandbox" })).json();
     await until(async () => existsSync(join(TMP, "boxed-in.txt")), 8000);
     await sleep(500);
@@ -900,6 +917,99 @@ try {
     t("sandbox: writes inside the folder work", existsSync(join(TMP, "boxed-in.txt")));
     t("sandbox: writes into home outside the folder are blocked", !leaked && !existsSync(join(TMP, "boxed-leaked.flag")));
     t("sandbox: the log says the run was sandboxed", readFileSync(join(TMP, ".ekip", "logs", `boxed-${bx.task.id}.log`), "utf8").includes("[ekip] sandboxed to"));
+  }
+
+  // ---- robustness: a launch that throws fails the task instead of the hub ----
+  const brk = await (await post("/api/delegate", { to: "breaks", prompt: "x", title: "throws" })).json();
+  t("launch failure fails the task with the reason", brk.task?.status === "failed" && /could not start the worker: disk full/.test(brk.task?.result ?? ""), brk.task?.result);
+  t("hub still healthy after a launch failure", (await api("/health")).ok === true);
+  const stale = await fetch(`${BASE}/mcp`, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-session-id": "gone-session" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+  t("an unknown MCP session gets 404 (client should re-initialize)", stale.status === 404);
+
+  const { spawnLogHint } = await import("../dist/core/logs.js");
+  mkdirSync(join(TMP, ".ekip", "logs"), { recursive: true });
+  writeFileSync(join(TMP, ".ekip", "logs", "hintprobe-t1.log"), [
+    JSON.stringify({ type: "system", subtype: "init", permissionMode: "acceptEdits" }),
+    JSON.stringify({ type: "result", subtype: "success", is_error: true, result: "Failed to authenticate: OAuth session expired" }),
+  ].join("\n"));
+  t("failure hint quotes the run's own error, not its init line", spawnLogHint(TMP, "hintprobe", "t1") === JSON.stringify("Failed to authenticate: OAuth session expired"));
+
+  // ---- run keys: only the run the hub started can claim its task ----
+  const rk = await (await post("/api/delegate", { to: "sleeper", prompt: "never claims", title: "run-key" })).json();
+  await until(async () => (await taskById(rk.task.id))?.dispatchedAt);
+  const intruder = await openSession();
+  const noKey = await intruder("bridge_claim", { as: "sleeper", task_id: rk.task.id });
+  t("run key: claiming a hub-started task without its key is refused", noKey.task === null && /specific run/.test(noKey.error ?? ""), JSON.stringify(noKey));
+  const badKey = await intruder("bridge_claim", { as: "sleeper", task_id: rk.task.id, run_key: "guessing-wrong-key-123" });
+  t("run key: a wrong key is refused", badKey.task === null && /specific run/.test(badKey.error ?? ""));
+  const poll = await intruder("bridge_claim", { as: "sleeper" });
+  t("run key: polling can't take tasks of a member the hub launches", poll.task === null && /hub starts a run/.test(poll.note ?? ""));
+  await post("/api/cancel", { task_id: rk.task.id });
+  const q1 = await (await post("/api/delegate", { to: "serial", prompt: "a", title: "serial-a" })).json();
+  const q2 = await (await post("/api/delegate", { to: "serial", prompt: "b", title: "serial-b" })).json();
+  const queuedClaim = q2.dispatch?.queued ? await intruder("bridge_claim", { as: "serial", task_id: q2.task.id }) : { error: "not queued" };
+  t("run key: a queued task can't be claimed before its run starts", /waiting for the run/.test(queuedClaim.error ?? ""), JSON.stringify(queuedClaim));
+  t("run key: the real runs still claim and finish", !!(await until(async () => (await taskById(q1.task.id))?.dispatchedAt)));
+  const pr = await (await post("/api/delegate", { to: "parenting", prompt: "hand something out", title: "parent-run" })).json();
+  const sub = await until(async () => (await api("/api/state")).tasks.find((x) => x.title === "sub of parent-run"), 8000);
+  t("a run's delegation is linked to its own task without naming it", sub && sub.parentId === pr.task.id && sub.depth === pr.task.depth + 1, JSON.stringify(sub && { parentId: sub.parentId, depth: sub.depth }));
+
+  // ---- watchdog: a run that keeps working is not "wedged" ----
+  const busy = await (await post("/api/delegate", { to: "manual", prompt: "long job", title: "busy-run" })).json();
+  const worker = await openSession();
+  await worker("bridge_claim", { as: "manual", task_id: busy.task.id });
+  for (let i = 0; i < 6; i++) {
+    await sleep(800);
+    await worker("bridge_say", { task_id: busy.task.id, from: "manual", text: `step ${i}` });
+  }
+  t("watchdog: activity keeps a claimed run alive past its TTL", (await taskById(busy.task.id)).status === "claimed");
+  const busyDead = await until(async () => ((await taskById(busy.task.id))?.status === "failed" ? true : undefined), 9000);
+  t("watchdog: once it goes quiet it is still reaped", !!busyDead);
+
+  // ---- restart: flows, queued work, corrupt state, stopping ----
+  {
+    const RROOT = mkdtempSync(join(tmpdir(), "ekip-restart-"));
+    const RPORT = await new Promise((res) => { const probe = createServer(); probe.listen(0, "127.0.0.1", () => { const p = probe.address().port; probe.close(() => res(p)); }); });
+    const RB = `http://127.0.0.1:${RPORT}`;
+    const now = new Date().toISOString();
+    const task = (o) => ({ from: "human", title: o.id, prompt: "x", depth: 0, createdAt: now, updatedAt: now, ...o });
+    mkdirSync(join(RROOT, ".ekip"), { recursive: true });
+    writeFileSync(join(RROOT, ".ekip", "state.json"), JSON.stringify({
+      tasks: [
+        task({ id: "flow-root", to: "flow:x", status: "claimed" }),
+        task({ id: "flow-stage", to: "napper", status: "pending", parentId: "flow-root", from: "flow:x", depth: 1 }),
+        task({ id: "was-queued", to: "quick", status: "pending" }),
+        task({ id: "for-a-person", to: "person", status: "pending" }),
+      ],
+      context: [], messages: [], folders: [],
+    }));
+    const rcfg = { project: "restart", host: "127.0.0.1", port: RPORT, projectRoot: RROOT,
+      agents: [
+        { name: "quick", adapter: "command", spawnable: true, command: "true" },
+        { name: "napper", adapter: "command", spawnable: true, command: "sh", args: ["-c", "sleep 30"] },
+        { name: "person", adapter: "command", spawnable: false, command: "true" },
+      ] };
+    let rhub = await startServer(rcfg);
+    const rstate = async () => (await (await fetch(RB + "/api/state")).json()).tasks;
+    const rt = async (id) => (await rstate()).find((x) => x.id === id);
+    t("restart: a flow left running is failed with the reason", (await rt("flow-root")).status === "failed" && /restarted/.test((await rt("flow-root")).result ?? ""));
+    t("restart: its unstarted stage is cancelled", (await rt("flow-stage")).status === "cancelled");
+    t("restart: queued work is launched again", !!(await until(async () => (await rt("was-queued"))?.dispatchedAt, 6000)));
+    t("restart: work waiting for a person is left alone", (await rt("for-a-person")).status === "pending" && !(await rt("for-a-person")).dispatchedAt);
+    const nap = await (await fetch(RB + "/api/delegate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to: "napper", prompt: "sleep" }) })).json();
+    const napPid = await until(async () => (await rt(nap.task.id))?.pid);
+    await rhub.close();
+    await sleep(400);
+    const afterClose = JSON.parse(readFileSync(join(RROOT, ".ekip", "state.json"), "utf8")).tasks.find((x) => x.id === nap.task.id);
+    t("stopping the hub stops its workers", typeof napPid === "number" && !isAlive(napPid));
+    t("stopping the hub says so on their tasks", afterClose?.status === "failed" && /hub stopped/.test(afterClose?.result ?? ""), afterClose?.result);
+    t("state is written atomically (no temp file left)", !existsSync(join(RROOT, ".ekip", "state.json.tmp")));
+    writeFileSync(join(RROOT, ".ekip", "state.json"), "{ torn write");
+    rhub = await startServer(rcfg);
+    const aside = readdirSync(join(RROOT, ".ekip")).filter((f) => f.startsWith("state.json.corrupt-"));
+    t("restart: an unreadable state file is kept aside, not overwritten", aside.length === 1 && readFileSync(join(RROOT, ".ekip", aside[0]), "utf8") === "{ torn write");
+    t("restart: the hub still starts on unreadable state", (await fetch(RB + "/health")).status === 200);
+    await rhub.close();
   }
 
   // ---- budgets: one request may only spend so much ----

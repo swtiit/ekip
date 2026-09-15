@@ -25,7 +25,7 @@ import { buildHub, type HubSessions } from "./hub.js";
 import { removeSpawnLog } from "./logs.js";
 import { FlowRunner, loadFlows, validateFlow } from "./flows.js";
 import { assertSafeBinding, checkAccess, hubToken, presentedToken, tokenMatches } from "./access.js";
-import { isTerminal } from "../protocol/index.js";
+import { isTerminal, type Task } from "../protocol/index.js";
 import { catalogFor } from "./models.js";
 import { claudeBilling } from "./billing.js";
 import { Store } from "./store.js";
@@ -99,9 +99,11 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   watchdog.start();
 
   // A hub restart loses process handles: whatever was running is unknowable
-  // now. Drop stale pids so the dashboard doesn't show ghosts; the watchdog
-  // still reaps those tasks by TTL if their workers never report back.
-  for (const t of store.listTasks()) if (t.pid !== undefined) store.updateTask(t.id, { pid: undefined });
+  // now. Drop stale pids so the web app doesn't show ghosts (without touching
+  // the idle clock); the watchdog still reaps those tasks by TTL if their
+  // workers never report back.
+  for (const t of store.listTasks()) if (t.pid !== undefined) store.updateTask(t.id, { pid: undefined }, { touch: false });
+  const relaunch = recoverAfterRestart(config, store);
 
   // Retention: finished tasks older than N days go, with their spawn logs.
   const retentionDays = config.retention?.days ?? RETENTION_DEFAULTS.days;
@@ -132,7 +134,17 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     if (req.method === "POST") {
       const body = await readJsonBody(req);
       if (!transport) {
-        if (sessionId || !isInitializeRequest(body)) {
+        if (sessionId) {
+          // Unknown session (e.g. the hub restarted): per the MCP transport spec a 404
+          // tells the client to start a new session instead of failing for good.
+          sendJson(res, 404, {
+            jsonrpc: "2.0",
+            error: { code: -32001, message: "Session not found; send a new initialize request." },
+            id: null,
+          });
+          return;
+        }
+        if (!isInitializeRequest(body)) {
           sendJson(res, 400, {
             jsonrpc: "2.0",
             error: { code: -32000, message: "No valid session; send an initialize request first." },
@@ -152,7 +164,12 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           sessions.live.delete(run);
           if (transport!.sessionId) delete transports[transport!.sessionId];
         };
-        const server = buildHub(config, store, dispatcher, { id: run, registry: sessions });
+        const runHeader = req.headers["x-ekip-run"];
+        const server = buildHub(config, store, dispatcher, {
+          id: run,
+          registry: sessions,
+          runKey: typeof runHeader === "string" && runHeader ? runHeader : undefined,
+        });
         await server.connect(transport);
       }
       await transport.handleRequest(req, res, body);
@@ -646,6 +663,16 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   }
 
   const httpServer = createServer((req, res) => {
+    try {
+      handleRequest(req, res);
+    } catch (err) {
+      // A request must never take the hub (and every running task's bookkeeping) down.
+      if (!res.headersSent) sendJson(res, 400, { error: (err as Error).message });
+      else res.end();
+    }
+  });
+
+  function handleRequest(req: IncomingMessage, res: ServerResponse): void {
     const path = (req.url ?? "/").split("?")[0];
     const route = `${req.method} ${path}`;
 
@@ -788,15 +815,18 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
         res.end();
       }
     });
-  });
+  }
 
   return new Promise((resolvePromise) => {
     httpServer.listen(config.port, config.host, () => {
+      // Work that was waiting in the old hub's queue launches now that we can take calls.
+      for (const task of relaunch) void dispatcher.dispatch(task);
       resolvePromise({
         store,
         close: () =>
           new Promise<void>((done) => {
             watchdog.stop();
+            dispatcher.shutdown();
             clearInterval(pruneTimer);
             clearInterval(budgetTimer);
             for (const res of sseClients) res.end();
@@ -808,3 +838,36 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     });
   });
 }
+
+/**
+ * What a restart leaves behind, and what to do with it:
+ * - a flow's runner lived in the old process, so a flow still "running" can
+ *   never advance — fail it (and stop its unfinished stages) with the reason;
+ * - tasks that were queued (pending, never launched) come back as a list to
+ *   dispatch again once the hub listens — otherwise nobody would ever run them.
+ * Work that had a worker is left to the watchdog: that worker may still report.
+ */
+export function recoverAfterRestart(config: BridgeConfig, store: Store): Task[] {
+  const relaunch: Task[] = [];
+  const vi = /^vi|việt/i.test((config.language ?? "").trim());
+  const reason = vi
+    ? "hub đã khởi động lại khi quy trình này đang chạy; hãy chạy lại"
+    : "the hub restarted while this flow was running; run it again";
+  for (const t of store.listTasks()) {
+    if (isTerminal(t.status)) continue;
+    if (t.to.startsWith("flow:")) {
+      for (const child of store.listTasks()) {
+        if (child.parentId === t.id && !isTerminal(child.status) && !child.dispatchedAt) {
+          store.updateTask(child.id, { status: "cancelled", result: reason });
+        }
+      }
+      store.updateTask(t.id, { status: "failed", result: reason });
+      store.addMessage({ taskId: t.id, from: "hub", kind: "system", text: reason, meta: { hubRestarted: true } });
+      continue;
+    }
+    const agent = config.agents.find((a) => a.name === t.to);
+    if (t.status === "pending" && !t.dispatchedAt && agent && agent.spawnable !== false) relaunch.push(t);
+  }
+  return relaunch;
+}
+

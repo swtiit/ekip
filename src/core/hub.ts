@@ -29,8 +29,29 @@ export function buildHub(
   config: BridgeConfig,
   store: Store,
   dispatcher: Dispatcher,
-  session?: { id: string; registry: HubSessions },
+  session?: { id: string; registry: HubSessions; runKey?: string },
 ): McpServer {
+  /**
+   * For a run the hub started (it proved it with its run key): the task it is
+   * working on. Work it hands out hangs off that task, so it stays in the same
+   * folder, thread, budget and depth count. Sessions the hub didn't start —
+   * you in Claude Code, a polling agent — keep choosing their own parent.
+   */
+  let sessionTask: string | undefined = dispatcher.taskForRunKey(session?.runKey);
+  const runTask = (): string | undefined => {
+    const t = sessionTask ? store.getTask(sessionTask) : undefined;
+    return t && t.status !== "done" && t.status !== "failed" && t.status !== "cancelled" ? t.id : undefined;
+  };
+  const isDescendant = (taskId: string, ancestorId: string): boolean => {
+    let cur = store.getTask(taskId);
+    const seen = new Set<string>();
+    while (cur && !seen.has(cur.id)) {
+      if (cur.id === ancestorId) return true;
+      seen.add(cur.id);
+      cur = cur.parentId ? store.getTask(cur.parentId) : undefined;
+    }
+    return false;
+  };
   /**
    * One MCP session serves one agent run, so the folder of the task it claims
    * (or delegates from) tells us which folder's blackboard it should see.
@@ -81,11 +102,19 @@ export function buildHub(
         parent_task_id: z
           .string()
           .optional()
-          .describe("id of the task this one descends from, for loop-guarding"),
+          .describe("the task this one is part of — defaults to the task you claimed, so leave it out when working on a delegated task"),
       },
     },
     async ({ from, to, title, prompt, context, parent_task_id }) => {
-      const parent = parent_task_id ? store.getTask(parent_task_id) : undefined;
+      const own = runTask();
+      const parentId = parent_task_id ?? own;
+      const parent = parentId ? store.getTask(parentId) : undefined;
+      if (parentId && !parent) return jsonText({ error: `unknown parent task ${parentId}` });
+      if (own && parent && !isDescendant(parent.id, own)) {
+        return jsonText({
+          error: `a run can only hand out work from its own task (${own}); leave parent_task_id out`,
+        });
+      }
       const task = store.createTask({
         from,
         to,
@@ -93,11 +122,11 @@ export function buildHub(
         prompt,
         context,
         depth: (parent?.depth ?? 0) + 1,
-        parentId: parent_task_id,
+        parentId: parent?.id,
         // Work handed out inside a conversation stays in its folder.
         cwd: parent?.cwd,
       });
-      if (parent_task_id) remember(parent_task_id);
+      if (parent) remember(parent.id);
       store.addMessage({ taskId: task.id, from, to, kind: "agent", text: prompt, meta: { delegation: true, title } });
       const outcome = await dispatcher.dispatch(task);
       return jsonText({ task_id: task.id, status: task.status, dispatch: outcome });
@@ -109,16 +138,21 @@ export function buildHub(
     {
       title: "Claim a task addressed to you",
       description:
-        "Claims a pending task addressed to `as` and returns it, or null if none. Pass `task_id` to claim a specific task (spawned runs should claim the id from their bootstrap prompt); omit it to take the oldest pending one.",
+        "Claims a pending task addressed to `as` and returns it, or null if none. A run the hub started claims its own task with the `task_id` and `run_key` from its instructions. Agents that poll (not launched by the hub) omit `task_id` to take the oldest pending one.",
       inputSchema: {
         as: z.string().describe("your own agent name"),
         task_id: z
           .string()
           .optional()
           .describe("specific task to claim; omit to take the oldest pending"),
+        run_key: z
+          .string()
+          .optional()
+          .describe("the run key from your instructions, when the hub started you for this task"),
       },
     },
-    async ({ as, task_id }) => {
+    async ({ as, task_id, run_key }) => {
+      const hubLaunches = (name: string) => config.agents.some((a) => a.name === name && a.spawnable !== false);
       let task;
       if (task_id) {
         const candidate = store.getTask(task_id);
@@ -129,13 +163,28 @@ export function buildHub(
             error: `task ${task_id} is not pending for "${as}" (status: ${candidate.status}, to: ${candidate.to})`,
           });
         }
+        const keyed = dispatcher.runKeyMatches(candidate.id, run_key ?? session?.runKey);
+        if (keyed === false) {
+          return jsonText({
+            task: null,
+            error: `task ${task_id} was started for a specific run; claim it with the run_key from your instructions`,
+          });
+        }
+        if (keyed === undefined && hubLaunches(candidate.to) && !candidate.dispatchedAt) {
+          return jsonText({ task: null, error: `task ${task_id} is waiting for the run the hub will start for it` });
+        }
         task = candidate;
       } else {
+        // Tasks for members the hub launches belong to those runs, not to whoever polls first.
+        if (hubLaunches(as)) {
+          return jsonText({ task: null, note: `the hub starts a run for each task addressed to "${as}"; that run claims it by task_id` });
+        }
         task = store.nextPending(as);
       }
       if (!task) return jsonText({ task: null });
       store.updateTask(task.id, { status: "claimed" });
       session?.registry.claims.set(task.id, session.id);
+      if (task_id && dispatcher.runKeyMatches(task.id, run_key ?? session?.runKey) === true) sessionTask = task.id;
       remember(task.id);
       store.addMessage({ taskId: task.id, from: as, kind: "system", text: `${as} started: ${task.title}` });
       return jsonText({ task: store.getTask(task.id) });

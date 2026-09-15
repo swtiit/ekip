@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-248_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-273_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -259,14 +259,21 @@ splitting, while `code-review` is the cheaper way to make review mandatory.
 - **Folders.** Each conversation works in the folder it was started in, and
   each folder has its own blackboard. **`folderGuard`** (default `true`) tells
   every run its folder and, for Claude runs, adds a PreToolUse hook that
-  blocks any file, search or shell access outside it — field-tested: without
-  it, a headless `claude -p` read and wrote a sibling project freely.
-  Antigravity has no such hook, so on macOS Gemini runs are started under the
-  OS sandbox (`sandbox-exec`): reads and writes into other folders in your
-  home, and into `~/.ssh`/`~/.aws`/`~/.gnupg`, are refused by the kernel —
-  field-tested with a real agy run. Set `"sandbox": true` on any agent to
-  confine it the same way (off by default elsewhere; other platforms get the
-  instruction only).
+  checks file, search and shell calls — field-tested: without it, a headless
+  `claude -p` read and wrote a sibling project freely. The hook reads paths
+  out of commands, so it stops honest mistakes but not a determined bypass
+  (`$HOME/…`, a symlink, a decoded script); treat it as a guard rail.
+  Antigravity has no hook, so on macOS Gemini runs are started under the OS
+  sandbox (`sandbox-exec`), which the kernel enforces: writes in your home go
+  only to the folder and to agent state/caches (`~/.gemini`, `~/.cache`,
+  `~/.npm`, `~/Library/Caches`…) — not shell startup files, LaunchAgents or
+  other projects; reads of other home folders and of credentials (`~/.ssh`,
+  `~/.aws`, `~/.netrc`, `~/.npmrc`, gh/docker/kube configs, Claude's files,
+  shell history, browser profiles, Mail) are refused. The keychain file stays
+  reachable because agy signs in through it. Field-tested with real agy runs.
+  Set `"sandbox": true` on any agent (including Claude, for a hard boundary)
+  to confine it the same way; `"sandbox": false` turns the Antigravity default
+  off. Other platforms get the instruction only.
 - **One editor per folder.** Members that edit files — `"writer": true`, or
   inferred: Antigravity, or Claude with `acceptEdits`/`bypassPermissions` —
   never run two at once in the same folder (`writersPerFolder`, default 1;
@@ -309,10 +316,19 @@ Anything that can reach the hub can launch agents that edit files, so:
   it signed in; `ekip init` writes the header into `.mcp.json`; spawned
   workers get it automatically.
 - A hub told to listen beyond loopback **refuses to start without a token**.
-- **Only the run that claimed a task can report it.** A `bridge_post_result`
-  from another MCP session is refused while the claiming run is connected,
-  and a reported result can't be replaced — so one agent can't overwrite
-  another's work.
+- **Each run proves who it is.** The hub gives every worker it launches a
+  secret run key (in its instructions, its environment, and — for Claude — an
+  MCP header). Only that key claims the task, so another session can't grab a
+  task and post a fake "APPROVE" before the real reviewer does; queued tasks
+  can't be claimed ahead of their run, and polling can't take work meant for a
+  member the hub launches. A claimed task is reported only by its run while
+  connected, and a reported result can't be replaced.
+- **A run's hand-offs stay attached.** When a run calls `bridge_delegate`, the
+  hub links the sub-task to that run's task — same folder, thread, budget and
+  depth — and refuses a parent outside it.
+- **Known limit:** without a hub token, any local process — including a run —
+  can use the HTTP API directly (e.g. start a request in another folder). Set
+  `EKIP_TOKEN` if the agents you run may be steered by untrusted content.
 
 ## Cost on a subscription vs an API key
 
@@ -365,6 +381,14 @@ A watchdog remains as the safety net for workers that are alive but wedged
 <task>` (or `bridge_cancel` from any agent) stops a task and everything
 delegated from it, killing the whole process tree.
 
+Stopping the hub (Ctrl+C) stops the workers it started and marks their tasks
+failed with the reason, so nothing keeps editing with nobody listening. On
+the next start, work that was queued launches again, a flow that was
+mid-run is failed with "the hub restarted" (its runner lived in the old
+process), and the watchdog counts a run's streamed tool calls as signs of
+life, so a long run that is still working isn't reaped. State is written
+atomically; an unreadable state file is kept aside instead of overwritten.
+
 Neither vendor exposes remaining quota programmatically today, so the bridge
 surfaces quota problems post-mortem — and the pipeline templates carry spawn
 estimates (best case 6, worst case ~12 per feature run) so you can budget.
@@ -372,7 +396,7 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 248 end-to-end cases, no LLMs involved
+npm test   # 273 end-to-end cases, no LLMs involved
 npm run test:ui   # 17 browser checks in headless Chrome (uses the installed Chrome)
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```

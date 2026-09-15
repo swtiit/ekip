@@ -55,7 +55,14 @@ export function presentedToken(req: IncomingMessage): string | undefined {
   const cookie = req.headers.cookie;
   if (typeof cookie === "string") {
     const m = /(?:^|;\s*)ekip_token=([^;]+)/.exec(cookie);
-    if (m) return decodeURIComponent(m[1]);
+    if (m) {
+      try {
+        return decodeURIComponent(m[1]);
+      } catch {
+        // Any page on 127.0.0.1 can set a cookie for this host; a malformed one is just "no token".
+        return undefined;
+      }
+    }
   }
   return undefined;
 }

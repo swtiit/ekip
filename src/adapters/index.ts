@@ -35,6 +35,8 @@ export interface SpawnRequest {
   sandbox?: boolean;
   /** headers a spawned agent must send to the hub (the token, when one is set) */
   hubHeaders?: Record<string, string>;
+  /** secret the hub issued for this run only; proves the claim comes from the run it started */
+  runKey?: string;
   /** called once when the spawned process ends (or fails to start) */
   onExit?: (exit: WorkerExit) => void;
   /** called as the worker speaks / acts, when the adapter can decode its output */

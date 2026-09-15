@@ -45,7 +45,7 @@ await fetch(url, {
 
 const claim = await rpc(
   "tools/call",
-  { name: "bridge_claim", arguments: { as: agent, task_id: taskId } },
+  { name: "bridge_claim", arguments: { as: agent, task_id: taskId, run_key: process.env.EKIP_RUN_KEY } },
   2,
   sid,
 );
@@ -66,6 +66,17 @@ if (script) {
   writeFileSync(counter, String(n + 1));
   const lines = script.slice("--script=".length).split("|");
   scripted = lines[Math.min(n, lines.length - 1)];
+}
+// Optional `--delegate-to=<agent>`: hand out a sub-task without naming a parent
+// (the hub should link it to this run's task).
+const delegateTo = process.argv.find((a) => a.startsWith("--delegate-to="));
+if (delegateTo) {
+  await rpc(
+    "tools/call",
+    { name: "bridge_delegate", arguments: { from: agent, to: delegateTo.slice("--delegate-to=".length), title: `sub of ${payload.task.title}`, prompt: "sub-task" } },
+    4,
+    sid,
+  );
 }
 await rpc(
   "tools/call",

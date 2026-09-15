@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
   Artifact,
@@ -23,6 +23,7 @@ import { isTerminal } from "../protocol/index.js";
  */
 export class Store extends EventEmitter {
   private tasks = new Map<string, Task>();
+  private readonly lastMessageAt = new Map<string, string>();
   private context = new Map<string, ContextEntry>();
   /** conversation lines, keyed by thread (root task) id, in arrival order */
   private messages = new Map<string, Message[]>();
@@ -43,10 +44,21 @@ export class Store extends EventEmitter {
       const data = JSON.parse(readFileSync(path, "utf8")) as BridgeState;
       for (const t of data.tasks ?? []) this.tasks.set(t.id, t);
       for (const c of data.context ?? []) this.context.set(Store.ctxKey(c.folder, c.key), c);
-      for (const m of data.messages ?? []) this.threadMessages(m.threadId).push(m);
+      for (const m of data.messages ?? []) {
+        this.threadMessages(m.threadId).push(m);
+        this.lastMessageAt.set(m.taskId, m.at);
+      }
       this.folders = Array.isArray(data.folders) ? data.folders.filter((f) => typeof f === "string") : [];
-    } catch {
-      // Corrupt or partial state file — start clean rather than crash.
+    } catch (err) {
+      if (!existsSync(path)) return;
+      // Unreadable state: keep the file for inspection instead of silently overwriting it.
+      const aside = `${path}.corrupt-${Date.now()}`;
+      try {
+        renameSync(path, aside);
+        console.warn(`ekip: ${path} could not be read (${(err as Error).message}); moved it to ${aside} and started empty`);
+      } catch {
+        console.warn(`ekip: ${path} could not be read (${(err as Error).message}); starting empty`);
+      }
     }
   }
 
@@ -60,7 +72,10 @@ export class Store extends EventEmitter {
     };
     try {
       mkdirSync(dirname(this.filePath), { recursive: true });
-      writeFileSync(this.filePath, JSON.stringify(snapshot, null, 2));
+      // Write aside, then rename: a crash mid-write can't leave a torn state file.
+      const tmp = `${this.filePath}.tmp`;
+      writeFileSync(tmp, JSON.stringify(snapshot, null, 2));
+      renameSync(tmp, this.filePath);
     } catch {
       // Persistence is best-effort; keep serving from memory on failure.
     }
@@ -147,6 +162,7 @@ export class Store extends EventEmitter {
       ...input,
     };
     this.threadMessages(message.threadId).push(message);
+    this.lastMessageAt.set(input.taskId, message.at);
     this.persist();
     this.emit("change", { kind: "message", id: message.id, threadId: message.threadId, taskId: message.taskId });
     return message;
@@ -183,9 +199,15 @@ export class Store extends EventEmitter {
   }
 
   /** Oldest pending task addressed to `agent`, or undefined. */
+  /** When anything was last said or done on a task (tool calls, notes, results). */
+  lastActivityOf(taskId: string): string | undefined {
+    return this.lastMessageAt.get(taskId);
+  }
+
   nextPending(agent: string): Task | undefined {
+    // A task the hub already started a worker for belongs to that worker.
     return [...this.tasks.values()]
-      .filter((t) => t.to === agent && t.status === "pending")
+      .filter((t) => t.to === agent && t.status === "pending" && t.pid === undefined && t.dispatchedAt === undefined)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
   }
 

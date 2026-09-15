@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Task } from "../protocol/index.js";
 import { DEFAULT_MAX_DEPTH, isTerminal } from "../protocol/index.js";
@@ -117,7 +118,36 @@ export class Dispatcher {
     return this.config.folderGuard !== false;
   }
 
-  private buildBootstrap(task: Task, role?: string): string {
+  /**
+   * One secret per launched run. It is handed only to that run (its prompt and
+   * environment) and is required to claim the task, so another session — a
+   * stray client, or a prompt-injected run — can't take over a task and post
+   * its result before the real worker does.
+   */
+  private readonly runKeys = new Map<string, string>();
+
+  issueRunKey(taskId: string): string {
+    const key = randomBytes(18).toString("base64url");
+    this.runKeys.set(taskId, key);
+    return key;
+  }
+
+  /** undefined: the hub started no run for this task (so no key applies). */
+  runKeyMatches(taskId: string, key: string | undefined): boolean | undefined {
+    const expected = this.runKeys.get(taskId);
+    if (expected === undefined) return undefined;
+    if (typeof key !== "string" || key.length !== expected.length) return false;
+    return timingSafeEqual(Buffer.from(key), Buffer.from(expected));
+  }
+
+  /** The task a run key was issued for, if it is still outstanding. */
+  taskForRunKey(key: string | undefined): string | undefined {
+    if (!key) return undefined;
+    for (const [taskId, k] of this.runKeys) if (k === key) return taskId;
+    return undefined;
+  }
+
+  private buildBootstrap(task: Task, role: string | undefined, runKey: string): string {
     const header = role
       ? [`[Standing role instructions for "${task.to}"]`, role, "", "---", ""]
       : [];
@@ -130,10 +160,10 @@ export class Dispatcher {
       ``,
       `If instructions conflict, follow this order: (1) limits the hub enforces — working folder, parallel runs, delegation depth — which you cannot override; (2) your standing role instructions${role ? " above" : ""}; (3) the task request below; (4) your own defaults. If the task asks for something your role rules out, do only what the role allows and say plainly in bridge_post_result what you did not do and why.`,
       ``,
-      `1. Call the MCP tool \`bridge_claim\` with { as: "${task.to}", task_id: "${task.id}" } to acknowledge it.`,
+      `1. Call the MCP tool \`bridge_claim\` with { as: "${task.to}", task_id: "${task.id}", run_key: "${runKey}" } to acknowledge it. The run_key is yours alone: never write it into files, results or messages.`,
       `2. Do what the task asks, in the way your role describes — do the work yourself, or hand parts of it to crew members, whichever your role calls for.`,
       `3. When finished, call \`bridge_post_result\` with { task_id: "${task.id}", status: "done", result: "<summary>" }. Use status "failed" if you could not complete it.`,
-      `You may read/write shared context with \`bridge_context_get\` / \`bridge_context_set\`, and delegate sub-tasks with \`bridge_delegate\`.`,
+      `You may read/write shared context with \`bridge_context_get\` / \`bridge_context_set\`, and delegate sub-tasks with \`bridge_delegate\` — the hub links them to this task (same folder, same budget) automatically.`,
       ...this.crewLines(task.to),
       ...(this.guardOn()
         ? [
@@ -278,10 +308,22 @@ export class Dispatcher {
   }
 
   private async launch(task: Task, agent: AgentConfig): Promise<DispatchOutcome> {
+    try {
+      return await this.launchUnsafe(task, agent);
+    } catch (err) {
+      // e.g. the log folder can't be created, or the process table / fd limit is full.
+      // Fail the task with the reason instead of leaving it pending with nobody coming.
+      return this.refuse(task, `could not start the worker: ${(err as Error).message}`);
+    }
+  }
+
+  private async launchUnsafe(task: Task, agent: AgentConfig): Promise<DispatchOutcome> {
     const adapter = getAdapter(agent.adapter)!;
+    const runKey = this.issueRunKey(task.id);
     const result = await adapter.spawn({
       agentName: agent.name,
-      prompt: this.buildBootstrap(task, this.rolePrompt(agent)),
+      runKey,
+      prompt: this.buildBootstrap(task, this.rolePrompt(agent), runKey),
       // The conversation's folder wins: that is where the person asked for
       // the work to happen. Logs stay with the hub either way.
       cwd: task.cwd ?? agent.cwd ?? this.config.projectRoot,
@@ -292,7 +334,8 @@ export class Dispatcher {
       extraArgs: agent.args,
       command: agent.command,
       scope: this.guardOn() ? this.folderOf(task) : undefined,
-      sandbox: this.guardOn() && (agent.sandbox ?? agent.adapter === "antigravity"),
+      // An explicit `sandbox: true` always applies; the Antigravity default follows the folder guard.
+      sandbox: agent.sandbox === true || (agent.sandbox !== false && this.guardOn() && agent.adapter === "antigravity"),
       hubHeaders: hubToken(this.config) ? { Authorization: `Bearer ${hubToken(this.config)}` } : undefined,
       onExit: (exit) => this.onWorkerExit(task.id, agent.name, exit),
       onEvent: (event) => this.onWorkerEvent(task.id, agent.name, event),
@@ -313,18 +356,20 @@ export class Dispatcher {
    * may take a while to actually exit.
    */
   release(taskId: string): void {
+    this.runKeys.delete(taskId);
     const worker = this.running.get(taskId);
     if (!worker) return;
     this.running.delete(taskId);
     this.lingering.set(taskId, worker);
-    void this.drain();
+    this.drainSoon();
   }
 
   private onWorkerExit(taskId: string, agent: string, exit: WorkerExit): void {
+    this.runKeys.delete(taskId);
     this.running.delete(taskId);
     this.lingering.delete(taskId);
     // A slot opened — launch the next queued task for which there is room.
-    void this.drain();
+    this.drainSoon();
 
     const finish = (): void => {
       const task = this.store.getTask(taskId);
@@ -354,11 +399,19 @@ export class Dispatcher {
     else setTimeout(finish, EXIT_GRACE_MS).unref();
   }
 
+  /** Launch what fits now; never lets a failure escape as an unhandled rejection. */
+  private drainSoon(): void {
+    this.drain().catch(() => {
+      // launch() already turns failures into failed tasks; nothing else should reach here
+    });
+  }
+
   private async drain(): Promise<void> {
     for (let i = 0; i < this.queue.length; ) {
       const task = this.queue[i];
       const current = this.store.getTask(task.id);
-      if (!current || isTerminal(current.status)) {
+      // Only still-pending work launches: a polling run may have claimed it meanwhile.
+      if (!current || current.status !== "pending") {
         this.queue.splice(i, 1);
         continue;
       }
@@ -383,7 +436,7 @@ export class Dispatcher {
     this.running.delete(taskId);
     this.lingering.delete(taskId);
     killTree(worker.pid);
-    void this.drain();
+    this.drainSoon();
     return true;
   }
 
@@ -413,6 +466,29 @@ export class Dispatcher {
         if (!isTerminal(t.status)) stopped.push(...this.cancel(t.id, "hub", reason));
       }
     }
+    return stopped;
+  }
+
+  /**
+   * The hub is stopping: kill every worker it started and fail their tasks
+   * with the reason, so nothing keeps editing files with nobody to report to.
+   * Queued tasks stay pending — the next hub launches them.
+   */
+  shutdown(reason = "the hub stopped while this was running"): string[] {
+    const stopped: string[] = [];
+    for (const [taskId, worker] of [...this.running, ...this.lingering]) {
+      killTree(worker.pid);
+      const task = this.store.getTask(taskId);
+      if (task && !isTerminal(task.status)) {
+        this.store.updateTask(taskId, { status: "failed", result: reason, pid: undefined });
+        this.store.addMessage({ taskId, from: "hub", kind: "system", text: reason, meta: { hubStopped: true } });
+        stopped.push(taskId);
+      }
+    }
+    this.running.clear();
+    this.lingering.clear();
+    this.runKeys.clear();
+    this.queue.length = 0;
     return stopped;
   }
 
@@ -448,13 +524,14 @@ export class Dispatcher {
         this.lingering.delete(id);
         killTree(worker.pid);
       }
+      this.runKeys.delete(id);
       const result = `cancelled by ${by}${reason ? `: ${reason}` : ""}`;
       this.store.updateTask(id, { status: "cancelled", result, pid: undefined });
       this.store.addMessage({ taskId: id, from: by, kind: "system", text: `${task.title}: ${result}` });
       cancelled.push(id);
     };
     visit(taskId);
-    void this.drain();
+    this.drainSoon();
     return cancelled;
   }
 }

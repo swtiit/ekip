@@ -76,9 +76,13 @@ export class Watchdog {
     return false;
   }
 
-  /** Latest sign of life: its own update, or when its last hand-off finished. */
+  /** Latest sign of life: its own update, anything it said or did, or when its last hand-off finished. */
   private lastActivity(taskId: string, own: string): string {
+    // A run that keeps calling tools or talking is working, not wedged: its
+    // stream updates messages, not the task itself.
     let latest = own;
+    const said = this.store.lastActivityOf(taskId);
+    if (said && said > latest) latest = said;
     for (const t of this.store.listTasks()) {
       if (t.parentId === taskId && t.updatedAt > latest) latest = t.updatedAt;
     }

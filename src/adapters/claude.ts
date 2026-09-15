@@ -33,8 +33,11 @@ export const claudeAdapter: Adapter = {
     // run from loading the user's global MCP servers (field-tested: those can
     // add minutes of startup and keep the process alive after the task is
     // posted). Extra --mcp-config entries in `args` still compose on top.
+    // The run key rides along as a header too, so the claim is recognised even
+    // if the model leaves `run_key` out of its bridge_claim call.
+    const headers = { ...req.hubHeaders, ...(req.runKey ? { "x-ekip-run": req.runKey } : {}) };
     const bridgeMcpConfig = JSON.stringify({
-      mcpServers: { "ekip": { type: "http", url: req.hubUrl, ...(req.hubHeaders ? { headers: req.hubHeaders } : {}) } },
+      mcpServers: { "ekip": { type: "http", url: req.hubUrl, ...(Object.keys(headers).length ? { headers } : {}) } },
     });
     const args = [
       "-p",

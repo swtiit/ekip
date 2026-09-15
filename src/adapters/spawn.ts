@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, createWriteStream, mkdirSync, openSync } from "node:fs";
+import { appendFileSync, closeSync, createWriteStream, mkdirSync, openSync } from "node:fs";
 import { dirname } from "node:path";
 import { confine } from "../guard/sandbox.js";
 import type { SpawnResult, WorkerExit } from "./index.js";
@@ -38,12 +38,18 @@ export function launchDetached(opts: LaunchOptions): SpawnResult {
   // straight to the log file.
   const run = confine(opts.command, opts.args, opts.confineTo);
   if (run.confined) appendFileSync(opts.logFile, `[ekip] sandboxed to ${opts.confineTo}\n`);
-  const child = spawn(run.command, run.args, {
-    cwd: opts.cwd,
-    detached: true,
-    stdio: ["ignore", opts.onLine ? "pipe" : fd, fd],
-    env: opts.env,
-  });
+  let child: ReturnType<typeof spawn>;
+  try {
+    child = spawn(run.command, run.args, {
+      cwd: opts.cwd,
+      detached: true,
+      stdio: ["ignore", opts.onLine ? "pipe" : fd, fd],
+      env: opts.env,
+    });
+  } finally {
+    // The child has its own copy of the log descriptor; ours would leak one fd per run.
+    closeSync(fd);
+  }
   if (child.stdout) {
     const log = createWriteStream(opts.logFile, { flags: "a" });
     let buf = "";
@@ -93,6 +99,7 @@ export function bridgeEnv(req: {
   depth: number;
   scope?: string;
   hubHeaders?: Record<string, string>;
+  runKey?: string;
 }): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -101,6 +108,7 @@ export function bridgeEnv(req: {
     EKIP_TASK: req.taskId,
     EKIP_DEPTH: String(req.depth),
     ...(req.scope ? { EKIP_SCOPE: req.scope } : {}),
+    ...(req.runKey ? { EKIP_RUN_KEY: req.runKey } : {}),
     ...(req.hubHeaders?.Authorization ? { EKIP_TOKEN: req.hubHeaders.Authorization.replace(/^Bearer /, "") } : {}),
   };
 }

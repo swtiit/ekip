@@ -8,16 +8,20 @@ import { realish } from "./scope.js";
  * tool calls (Antigravity). On macOS the run is started under `sandbox-exec`
  * with a profile that:
  *
- * - blocks writes anywhere in your home folder except the conversation's
- *   folder and the places CLI agents keep their own state (dot-folders,
- *   ~/Library) — writes outside home (temp dirs) stay allowed;
- * - blocks reads of your ordinary home folders (Documents, projects, …) and
- *   of credential folders (~/.ssh, ~/.aws, ~/.gnupg), except the
- *   conversation's folder.
+ * - writes: nothing in your home folder except the conversation's folder and
+ *   an allowlist of places CLI agents keep state and caches (~/.gemini,
+ *   ~/.cache, ~/.npm, ~/Library/Caches, ~/Library/Logs, Antigravity's app
+ *   support folder). Shell startup files, LaunchAgents and other projects are
+ *   refused. Writes outside home (temp folders) stay allowed.
+ * - reads: not your ordinary home folders (Documents, other projects, …), and
+ *   not credential stores — ~/.ssh, ~/.aws, ~/.gnupg, ~/.netrc, ~/.npmrc,
+ *   git/docker/kube/gh credentials, Claude's own files, shell history,
+ *   browser profiles, Mail and Messages. (The keychain file stays reachable:
+ *   agy signs in through it; its items remain protected by macOS itself.)
+ * - network and processes are not restricted (the agent must reach its model).
  *
- * Field-tested with a probe: inside writes succeed; writing or reading a
- * sibling folder fails with "Operation not permitted". Later rules win in a
- * sandbox profile, which is what the allow-after-deny order relies on.
+ * Field-tested with a real agy run. Later rules win in a sandbox profile,
+ * which is what the allow-after-deny order relies on.
  *
  * Other platforms have no equivalent built in, so runs there get the
  * instruction only (the dispatcher still tells the agent its folder).
@@ -33,22 +37,49 @@ function escapeRegex(path: string): string {
   return path.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 }
 
-export function sandboxProfile(scope: string, home = homedir()): string {
+/** Where agents may write in home besides their folder. */
+const WRITABLE_IN_HOME = [
+  ".gemini",
+  ".cache",
+  ".npm",
+  "Library/Caches",
+  "Library/Logs",
+  "Library/HTTPStorages",
+  "Library/Application Support/Antigravity",
+  // agy keeps its sign-in in the login keychain and opens the keychain file
+  // itself (field-tested: blocking it means "please sign in"). The file is
+  // encrypted, and macOS still asks before an app reads another app's item.
+  "Library/Keychains",
+];
+
+/** Never readable, even though they sit in dot-folders or ~/Library. */
+const SECRET_IN_HOME = [
+  ".ssh", ".aws", ".gnupg", ".netrc", ".npmrc", ".git-credentials", ".docker", ".kube",
+  ".config/gh", ".config/gcloud", ".azure", ".claude", ".claude.json",
+  ".zsh_history", ".bash_history", ".python_history", ".node_repl_history",
+  "Library/Cookies", "Library/Mail", "Library/Messages", "Library/Safari",
+  "Library/Application Support/Google/Chrome", "Library/Application Support/Firefox",
+  "Library/Application Support/BraveSoftware", "Library/Application Support/Arc",
+];
+
+export function sandboxProfile(scope: string, home = homedir(), command = ""): string {
   const root = realish(scope);
   const h = realish(home);
-  const secrets = [".ssh", ".aws", ".gnupg"].map((d) => join(h, d));
+  // A sandboxed Claude run still needs its own settings and session files.
+  const own = /(^|\/)claude$/.test(command) ? [".claude", ".claude.json"] : [];
+  const writable = [...WRITABLE_IN_HOME, ...own];
+  const secret = SECRET_IN_HOME.filter((d) => !own.includes(d));
   return [
     "(version 1)",
     "(allow default)",
-    // writes: nothing in home…
+    // writes: nothing in home, except agent state and caches
     `(deny file-write* (subpath ${quote(h)}))`,
-    // …except agent state (dot-folders, ~/Library)
-    `(allow file-write* (regex #"^${escapeRegex(h)}/\\."))`,
-    `(allow file-write* (subpath ${quote(join(h, "Library"))}))`,
-    // reads: not the ordinary folders in home, not credentials
+    ...writable.map((d) => `(allow file-write* (subpath ${quote(join(h, d))}))`),
+    // reads: not the ordinary folders in home (dot-folders and ~/Library stay readable)…
     `(deny file-read* (regex #"^${escapeRegex(h)}/[^.]"))`,
     `(allow file-read* (subpath ${quote(join(h, "Library"))}))`,
-    ...secrets.map((s) => `(deny file-read* file-write* (subpath ${quote(s)}))`),
+    // …and never credentials, history, keychains, browsers, mail
+    ...secret.map((d) => `(deny file-read* file-write* (subpath ${quote(join(h, d))}))`),
     // the conversation's folder wins over all of the above
     `(allow file-read* file-write* (subpath ${quote(root)}))`,
   ].join("\n");
@@ -61,5 +92,5 @@ export function sandboxAvailable(): boolean {
 /** Wrap a command so it runs confined to `scope`, or return it unchanged when the OS can't. */
 export function confine(command: string, args: string[], scope: string | undefined): { command: string; args: string[]; confined: boolean } {
   if (!scope || !sandboxAvailable()) return { command, args, confined: false };
-  return { command: SANDBOX_EXEC, args: ["-p", sandboxProfile(scope), command, ...args], confined: true };
+  return { command: SANDBOX_EXEC, args: ["-p", sandboxProfile(scope, homedir(), command), command, ...args], confined: true };
 }

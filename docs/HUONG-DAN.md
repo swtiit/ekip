@@ -82,17 +82,34 @@ thư mục). Folder quyết định:
   của nó; riêng Claude còn có hook PreToolUse chặn cứng mọi thao tác đọc/ghi/
   tìm/lệnh shell trỏ ra ngoài (đã thử thật: không có hook thì `claude -p` đọc
   và ghi sang folder bên cạnh thoải mái). Antigravity không có hook, nên trên
-  macOS ekip chạy agy trong **sandbox của hệ điều hành**: đọc/ghi folder khác
-  trong home, `~/.ssh`, `~/.aws` đều bị từ chối (đã thử thật với agy). Linux/
-  Windows thì Gemini chỉ được dặn. Agent khác muốn chặn tương tự thì thêm
+  macOS ekip chạy agy trong **sandbox của hệ điều hành**: chỉ ghi được vào
+  folder và chỗ agent giữ trạng thái/cache (`~/.gemini`, `~/.cache`,
+  `~/Library/Caches`…) — không ghi được `~/.zshrc`, LaunchAgents hay dự án
+  khác; không đọc được folder khác trong home và các file credential
+  (`~/.ssh`, `~/.aws`, `~/.netrc`, `~/.npmrc`, cấu hình gh/docker, file của
+  Claude, lịch sử shell, profile trình duyệt, Mail). File keychain vẫn đọc
+  được vì agy đăng nhập qua đó. Đã thử thật với agy. Linux/Windows thì Gemini
+  chỉ được dặn. Agent khác (kể cả Claude) muốn chặn cứng thì thêm
   `"sandbox": true`.
+- **Hook của Claude là rào chắn mềm:** nó đọc đường dẫn trong lệnh nên chặn
+  được nhầm lẫn thông thường, nhưng lách được bằng `$HOME/…`, symlink hay
+  script giải mã. Muốn chặn cứng cho Claude thì bật `"sandbox": true`.
 - **Mỗi folder một người sửa:** agent có quyền sửa file (Antigravity, hoặc
   Claude có `acceptEdits`; hoặc đặt `"writer": true`) không chạy hai cái cùng
   lúc trong một folder (`writersPerFolder`, mặc định 1). Cái sau xếp hàng với
   lý do "another agent is editing this folder". Review, Điều phối chạy song
   song bình thường.
-- **Chỉ lượt đã nhận việc mới được báo kết quả:** phiên MCP khác không ghi đè
-  được, kết quả đã báo xong thì không thay được.
+- **Mỗi lượt chạy có khoá riêng:** hub cấp cho mỗi worker một khoá bí mật; chỉ
+  khoá đó mới nhận (claim) được task, nên phiên khác không thể giành việc rồi
+  tự báo "APPROVE" thay reviewer. Việc giao tiếp từ lượt chạy tự gắn vào task
+  của nó (cùng folder, ngân sách, độ sâu). Kết quả đã báo xong thì không thay
+  được.
+- **Giới hạn còn lại:** nếu hub không đặt token, tiến trình bất kỳ trên máy
+  (kể cả một agent) vẫn gọi được HTTP API trực tiếp. Làm việc với repo lạ thì
+  nên đặt `EKIP_TOKEN`.
+- **Tắt / bật lại hub:** Ctrl+C dừng luôn các worker hub đã bật và ghi lý do
+  lên task. Bật lại thì việc đang xếp hàng tự chạy tiếp; quy trình đang dở bị
+  đánh dấu thất bại "hub đã khởi động lại" để bạn chạy lại.
 
 ## 6. Quy trình (flow) — luật cứng do hub chạy
 
