@@ -390,8 +390,11 @@ function deleteThread(id){
     html: '<p><b>' + esc(title) + '</b></p><p>' + esc(T('deleteBody', { n: family.length || 1 })) + '</p>' +
       (running ? '<p class="dlg-warn">' + icon('alert', 'sm') + esc(T('confirmDeleteLive', { n: running })) + '</p>' : '')
   }).then(function(yes){ if (yes) doDelete(); });
-  function doDelete(){ post('/api/threads/delete', { id: rootId, stop: running > 0 }).then(function(d){
-    if (d.error) { toast(d.error, true); return; }
+  function doDelete(){
+    // The hub's change event can arrive before this reply; don't reload a conversation that is going away.
+    S.gone[rootId] = true;
+    post('/api/threads/delete', { id: rootId, stop: running > 0 }).then(function(d){
+    if (d.error) { delete S.gone[rootId]; toast(d.error, true); return; }
     toast(T('deleted'));
     if (S.selectedTask && family.some(function(x){ return x.id === S.selectedTask; })) closeDrawer();
     S.sig = {};

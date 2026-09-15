@@ -1075,14 +1075,19 @@ try {
 printf '%s\\n' "$@" > argv.txt
 prev=""
 for a in "$@"; do
-  if [ "$prev" = "--mcp-config" ]; then cp "$a" mcp-config.json; stat -f %Lp "$a" > mcp-mode.txt 2>/dev/null || stat -c %a "$a" > mcp-mode.txt; echo "$a" > mcp-path.txt; fi
+  if [ "$prev" = "--mcp-config" ]; then
+    cp "$a" mcp-config.json
+    "${process.execPath}" -e 'console.log((require("fs").statSync(process.argv[1]).mode & 0o777).toString(8))' "$a" > mcp-mode.txt
+    echo "$a" > mcp-path.tmp && mv mcp-path.tmp mcp-path.txt
+  fi
   prev="$a"
 done
 `, { mode: 0o755 });
     const savedPath = process.env.PATH;
     process.env.PATH = `${SHIM}:${savedPath}`;
     const ac = await (await post("/api/delegate", { to: "argvcheck", prompt: "argv probe", title: "argv" })).json();
-    await until(async () => existsSync(join(TMP, "mcp-config.json")) && existsSync(join(TMP, "mcp-mode.txt")));
+    // The shim writes mcp-path.txt last, by rename, so its presence means everything is there.
+    await until(async () => existsSync(join(TMP, "mcp-path.txt")));
     process.env.PATH = savedPath;
     const argv = existsSync(join(TMP, "argv.txt")) ? readFileSync(join(TMP, "argv.txt"), "utf8") : "";
     const cfgText = existsSync(join(TMP, "mcp-config.json")) ? readFileSync(join(TMP, "mcp-config.json"), "utf8") : "{}";

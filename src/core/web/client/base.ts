@@ -274,7 +274,7 @@ function avatar(name, opts){
 
 /* ================= state ================= */
 var SIDEBAR_LIMIT = 10;
-var S = { expandedFolders:{}, billing:null, folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
+var S = { gone:{}, expandedFolders:{}, billing:null, folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
   view:'chat', filter:'', boardFilter:'', boardAgent:'', target:null, selectedTask:null,
   openGroups:{}, openSteps:{}, sig:{} };
 function agentByName(n){ return S.state ? S.state.agents.filter(function(a){ return a.name === n; })[0] : null; }
@@ -314,7 +314,7 @@ function refresh(){
   if (!S.flows) { S.flows = []; getJSON('/api/flows').then(function(d){ if (d) { S.flows = d.flows; S.sig = {}; render(); } }); }
   if (S.view === 'chat') {
     jobs.push(getJSON('/api/threads').then(function(d){ if (d) S.threads = d.threads; }));
-    if (S.current) {
+    if (S.current && !S.gone[S.current]) {
       var want = S.current;
       jobs.push(getJSON('/api/thread/' + want).then(function(d){ if (want !== S.current) return; S.thread = d; S.notFound = !d; }));
     }
