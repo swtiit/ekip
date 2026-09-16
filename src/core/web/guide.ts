@@ -15,7 +15,7 @@ type Lang = "vi" | "en";
 
 const L = {
   vi: {
-    you: "Bạn", youSub: "Web app · CLI", hub: "Hub · ekip serve",
+    you: "Bạn", youSub: "Web app · CLI", hub: "Hub · ekip start",
     queue: "Hàng đợi việc", queueSub: "chờ → làm → xong",
     board: "Bảng đen chung", boardSub: "kế hoạch, ghi chú, kết luận",
     guard: "Điều phối + canh gác", guardSub: "bật agent, bắt lỗi, giới hạn song song",
@@ -34,7 +34,7 @@ const L = {
     l1: "Hội thoại", l2: "Transcript", l3: "Các bước làm", l4: "Kết quả + biên nhận", l5: "Ê-kíp", l6: "Ô soạn",
   },
   en: {
-    you: "You", youSub: "Web app · CLI", hub: "Hub · ekip serve",
+    you: "You", youSub: "Web app · CLI", hub: "Hub · ekip start",
     queue: "Task queue", queueSub: "queued → working → done",
     board: "Shared blackboard", boardSub: "plans, notes, verdicts",
     guard: "Dispatcher + watchdog", guardSub: "launches agents, catches failures, caps parallel runs",
@@ -173,7 +173,7 @@ function doc(lang: Lang): string {
 <p>ekip là phòng điều phối cho các coding agent. Bạn giao việc bằng lời; hub tự bật đúng agent, các agent có thể giao việc cho nhau, và mọi kết quả đổ về một chỗ.</p>
 <figure>${arch(t, lang)}<figcaption>Bạn chỉ nói chuyện với hub. Khi có việc, hub bật agent ở chế độ chạy nền; agent làm xong thì báo kết quả ngược về qua MCP rồi tự tắt — không cần mở app của bên nhận. Agent đang làm sáng đèn đỏ.</figcaption></figure>
 <ul class="facts">
-<li><b>Hub</b> chạy trong thư mục dự án (<code>ekip serve</code>), mỗi dự án một hub.</li>
+<li><b>Hub</b> chạy bằng <code>ekip start</code> ở thư mục bất kỳ — một hub phục vụ mọi folder, mỗi hội thoại tự chọn folder của nó. Dự án muốn đội hình riêng thì <code>ekip init</code> rồi <code>ekip start</code> ngay trong dự án đó.</li>
 <li><b>Hàng đợi việc</b> giữ từng việc và trạng thái của nó; <b>bảng đen</b> giữ những thứ cần truyền qua nhiều lượt chạy như kế hoạch hay kết luận review.</li>
 <li><b>Canh gác</b> phát hiện agent chết im (hết quota, thiếu quyền, sai tên model) và báo lỗi kèm lý do trong vài giây.</li>
 </ul>`),
@@ -245,7 +245,7 @@ ${crewSlot()}`),
 <ol class="steps">
 <li><b>Cài một lần cho máy.</b>${copyBlock("npm install -g @swtiit/ekip")}</li>
 <li><b>Vào thư mục dự án và khởi tạo.</b> Lệnh tạo <code>ekip.config.json</code> từ ê-kíp mặc định của máy và nối sẵn <code>.mcp.json</code> cho Claude Code.${copyBlock("ekip init")}</li>
-<li><b>Bật hub</b>, giữ cửa sổ terminal mở, rồi mở web app.${copyBlock("ekip serve")}</li>
+<li><b>Bật hub và mở web app</b> bằng một lệnh, giữ cửa sổ terminal mở.${copyBlock("ekip start")}</li>
 <li><b>Nếu dùng Gemini</b>, thêm hub vào <code>~/.gemini/config/mcp_config.json</code> và cấp quyền <code>mcp(ekip/*)</code>, <code>write_file(*)</code> trong <code>~/.gemini/config/config.json</code>. <code>ekip init</code> in sẵn đoạn cần dán.</li>
 <li><b>Giao việc đầu tiên</b> trong Trò chuyện — thử một việc nhỏ trước để xem cả vòng chạy.</li>
 </ol>`),
@@ -258,7 +258,7 @@ ${crewSlot()}`),
 <tr><td>Gemini lỗi "auto-denied"</td><td>Thiếu quyền cho thao tác đó</td><td>Thêm quyền tương ứng trong <code>~/.gemini/config/config.json</code></td></tr>
 <tr><td>Việc nằm "đang chờ" rất lâu</td><td>Hết slot song song</td><td>Dừng bớt việc; muốn chạy nhiều hơn thì tăng <code>maxConcurrent</code> trong <code>ekip.config.json</code>. Nếu lý do là "một agent khác đang sửa file" thì chỉ cần chờ agent đó xong</td></tr>
 <tr><td>Agent trả lời tiếng Anh</td><td>Chưa đặt ngôn ngữ báo cáo</td><td>Cài đặt → Ngôn ngữ báo cáo → Tiếng Việt</td></tr>
-<tr><td>Không mở được web app</td><td>Hub chưa chạy</td><td>Chạy <code>ekip serve</code> trong thư mục dự án</td></tr>
+<tr><td>Không mở được web app</td><td>Hub chưa chạy</td><td>Chạy <code>ekip start</code> trong thư mục dự án</td></tr>
 </tbody></table></div>`),
       ]
     : [
@@ -266,7 +266,7 @@ ${crewSlot()}`),
 <p>ekip is a control room for coding agents. You hand out work in plain words; the hub launches the right agent, agents can hand work to each other, and every result lands in one place.</p>
 <figure>${arch(t, lang)}<figcaption>You only ever talk to the hub. When there is work, it launches an agent headless; the agent reports back over MCP and exits — no need to open the receiving app. A working agent lights its red lamp.</figcaption></figure>
 <ul class="facts">
-<li><b>The hub</b> runs inside your project folder (<code>ekip serve</code>) — one hub per project.</li>
+<li><b>The hub</b> runs with <code>ekip start</code> from any folder — one hub serves them all, and each conversation picks the folder it works in. A project that wants its own crew runs <code>ekip init</code> and then <code>ekip start</code> there.</li>
 <li><b>The task queue</b> keeps each task and its state; <b>the blackboard</b> keeps what must outlive a single run, such as plans and review verdicts.</li>
 <li><b>The watchdog</b> notices agents that die quietly (quota, permissions, a stale model name) and fails the task with the reason within seconds.</li>
 </ul>`),
@@ -338,7 +338,7 @@ ${crewSlot()}`),
 <ol class="steps">
 <li><b>Install once per machine.</b>${copyBlock("npm install -g @swtiit/ekip")}</li>
 <li><b>In your project folder, initialise.</b> This writes <code>ekip.config.json</code> from your machine's default crew and wires <code>.mcp.json</code> for Claude Code.${copyBlock("ekip init")}</li>
-<li><b>Start the hub</b>, keep the terminal open, and open the web app.${copyBlock("ekip serve")}</li>
+<li><b>Start the hub and open the app</b> with one command; keep the terminal open.${copyBlock("ekip start")}</li>
 <li><b>Using Gemini?</b> Add the hub to <code>~/.gemini/config/mcp_config.json</code> and grant <code>mcp(ekip/*)</code> and <code>write_file(*)</code> in <code>~/.gemini/config/config.json</code>. <code>ekip init</code> prints the snippet.</li>
 <li><b>Hand out a first task</b> in Chat — something small, to watch a whole round.</li>
 </ol>`),
@@ -351,7 +351,7 @@ ${crewSlot()}`),
 <tr><td>Gemini "auto-denied"</td><td>A permission is missing</td><td>Add the grant in <code>~/.gemini/config/config.json</code></td></tr>
 <tr><td>A task sits "queued" for long</td><td>Every parallel slot is busy</td><td>Stop some work, or raise <code>maxConcurrent</code> in <code>ekip.config.json</code>. If the reason is "another agent is editing this folder", it just waits for that agent</td></tr>
 <tr><td>Agents answer in the wrong language</td><td>No reporting language set</td><td>Settings → Reporting language</td></tr>
-<tr><td>The web app won't open</td><td>The hub isn't running</td><td>Run <code>ekip serve</code> in the project folder</td></tr>
+<tr><td>The web app won't open</td><td>The hub isn't running</td><td>Run <code>ekip start</code> in the project folder</td></tr>
 </tbody></table></div>`),
       ];
 

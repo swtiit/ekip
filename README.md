@@ -45,7 +45,7 @@ connect them are one-way ("use agent B as a tool inside agent A") or heavy
 
 ```mermaid
 flowchart LR
-    subgraph hub["ekip hub · one per project"]
+    subgraph hub["ekip hub · one per machine, or one per project"]
         Q["task queue<br/>pending → claimed → done"]
         B["context blackboard"]
         D["dispatcher + watchdog"]
@@ -220,7 +220,7 @@ splitting, while `code-review` is the cheaper way to make review mandatory.
 
 ## Configuration
 
-`ekip.config.json`, one per project:
+`ekip.config.json` — optional, and only when a project wants its own crew:
 
 ```json
 {

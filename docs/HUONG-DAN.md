@@ -10,7 +10,8 @@ chia sẻ bảng đen chung**, còn bạn theo dõi và điều khiển từ m�
 
 ## 1. Khái niệm trong 60 giây
 
-- **Hub** — một server nhỏ cho mỗi dự án (`ekip serve`). Mọi agent cắm vào
+- **Hub** — một server nhỏ, chạy bằng `ekip start` ở thư mục bất kỳ; một hub
+  phục vụ nhiều folder (mỗi hội thoại tự chọn folder). Mọi agent cắm vào
   hub qua MCP; không agent nào nói chuyện trực tiếp với agent nào.
 - **Task** — một việc giao từ người/agent này sang agent kia, đi qua
   `pending → claimed → done / failed / cancelled`. Việc giao tiếp nối vào
