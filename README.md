@@ -455,7 +455,7 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 
 ```bash
 npm test   # 314 end-to-end cases, no LLMs involved
-npm run test:ui   # 21 browser checks in headless Chrome (uses the installed Chrome)
+npm run test:ui   # 23 browser checks in headless Chrome (uses the installed Chrome)
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```
 

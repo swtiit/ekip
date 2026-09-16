@@ -90,9 +90,9 @@ try {
   await page.click("#send");
   await page.waitForURL(/\/chat\/[0-9a-f-]+$/, { timeout: 8000 });
   const firstId = page.url().split("/").pop();
-  await page.waitForSelector(".outcome", { timeout: 10000 });
-  const outcome = await page.textContent(".outcome");
-  t("sending shows the agent's result in the transcript", /mock done/.test(outcome ?? ""), outcome ?? "");
+  await page.waitForSelector(".answer", { timeout: 10000 });
+  const outcome = await page.textContent(".answer");
+  t("sending shows the agent's answer in the transcript", /mock done/.test(outcome ?? ""), outcome ?? "");
   t("the request appears as your bubble", (await page.textContent(".you .text"))?.includes("say hello from the browser"));
   t("the conversation is listed in the sidebar", (await page.$$(`[data-del="${firstId}"]`)).length > 0);
 
@@ -109,10 +109,13 @@ try {
   await page.waitForSelector(".notice.gate.pass", { timeout: 20000 });
   t("flow shows its stage map", (await page.$$(".flowmap .fs")).length === 2);
   t("flow shows the retry, then the pass", (await page.$$(".notice.gate.retry")).length === 1 && (await page.$$(".notice.gate.pass")).length === 1);
-  await page.waitForSelector(".outcome", { timeout: 10000 });
-  await page.waitForFunction(() => [...document.querySelectorAll(".outcome")].some((o) => /all stages passed/.test(o.textContent)), null, { timeout: 10000 }).catch(() => {});
-  const cards = await page.$$eval(".outcome", (els) => els.map((e) => e.textContent));
-  t("flow ends with its result card", cards.some((c) => /all stages passed/.test(c)), cards.join(" | ").slice(0, 300));
+  await page.waitForSelector(".answer", { timeout: 10000 });
+  await page.waitForFunction(() => /all stages passed/.test(document.querySelector(".answer")?.textContent ?? ""), null, { timeout: 10000 }).catch(() => {});
+  t("flow ends with its answer", /all stages passed/.test((await page.textContent(".answer")) ?? ""), (await page.textContent(".answer"))?.slice(0, 200));
+  const folded = await page.$$eval(".outcome.nested", (els) => els.map((e) => ({ open: e.open, peek: e.querySelector(".peek")?.textContent ?? "" })));
+  t("each stage's report is folded to one line", folded.length >= 2 && folded.every((f) => !f.open && f.peek.length > 0), JSON.stringify(folded).slice(0, 200));
+  await page.click(".outcome.nested > summary");
+  t("a folded report opens on click", await page.$eval(".outcome.nested", (e) => e.open));
   t("header counts the runs", /4 runs/.test((await page.textContent("#chat-top, .chat-top, header")) ?? "") || /4 runs/.test(await page.content()));
 
   // ---- delete through the in-app dialog, never the browser's ----
