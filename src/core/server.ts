@@ -26,7 +26,7 @@ import { removeSpawnLog } from "./logs.js";
 import { FlowRunner, loadFlows, validateFlow } from "./flows.js";
 import { assertSafeBinding, checkAccess, hubToken, presentedToken, tokenMatches } from "./access.js";
 import { isTerminal, type Task } from "../protocol/index.js";
-import { catalogFor } from "./models.js";
+import { catalogFor, probeClaudeModel } from "./models.js";
 import { claudeBilling } from "./billing.js";
 import { Store } from "./store.js";
 import { appHtml } from "./app.js";
@@ -415,6 +415,25 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
     sendJson(res, 200, { agent: describeAgent(agent) });
   }
 
+  /**
+   * Is a model id real? Claude Code can't list models, so we run one tiny
+   * task with it — that also pins down what an alias resolves to.
+   */
+  async function handleProbeModel(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const { model, adapter } = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
+    if (typeof model !== "string" || !model.trim()) {
+      sendJson(res, 400, { error: "`model` is required" });
+      return;
+    }
+    if (adapter !== undefined && adapter !== "claude") {
+      sendJson(res, 400, { error: `only Claude models are checked by running one; ${String(adapter)} lists its models directly` });
+      return;
+    }
+    const probe = await probeClaudeModel(model.trim());
+    store.emit("change", { kind: "config", models: true });
+    sendJson(res, 200, { model: model.trim(), ...probe });
+  }
+
   /** Hub-wide settings the UI can change: language for now. */
   async function handleConfigHub(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const body = ((await readJsonBody(req)) ?? {}) as Record<string, unknown>;
@@ -789,6 +808,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
           return handleEvents(req, res);
         case "GET /api/models":
           return handleModels(res);
+        case "POST /api/models/probe":
+          return handleProbeModel(req, res);
         case "POST /api/config/hub":
           return handleConfigHub(req, res);
         case "GET /api/billing":

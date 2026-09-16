@@ -55,7 +55,9 @@ function renderSettings(){
       '<div class="who"><b>' + esc(dn(a.name)) + '</b><span>@' + esc(a.name) + ' · ' + esc(a.adapter) + (a.promptFile ? ' · ' + esc(a.promptFile) : '') + '</span></div><span class="saved">' + icon('check', 'sm') + ' ' + esc(T('saved').split(' · ')[0]) + '</span></div>' +
       '<div class="ctl"><label>' + esc(T('displayName')) + '</label><input class="field" data-f="label" maxlength="40" placeholder="' + esc(a.name) + '" value="' + esc(a.label || '') + '">' +
       '<label class="top-align">' + esc(T('describe')) + '</label><textarea class="field" data-f="description" rows="3" maxlength="240" placeholder="' + esc(T('describePh')) + '">' + esc(a.description || '') + '</textarea>' +
-      '<label>' + esc(T('model')) + '</label><select class="field" data-f="model"' + (S.catalogs ? '' : ' disabled') + '>' + opts + '</select>' +
+      '<label>' + esc(T('model')) + '</label><div class="model-row"><select class="field" data-f="model"' + (S.catalogs ? '' : ' disabled') + '>' + opts + '</select>' +
+      (a.adapter === 'claude' ? '<button class="btn ghost sm" data-check-model="' + esc(a.name) + '" title="' + esc(T('checkModelTip')) + '">' + esc(T('checkModel')) + '</button>' : '') +
+      '</div>' + (a.adapter === 'claude' && a.model && aliasOf(a.model) ? '<span></span><span class="muted alias-note">' + esc(a.model) + ' → ' + esc(aliasOf(a.model)) + '</span>' : '') +
       (a.adapter === 'claude' ? '<label>' + esc(T('effort')) + '</label><select class="field" data-f="effort">' + [''].concat(EFFORTS).map(function(e){
         return '<option value="' + e + '"' + ((a.effort || '') === e ? ' selected' : '') + '>' + esc(T('eff_' + (e || 'def'))) + '</option>';
       }).join('') + '</select>' : '') +
@@ -112,7 +114,33 @@ $('roster').addEventListener('change', function(e){
   }
   saveAgent(name, { model: v });
 });
+/* What an alias last resolved to here, e.g. opus → claude-opus-5. */
+function aliasOf(model){
+  var cat = S.catalogs && S.catalogs.claude;
+  return (cat && cat.aliases && cat.aliases[model]) || '';
+}
+/* Claude can't list its models, so checking one means running a tiny task with it. */
+function checkModel(name){
+  var card = document.querySelector('.agent-card[data-agent="' + name + '"]');
+  var sel = card && card.querySelector('select[data-f="model"]');
+  var model = sel && sel.value && sel.value !== '__custom' ? sel.value : '';
+  if (!model) { toast(T('checkPickFirst'), true); return; }
+  dialog({ title: T('checkModel'), icon: 'plug', ok: T('checkRun'), html: '<p><b>' + esc(model) + '</b></p><p>' + esc(T('checkBody')) + '</p>' }).then(function(yes){
+    if (!yes) return;
+    var btn = card.querySelector('[data-check-model]');
+    if (btn) { btn.disabled = true; btn.textContent = T('checking'); }
+    post('/api/models/probe', { model: model, adapter: 'claude' }).then(function(d){
+      if (btn) { btn.disabled = false; btn.textContent = T('checkModel'); }
+      if (!d) return;
+      if (d.ok) toast(T('checkOk', { m: d.resolved, c: typeof d.costUsd === 'number' && showMoney() ? ' · ' + money(d.costUsd) : '' }));
+      else toast(T('checkNo', { e: d.error || '' }), true);
+      S.catalogs = null; S.sig.settings = ''; loadCatalogs();
+    });
+  });
+}
 $('roster').addEventListener('click', function(e){
+  var check = e.target.closest('[data-check-model]');
+  if (check) { checkModel(check.getAttribute('data-check-model')); return; }
   var card = e.target.closest('[data-agent]'); if (!card) return;
   var name = card.getAttribute('data-agent');
   var sw = e.target.closest('[data-f="spawnable"]');

@@ -1097,6 +1097,41 @@ try {
     await post("/api/config/hub", { language: "" });
   }
 
+  // ---- checking a model id by running one tiny task with it ----
+  {
+    const MSHIM = join(TMP, "mshim");
+    mkdirSync(MSHIM, { recursive: true });
+    // Stands in for claude: a known id answers like a real run, anything else is refused.
+    writeFileSync(join(MSHIM, "claude"), `#!/bin/sh
+for a in "$@"; do
+  if [ "$seen" = "1" ]; then model="$a"; seen=0; fi
+  if [ "$a" = "--model" ]; then seen=1; fi
+done
+echo "SessionEnd hook noise \\$CLAUDE_PLUGIN_ROOT" >&2
+if [ "$model" = "sonnet" ]; then
+  echo '{"type":"result","is_error":false,"result":"ok","total_cost_usd":0.012,"duration_ms":900,"modelUsage":{"claude-sonnet-5":{"costUSD":0.012}}}'
+else
+  echo '{"type":"result","is_error":true,"result":"There is an issue with the selected model ('"$model"'). It may not exist."}'
+fi
+`, { mode: 0o755 });
+    const savedPath2 = process.env.PATH;
+    const savedHome2 = process.env.EKIP_HOME;
+    const MHOME = mkdtempSync(join(tmpdir(), "ekip-mhome-"));
+    process.env.PATH = `${MSHIM}:${savedPath2}`;
+    process.env.EKIP_HOME = MHOME;
+    const good = await (await post("/api/models/probe", { model: "sonnet", adapter: "claude" })).json();
+    t("model check: a working id reports what it resolves to", good.ok === true && good.resolved === "claude-sonnet-5" && good.costUsd === 0.012, JSON.stringify(good));
+    const bad = await (await post("/api/models/probe", { model: "nope-9", adapter: "claude" })).json();
+    t("model check: a bad id says so, without hook chatter", bad.ok === false && /may not exist/.test(bad.error ?? "") && !/hook/i.test(bad.error ?? ""), JSON.stringify(bad));
+    t("model check: needs a model", (await post("/api/models/probe", {})).status === 400);
+    t("model check: only Claude is probed", (await post("/api/models/probe", { model: "x", adapter: "antigravity" })).status === 400);
+    const { listAliases, claudeCatalog } = await import("../dist/core/models.js");
+    t("model check: the alias is remembered", listAliases().sonnet === "claude-sonnet-5" && claudeCatalog().aliases?.sonnet === "claude-sonnet-5");
+    t("model check: the resolved id joins the list", claudeCatalog().models.some((m) => m.value === "claude-sonnet-5"));
+    process.env.PATH = savedPath2;
+    if (savedHome2) process.env.EKIP_HOME = savedHome2; else delete process.env.EKIP_HOME;
+  }
+
   // ---- the real claude adapter keeps secrets out of argv ----
   {
     const SHIM = join(TMP, "shim");

@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 export interface ModelOption {
@@ -15,6 +16,8 @@ export interface ModelOption {
 
 export interface ModelCatalog {
   models: ModelOption[];
+  /** what each alias resolved to when it last ran here, e.g. opus → claude-opus-5 */
+  aliases?: Record<string, string>;
   /** true when the list came from the installed CLI or the account cache */
   live: boolean;
   note?: string;
@@ -131,8 +134,11 @@ export function claudeCatalog(): ModelCatalog {
     taken.add(m.value);
     models.push(m);
   }
+  const aliases = listAliases();
+  for (const m of models) if (aliases[m.value]) m.description = `${m.description ?? "alias"} → ${aliases[m.value]}`;
   return {
     models,
+    aliases,
     live: account.length > 0 || seen.length > 0,
     note:
       "Claude Code has no list-models command; this mixes the always-valid aliases, your account's cached options, and models seen running here. Any id the CLI accepts can be typed in.",
@@ -210,4 +216,104 @@ export async function catalogFor(adapter: string): Promise<ModelCatalog> {
     note: `The "${adapter}" adapter has no model list — set flags in the agent's args.`,
     fetchedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Is this model id real, and which model does it actually resolve to?
+ *
+ * Claude Code has no way to list models, so the only honest check is to run
+ * one: `claude -p` with the id and a one-word prompt. The run reports the
+ * model it really used (an alias like `opus` comes back as the concrete id),
+ * which is also how an alias gets pinned down. It costs a small run — on
+ * Opus, about a quarter of a dollar at list prices, because every run writes
+ * its opening context to cache — so the UI asks before probing.
+ */
+export interface ModelProbe {
+  ok: boolean;
+  /** the id the run reported using, when it worked */
+  resolved?: string;
+  costUsd?: number;
+  durationMs?: number;
+  /** why it didn't work */
+  error?: string;
+}
+
+export function probeClaudeModel(model: string, timeoutMs = 180_000): Promise<ModelProbe> {
+  return new Promise((resolve) => {
+    const empty = join(tmpdir(), `ekip-probe-${randomBytes(6).toString("hex")}.json`);
+    try {
+      writeFileSync(empty, JSON.stringify({ mcpServers: {} }));
+    } catch {
+      // fall through: claude will complain and we report that
+    }
+    const done = (probe: ModelProbe): void => {
+      rmSync(empty, { force: true });
+      resolve(probe);
+    };
+    const child = spawn(
+      "claude",
+      ["-p", "ok", "--model", model, "--output-format", "json", "--mcp-config", empty, "--strict-mcp-config"],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let out = "";
+    let err = "";
+    child.stdout.on("data", (b: Buffer) => (out += b.toString("utf8")));
+    child.stderr.on("data", (b: Buffer) => (err += b.toString("utf8")));
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      done({ ok: false, error: `no answer within ${Math.round(timeoutMs / 1000)}s` });
+    }, timeoutMs);
+    timer.unref();
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      done({ ok: false, error: e.message });
+    });
+    child.on("close", () => {
+      clearTimeout(timer);
+      let event: { is_error?: boolean; result?: unknown; total_cost_usd?: number; duration_ms?: number; modelUsage?: Record<string, unknown> } | undefined;
+      try {
+        event = JSON.parse(out.trim()) as typeof event;
+      } catch {
+        // not JSON: the CLI refused before the run started
+      }
+      if (!event || event.is_error) {
+        // Hooks and plugins chatter on the same streams; keep the line that
+        // actually explains the refusal.
+        const lines = `${err}\n${out}`.split("\n").map((l) => l.trim()).filter(Boolean).filter((l) => !/hook|CLAUDE_PLUGIN_ROOT/i.test(l));
+        const said = typeof event?.result === "string" ? event.result : undefined;
+        const line =
+          said ??
+          [...lines].reverse().find((l) => /model|unrecognized|not recognized|invalid|error/i.test(l)) ??
+          lines[lines.length - 1] ??
+          "the run produced no output";
+        return done({ ok: false, error: line.slice(0, 200) });
+      }
+      const resolved = Object.keys(event.modelUsage ?? {})[0] ?? model;
+      recordSeenModel(resolved);
+      if (resolved !== model) rememberAlias(model, resolved);
+      done({ ok: true, resolved, costUsd: event.total_cost_usd, durationMs: event.duration_ms });
+    });
+  });
+}
+
+/** What an alias resolved to last time it ran, e.g. opus → claude-opus-5. */
+const aliasFile = (): string => join(process.env.EKIP_HOME ?? join(homedir(), ".ekip"), "model-aliases.json");
+
+export function rememberAlias(alias: string, model: string): void {
+  const all = { ...listAliases(), [alias]: model };
+  try {
+    mkdirSync(join(aliasFile(), ".."), { recursive: true });
+    writeFileSync(aliasFile(), JSON.stringify(all, null, 2) + "\n");
+  } catch {
+    // best-effort
+  }
+}
+
+export function listAliases(): Record<string, string> {
+  try {
+    const raw = JSON.parse(readFileSync(aliasFile(), "utf8")) as Record<string, string>;
+    return typeof raw === "object" && raw ? raw : {};
+  } catch {
+    return {};
+  }
 }

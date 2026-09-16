@@ -227,6 +227,21 @@ Chỉnh đội hình ở một dự án cho ưng rồi `ekip init --global` đ�
 máy (`~/.ekip/`). Mọi `ekip init` sau tự có nguyên đội hình; file của dự án
 luôn thắng chuẩn máy theo từng field.
 
+### Chọn model nào, và làm sao biết id đúng
+
+Claude Code **không có lệnh liệt kê model**, nên danh sách trong Cài đặt là
+ghép từ ba nguồn: alias (`opus`, `sonnet`, `haiku`, `fable` — luôn trỏ bản mới
+nhất), danh sách tài khoản mà app Claude lưu lại, và những model đã chạy thật
+ở đây. Gõ tay id bất kỳ cũng được.
+
+Muốn chắc một id dùng được: bấm **Kiểm tra** cạnh ô model (hoặc
+`ekip models --check claude-opus-5`). ekip chạy thử một việc một chữ với id
+đó rồi báo id thật nó dùng — ví dụ `sonnet → claude-sonnet-5` — hoặc lý do bị
+từ chối. Tốn một phần nhỏ của lượt chạy: đo thật $0.06 với Haiku, khoảng
+$0.25 với Opus. `ekip models --refresh` dò cả bốn alias một lượt.
+
+Antigravity thì có danh sách thật: ekip đọc thẳng từ `agy models`.
+
 ## 9. Chi phí và token
 
 - **Dùng gói Claude (Pro/Max) đăng nhập ở terminal thì không trả tiền theo

@@ -420,6 +420,44 @@ function cmdInit(): void {
   console.log("Then run: ekip serve");
 }
 
+/**
+ * `ekip models`: what each adapter offers. Claude has no list-models command,
+ * so `--refresh` runs one tiny task per alias to see what it resolves to, and
+ * `--check <id>` does the same for one id you want to pin.
+ */
+async function cmdModels(args: string[]): Promise<void> {
+  const { catalogFor, probeClaudeModel, listAliases } = await import("../core/models.js");
+  const config = loadConfig(cwd);
+  const check = args.includes("--check") ? args[args.indexOf("--check") + 1] : undefined;
+  const targets = check ? [check] : args.includes("--refresh") ? ["opus", "sonnet", "haiku", "fable"] : [];
+  for (const model of targets) {
+    if (!model) continue;
+    process.stdout.write(`${C.dim}running one small task with${C.reset} ${model} … `);
+    const probe = await probeClaudeModel(model);
+    if (probe.ok) {
+      const cost = probe.costUsd ? ` ${C.dim}(${probe.costUsd < 0.01 ? "<$0.01" : "$" + probe.costUsd.toFixed(2)} list price)${C.reset}` : "";
+      console.log(`${C.green}works${C.reset} → ${probe.resolved}${cost}`);
+    } else {
+      console.log(`${C.red}no${C.reset} — ${probe.error}`);
+    }
+  }
+  const adapters = [...new Set(config.agents.map((a) => a.adapter))];
+  for (const id of adapters) {
+    const cat = await catalogFor(id).catch(() => undefined);
+    if (!cat) continue;
+    console.log(`\n${C.cyan}${id}${C.reset} ${C.dim}${cat.live ? "live list" : "best guess"}${C.reset}`);
+    for (const m of cat.models) console.log(`  ${m.value}${m.description ? `  ${C.dim}${m.description}${C.reset}` : ""}`);
+  }
+  const aliases = listAliases();
+  if (Object.keys(aliases).length) {
+    console.log(`\n${C.dim}Aliases seen here:${C.reset} ${Object.entries(aliases).map(([a, m]) => `${a} → ${m}`).join(", ")}`);
+  }
+  if (!check && !args.includes("--refresh")) {
+    console.log(`\n${C.dim}Claude has no list-models command. \`ekip models --refresh\` resolves the aliases by running one tiny task each;${C.reset}`);
+    console.log(`${C.dim}\`ekip models --check claude-opus-5\` tests one id. Opus probes cost about $0.25 at list prices.${C.reset}`);
+  }
+}
+
 /** `ekip token`: the two credentials, and how to hand the agent one out. */
 function cmdToken(): void {
   const config = loadConfig(cwd);
@@ -601,6 +639,9 @@ try {
     case "flow":
       await cmdFlow();
       break;
+    case "models":
+      await cmdModels(process.argv.slice(3));
+      break;
     case "token":
       cmdToken();
       break;
@@ -658,6 +699,7 @@ try {
           "Configure:",
           "  config                      interactive picker: agents → model → effort",
           "  agents                      list agents with their models",
+          "  models [--refresh|--check <id>]  list models; resolve aliases or test an id with one tiny run",
           "  model <agent> [model] [effort]  pick (no args) or hot-set an agent's model",
           "",
           "Inspect:",
