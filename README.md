@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-302_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-308_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -432,7 +432,7 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 302 end-to-end cases, no LLMs involved
+npm test   # 308 end-to-end cases, no LLMs involved
 npm run test:ui   # 17 browser checks in headless Chrome (uses the installed Chrome)
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```
@@ -445,6 +445,9 @@ exit, watchdog reaping (and worker kill), cancellation with process-tree
 kill and cascade, `maxConcurrent` queueing, retention pruning, loop-guard,
 concurrency (parallel claims), crash-safety (missing binaries), and the CLI
 as a subprocess. The same suite runs in CI on Linux and macOS with Node 22 and 24, plus Node 26 on Linux.
+
+Each suite cleans up its scratch folders when everything passes, and keeps
+them (saying where) when something fails; `KEEP_TMP=1` always keeps them.
 
 `npm run soak` is the stability harness: rounds of mixed work (healthy, slow,
 crashing, missing-binary and hanging workers) fired in bursts, cancels

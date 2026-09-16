@@ -3,7 +3,7 @@
 // with its gate, the in-app delete dialog, Settings and the palette.
 // Uses the Chrome already installed (playwright-core downloads no browser).
 // Run with `npm run test:ui`. Set UI_REQUIRED=1 to fail when Chrome is missing.
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -160,5 +160,8 @@ try {
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length} cases · ${results.length - failed.length} pass · ${failed.length} fail`);
+// Keep the scratch folder only when something failed (the screenshot is in it).
+if (failed.length || process.env.KEEP_TMP) console.log(`scratch kept: ${TMP}`);
+else rmSync(TMP, { recursive: true, force: true });
 if (failed.length) process.exit(1);
 process.exit(0);

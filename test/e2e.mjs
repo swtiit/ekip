@@ -1,7 +1,7 @@
 // End-to-end suite: boots a real hub on a scratch port and exercises the
 // HTTP API, the MCP tool surface, the dispatcher, the watchdog, and the CLI.
 // No LLMs involved — agents are scripted mocks. Run with `npm test`.
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,14 @@ import { request as httpRequest } from "node:http";
 import { startServer, registerAdapter, launchDetached, bridgeEnv, parseClaudeStreamLine, hubDataDir, logsDir } from "../dist/core/index.js";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const TMP = mkdtempSync(join(tmpdir(), "ekip-e2e-"));
+// Every scratch folder the suite creates, so it can clean up at the end.
+const scratchDirs = [];
+const scratch = (prefix) => {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  scratchDirs.push(dir);
+  return dir;
+};
+const TMP = scratch("ekip-e2e-");
 // Keep machine defaults (~/.ekip) out of the suite, in both directions.
 const HOME_DIR = join(TMP, "machine-home");
 process.env.EKIP_HOME = HOME_DIR;
@@ -403,6 +410,18 @@ try {
   const waitT = await tool("bridge_wait", { task_id: manual1.task_id, timeout_seconds: 1 });
   t("bridge_wait timeout flag", waitT.timed_out === true && waitT.task.status === "claimed");
 
+  const got = await tool("bridge_task_get", { task_id: manual1.task_id });
+  t("bridge_task_get returns the task", got.task?.id === manual1.task_id && got.task.to === "manual" && got.task.status === "claimed", JSON.stringify(got.task?.status));
+  t("bridge_task_get on an unknown id → null", (await tool("bridge_task_get", { task_id: "no-such-task" })).task === null);
+  const allTasks = await tool("bridge_list_tasks", {});
+  t("bridge_list_tasks lists everything, oldest first", Array.isArray(allTasks.tasks) && allTasks.tasks.length >= 2 && allTasks.tasks.some((x) => x.id === manual1.task_id) &&
+    allTasks.tasks.every((x, i, arr) => i === 0 || arr[i - 1].createdAt <= x.createdAt));
+  const byAgent = await tool("bridge_list_tasks", { to: "manual" });
+  t("bridge_list_tasks filters by agent", byAgent.tasks.length > 0 && byAgent.tasks.every((x) => x.to === "manual"));
+  const byStatus = await tool("bridge_list_tasks", { to: "manual", status: "claimed" });
+  t("bridge_list_tasks filters by status too", byStatus.tasks.every((x) => x.status === "claimed") && byStatus.tasks.some((x) => x.id === manual1.task_id));
+  t("bridge_list_tasks with no match is empty", (await tool("bridge_list_tasks", { to: "nobody-here" })).tasks.length === 0);
+
   // loop guard: chain until depth exceeds maxDepth=3
   let parent;
   let guard;
@@ -592,7 +611,7 @@ try {
     const TOKEN = "s3cret-token-for-tests";
     const AGENT_TOKEN = "agent-token-for-tests";
     const TPORT = await new Promise((res) => { const probe = createServer(); probe.listen(0, "127.0.0.1", () => { const p = probe.address().port; probe.close(() => res(p)); }); });
-    const TROOT = mkdtempSync(join(tmpdir(), "ekip-token-"));
+    const TROOT = scratch("ekip-token-");
     const TB = `http://127.0.0.1:${TPORT}`;
     const tokenHub = await startServer({ project: "tok", host: "127.0.0.1", port: TPORT, projectRoot: TROOT, token: TOKEN, agentToken: AGENT_TOKEN,
       agents: [{ name: "envdump", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'printf "%s" "$EKIP_TOKEN" > token.txt'] }] });
@@ -790,7 +809,7 @@ try {
   t("prune keeps live tasks", (await api("/api/state")).tasks.some((x) => x.status === "pending" || x.status === "claimed") || true);
 
   // ---- global defaults: machine-wide config + role fallback ----
-  const GHOME = mkdtempSync(join(tmpdir(), "ab-ghome-"));
+  const GHOME = scratch("ab-ghome-");
   mkdirSync(join(GHOME, "roles"), { recursive: true });
   writeFileSync(
     join(GHOME, "config.json"),
@@ -801,7 +820,7 @@ try {
     }),
   );
   writeFileSync(join(GHOME, "roles", "gr.md"), "GLOBAL ROLE");
-  const FRESH = mkdtempSync(join(tmpdir(), "ab-fresh-"));
+  const FRESH = scratch("ab-fresh-");
   await new Promise((r) =>
     execFile(
       process.execPath,
@@ -811,7 +830,7 @@ try {
     ),
   );
   {
-    const AHOME = mkdtempSync(join(tmpdir(), "ekip-auth-"));
+    const AHOME = scratch("ekip-auth-");
     const savedHome = process.env.EKIP_HOME;
     const savedTok = process.env.EKIP_TOKEN;
     const savedAgent = process.env.EKIP_AGENT_TOKEN;
@@ -837,8 +856,8 @@ try {
 
   const freshCfg = JSON.parse(readFileSync(join(FRESH, "ekip.config.json"), "utf8"));
   {
-    const G2 = mkdtempSync(join(tmpdir(), "ekip-g2-"));
-    const P2 = mkdtempSync(join(tmpdir(), "ekip-p2-"));
+    const G2 = scratch("ekip-g2-");
+    const P2 = scratch("ekip-p2-");
     writeFileSync(join(P2, "ekip.config.json"), JSON.stringify({ project: "p2", port: 4555, token: "do-not-share", language: "Vietnamese", budget: { runs: 9 }, retention: { days: 3 }, writersPerFolder: 2, agents: [{ name: "x", adapter: "command", command: "true" }] }));
     await new Promise((r) => execFile(process.execPath, [join(REPO, "dist/cli/index.js"), "init", "--global"], { cwd: P2, env: { ...process.env, EKIP_HOME: G2 } }, r));
     const saved = JSON.parse(readFileSync(join(G2, "config.json"), "utf8"));
@@ -1015,7 +1034,7 @@ try {
 
   // ---- restart: flows, queued work, corrupt state, stopping ----
   {
-    const RROOT = mkdtempSync(join(tmpdir(), "ekip-restart-"));
+    const RROOT = scratch("ekip-restart-");
     const RPORT = await new Promise((res) => { const probe = createServer(); probe.listen(0, "127.0.0.1", () => { const p = probe.address().port; probe.close(() => res(p)); }); });
     const RB = `http://127.0.0.1:${RPORT}`;
     const now = new Date().toISOString();
@@ -1120,7 +1139,7 @@ fi
 `, { mode: 0o755 });
     const savedPath2 = process.env.PATH;
     const savedHome2 = process.env.EKIP_HOME;
-    const MHOME = mkdtempSync(join(tmpdir(), "ekip-mhome-"));
+    const MHOME = scratch("ekip-mhome-");
     process.env.PATH = `${MSHIM}:${savedPath2}`;
     process.env.EKIP_HOME = MHOME;
     const good = await (await post("/api/models/probe", { model: "sonnet", adapter: "claude" })).json();
@@ -1171,7 +1190,7 @@ done
 
   // ---- MCP sessions are bounded ----
   {
-    const SROOT = mkdtempSync(join(tmpdir(), "ekip-sess-"));
+    const SROOT = scratch("ekip-sess-");
     const SPORT = await new Promise((res) => { const probe = createServer(); probe.listen(0, "127.0.0.1", () => { const p = probe.address().port; probe.close(() => res(p)); }); });
     const SB = `http://127.0.0.1:${SPORT}`;
     const shub = await startServer({ project: "sess", host: "127.0.0.1", port: SPORT, projectRoot: SROOT, agents: [], mcpSessions: { max: 2 } });
@@ -1265,6 +1284,26 @@ done
   t("messages persisted to disk", Array.isArray(state.messages) && state.messages.some((m) => m.kind === "tool"));
 }
 
+
+/**
+ * Tidy up after ourselves: every scratch folder this run made goes, unless a
+ * case failed (then they are worth reading) or KEEP_TMP is set.
+ */
+function tidyUp(keep) {
+  if (keep || process.env.KEEP_TMP) {
+    console.log(`\nscratch kept: ${TMP}`);
+    return;
+  }
+  for (const dir of scratchDirs) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* someone else's lock, or already gone */
+    }
+  }
+}
+
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length} cases · ${results.length - failed.length} pass · ${failed.length} fail`);
+tidyUp(failed.length > 0);
 if (failed.length > 0) process.exit(1);

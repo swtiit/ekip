@@ -6,7 +6,7 @@
 //   * a hub restart recovers its state and does not leak workers
 //   * no orphan processes and no unbounded growth
 // No LLMs involved. Run with `npm run soak` (optionally SOAK_ROUNDS=n).
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -197,4 +197,6 @@ try {
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length} checks · ${results.length - failed.length} pass · ${failed.length} fail`);
+if (failed.length || process.env.KEEP_TMP) console.log(`scratch kept: ${TMP}`);
+else rmSync(TMP, { recursive: true, force: true });
 if (failed.length > 0) process.exit(1);
