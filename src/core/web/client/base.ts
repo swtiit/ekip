@@ -85,6 +85,7 @@ function icon(name, cls){ return '<svg class="ico' + (cls ? ' ' + cls : '') + '"
 /* ================= language ================= */
 var DICT = {
   en: {
+    answer:'answer', reportOf:'{who} reported',
     checkModel:'Check', checkModelTip:'Claude has no list of models — checking one means running a tiny task with it', checkBody:'Claude Code cannot list its models, so ekip runs one very small task with this id. It costs a fraction of a run (more on Opus). You will see the id it really resolves to.', checkRun:'Run the check', checking:'Checking…', checkPickFirst:'Pick a model first', checkOk:'Works → {m}{c}', checkNo:'No: {e}',
     runsN:'{n} runs', bRunsU:'runs', bMinU:'min', budgetTitle:'Budget for this request: the hub stops it when a limit is reached', budget:'Budget per request', budgetS:'Each message you send, flow you run, or top-level delegation may spend at most this much. When a limit is reached the hub starts nothing more for it; a time limit also stops work in flight. 0 = no limit.', bRuns:'Worker runs', bTokens:'Output tokens', bMinutes:'Minutes', noLimit:'No limit',
     flows:'Flows', flowCantRun:'can’t run here', gatePass:'Gate passed: {s} — {d}', gateRetry:'Not yet: {s} — {d}. Back to {g} (round {r}/{n})', gateStop:'Stopped at {s} — {d}. No rounds left.',
@@ -137,6 +138,7 @@ var DICT = {
     t_write:'wrote {f}', t_edit:'edited {f}', t_read:'read {f}', t_run:'ran {c}', t_search:'searched {q}', t_tools:'loaded its tools', t_todo:'updated its checklist', blackboardW:'the blackboard'
   },
   vi: {
+    answer:'trả lời', reportOf:'{who} đã báo cáo',
     checkModel:'Kiểm tra', checkModelTip:'Claude không có danh sách model — kiểm tra nghĩa là chạy thử một việc rất nhỏ', checkBody:'Claude Code không liệt kê được model, nên ekip chạy thử một việc rất nhỏ với id này. Tốn một phần nhỏ của lượt chạy (Opus tốn hơn). Bạn sẽ thấy id thật mà nó dùng.', checkRun:'Chạy kiểm tra', checking:'Đang kiểm tra…', checkPickFirst:'Chọn model trước đã', checkOk:'Dùng được → {m}{c}', checkNo:'Không: {e}',
     runsN:'{n} lượt chạy', bRunsU:'lượt', bMinU:'phút', budgetTitle:'Ngân sách của yêu cầu này: hub dừng khi chạm giới hạn', budget:'Ngân sách mỗi yêu cầu', budgetS:'Mỗi tin bạn gửi, mỗi lần chạy quy trình hay mỗi việc giao trực tiếp chỉ được tiêu tối đa chừng này. Chạm giới hạn thì hub không bật thêm lượt nào; giới hạn thời gian còn dừng cả việc đang chạy. 0 = không giới hạn.', bRuns:'Lượt chạy', bTokens:'Token ra', bMinutes:'Phút', noLimit:'Không giới hạn',
     flows:'Quy trình', flowCantRun:'không chạy được ở đây', gatePass:'Qua cổng: {s} — {d}', gateRetry:'Chưa đạt: {s} — {d}. Quay lại {g} (vòng {r}/{n})', gateStop:'Dừng ở {s} — {d}. Đã hết số vòng.',
@@ -294,7 +296,7 @@ function avatar(name, opts){
 
 /* ================= state ================= */
 var SIDEBAR_LIMIT = 10;
-var S = { gone:{}, askedLang:false, expandedFolders:{}, billing:null, folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
+var S = { gone:{}, askedLang:false, openResults:{}, expandedFolders:{}, billing:null, folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
   view:'chat', filter:'', boardFilter:'', boardAgent:'', target:null, selectedTask:null,
   openGroups:{}, openSteps:{}, sig:{} };
 function agentByName(n){ return S.state ? S.state.agents.filter(function(a){ return a.name === n; })[0] : null; }

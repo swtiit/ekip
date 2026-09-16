@@ -271,12 +271,23 @@ function renderStage(){
       if (m.meta && m.meta.result) {
         reported = true;
         var failed = m.meta.result === 'failed';
-        body += '<div class="outcome' + (failed ? ' failed' : '') + '"><div class="oh">' + icon(failed ? 'x' : 'check', 'sm') + esc(failed ? T('failedT') : T('result')) +
-          '<span class="sp"></span><button class="btn ghost sm icon" data-copy="' + esc(m.id) + '" title="copy">' + icon('copy', 'sm') + '</button></div><div class="ob" data-text="' + esc(m.id) + '">' + md(m.text) + '</div>' +
-          (t.artifacts && t.artifacts.length ? '<div class="receipts">' + t.artifacts.map(function(a, ai){
-            return '<button class="receipt" data-art="' + t.id + ':' + ai + '">' + icon(a.kind === 'file' ? 'file' : a.kind === 'log' ? 'log' : a.kind === 'url' ? 'open' : 'note', 'sm') +
-              '<span class="k">' + esc(a.kind) + '</span>' + esc(a.label || base(a.value)) + '</button>';
-          }).join('') + '</div>' : '') + '</div>';
+        var receipts = (t.artifacts && t.artifacts.length ? '<div class="receipts">' + t.artifacts.map(function(a, ai){
+          return '<button class="receipt" data-art="' + t.id + ':' + ai + '">' + icon(a.kind === 'file' ? 'file' : a.kind === 'log' ? 'log' : a.kind === 'url' ? 'open' : 'note', 'sm') +
+            '<span class="k">' + esc(a.kind) + '</span>' + esc(a.label || base(a.value)) + '</button>';
+        }).join('') + '</div>' : '');
+        var copyBtn = '<button class="btn ghost sm icon" data-copy="' + esc(m.id) + '" title="copy">' + icon('copy', 'sm') + '</button>';
+        if (depth === 0) {
+          // The conversation's answer: what you asked for, read as prose.
+          body += '<div class="answer' + (failed ? ' failed' : '') + '"><div class="ah">' + avatar(m.from || t.to, { size:'sm' }) +
+            '<b>' + esc(dn(m.from || t.to)) + '</b><span class="lbl">' + esc(failed ? T('failedT') : T('answer')) + '</span><span class="sp"></span>' + copyBtn + '</div>' +
+            '<div class="ab" data-text="' + esc(m.id) + '">' + md(m.text) + receipts + '</div></div>';
+          return;
+        }
+        // A hand-off's report: folded, because the answer above already carries what mattered.
+        body += '<details class="outcome nested' + (failed ? ' failed' : '') + '"' + (S.openResults[m.id] ? ' open' : '') + ' data-result="' + esc(m.id) + '">' +
+          '<summary>' + icon(failed ? 'x' : 'check', 'sm') + '<b>' + esc(failed ? T('failedT') : T('reportOf', { who: dn(m.from || t.to) })) + '</b>' +
+          '<span class="peek">' + esc(firstLine(m.text)) + '</span></summary>' +
+          '<div class="ob" data-text="' + esc(m.id) + '">' + md(m.text) + receipts + '</div></details>';
         return;
       }
       if (idx >= msgs.length - 2 && samey(m.text, t.result)) return;
@@ -320,6 +331,8 @@ $('jump').addEventListener('click', function(){ var sc = $('scroller'); sc.scrol
 document.addEventListener('click', function(e){
   var g = e.target.closest('.activity > .sum');
   if (g) { var box = g.parentNode, k = box.getAttribute('data-group'); box.classList.toggle('open'); S.openGroups[k] = box.classList.contains('open'); return; }
+  var rp = e.target.closest('[data-result] > summary');
+  if (rp) { var box = rp.parentNode, rid = box.getAttribute('data-result'); setTimeout(function(){ S.openResults[rid] = box.open; }, 0); return; }
   var st = e.target.closest('[data-step]');
   if (st) { var id = st.getAttribute('data-step'); st.classList.toggle('open'); S.openSteps[id] = st.classList.contains('open'); return; }
   var dc = e.target.closest('[data-del-current]');
@@ -518,6 +531,11 @@ function showAgentPopover(query, mode){
   }).join('') : '<div class="opt">' + esc(T('noResults')) + '</div>') + flowOptions(q);
   el.hidden = false;
   el.style.left = '8px'; el.style.bottom = 'calc(100% + 8px)';
+}
+/* One line to preview a folded report by. */
+function firstLine(text){
+  var line = String(text || '').split('\n').map(function(x){ return x.trim(); }).filter(Boolean)[0] || '';
+  return line.replace(/[*\x60#>]+/g, '').replace(/^[\-\s]+/, '').trim().slice(0, 90);
 }
 /* The budget of the request that is still running, as "used/limit" for each limit that is on. */
 function budgetPill(budgets){
