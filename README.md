@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-308_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-314_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -61,21 +61,31 @@ flowchart LR
 
 ```bash
 npm install -g @swtiit/ekip      # the installed command is `ekip`
+ekip start                       # runs the hub and opens the web app
+```
 
+That is the whole setup. `ekip start` works from any folder: it runs your own
+hub — the crew you keep in `~/.ekip` — and each conversation picks the folder
+it works in, right in the app. Work you start without choosing a folder
+happens in `~/ekip`.
+
+The hub is password-protected from the first run, and `ekip start` signs the
+browser in for you; typing `127.0.0.1:4319` yourself asks for the token once
+(`ekip token` prints it).
+
+**A project with its own crew** — a different model per role, its own budget,
+its own flows — keeps the old shape:
+
+```bash
 cd /any/project
-ekip init      # writes config + prints the MCP snippets to paste
-ekip serve     # hub + web app, keeps running
-ekip ui        # opens the web app, already signed in   (new terminal)
+ekip init      # writes ekip.config.json + prints the MCP snippets to paste
+ekip start     # this project's hub
 ```
 
 `init` prints exactly what to paste into each agent (Claude Code's
 `.mcp.json`, Antigravity's global config — including the permission grants
-headless runs need, and the agent token line to export).
-
-The hub is password-protected from the first run: `ekip ui` and the CLI use
-your token by themselves, and typing `127.0.0.1:4319` into a browser asks for
-it once (`ekip token` prints it). Then, from any connected agent or your own
-terminal:
+headless runs need, and the agent token line to export). Then, from any
+connected agent or your own terminal:
 
 ```bash
 ekip run claude-coder "Add input validation to src/api/users.ts"
@@ -144,7 +154,7 @@ And two more ways in:
 
 | Surface | What you get |
 | --- | --- |
-| **CLI** | `run` (delegate + live-follow the whole task tree), `delegate`, `follow`, `cancel`, `flow`, `tasks`, `task`, `logs`, `context`, `config`, `agents`, `model`, `watch`, `status`, `ui` |
+| **CLI** | `start` (hub + web app), `serve`, `ui`, `token`, `run` (delegate + live-follow the whole task tree), `delegate`, `follow`, `cancel`, `flow`, `tasks`, `task`, `logs`, `context`, `config`, `agents`, `model`, `models`, `watch`, `status` |
 | **HTTP API** | `GET /api/state`, `GET /api/events` (SSE), `GET /api/threads`, `GET /api/thread/:taskId`, `POST /api/delegate` (with `parent_task_id` to reply into a thread, or `cwd` to pick the folder), `POST /api/cancel`, `POST /api/threads/delete`, `GET /api/flows`, `POST /api/flows/run`, `POST /api/context`, `GET /api/folders`, `GET /api/logs/:taskId` |
 
 ## Flows: pipelines the hub enforces
@@ -444,7 +454,7 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 308 end-to-end cases, no LLMs involved
+npm test   # 314 end-to-end cases, no LLMs involved
 npm run test:ui   # 21 browser checks in headless Chrome (uses the installed Chrome)
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```

@@ -1120,6 +1120,20 @@ try {
     await post("/api/config/hub", { language: "" });
   }
 
+  // ---- a hub you can run from anywhere ----
+  {
+    const { hubConfig, isProjectHub, personalWorkspace, loadConfig } = await import("../dist/core/config.js");
+    const PLAIN = scratch("ekip-plain-");
+    t("a folder with no config gets your own hub", !isProjectHub(PLAIN) && hubConfig(PLAIN).project === "ekip");
+    t("its workspace is ~/ekip, not the folder you happened to be in", hubConfig(PLAIN).projectRoot === personalWorkspace());
+    t("it still carries a token pair", !!hubConfig(PLAIN).token && !!hubConfig(PLAIN).agentToken);
+    const PROJ = scratch("ekip-proj-");
+    writeFileSync(join(PROJ, "ekip.config.json"), JSON.stringify({ project: "mine", port: 4777, agents: [{ name: "a", adapter: "command", command: "true" }] }));
+    t("a folder with a config keeps its own hub", isProjectHub(PROJ) && hubConfig(PROJ).project === "mine" && hubConfig(PROJ).port === 4777);
+    t("the two resolve to different records", hubConfig(PROJ).projectRoot === PROJ && hubConfig(PROJ).projectRoot !== hubConfig(PLAIN).projectRoot);
+    t("loadConfig still refuses a folder with no config", (() => { try { loadConfig(PLAIN); return false; } catch { return true; } })());
+  }
+
   // ---- checking a model id by running one tiny task with it ----
   {
     const MSHIM = join(TMP, "mshim");

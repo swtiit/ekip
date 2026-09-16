@@ -19,7 +19,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc && node -e \"for (const f of ['dist/cli/index.js','dist/guard/scope-hook.js']) require('node:fs').chmodSync(f, 0o755)\"",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "serve": "node dist/cli/index.js serve",

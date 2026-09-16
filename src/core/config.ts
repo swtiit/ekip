@@ -238,6 +238,35 @@ export function resolveAuth(config: BridgeConfig): BridgeConfig {
   return config;
 }
 
+/**
+ * The folder a hub with no project of its own works in when a conversation
+ * doesn't pick one. Not your whole home: a run that hasn't been given a
+ * folder stays in this scratch workspace.
+ */
+export function personalWorkspace(): string {
+  return join(homedir(), "ekip");
+}
+
+/**
+ * The hub to run here. A project with its own `ekip.config.json` gets that
+ * (cd into it, as before); anywhere else you get your personal hub — the crew
+ * and settings you saved with `ekip init --global`, working in whichever
+ * folder each conversation picks.
+ */
+export function hubConfig(cwd = process.cwd()): BridgeConfig {
+  if (existsSync(resolve(cwd, CONFIG_FILENAME))) return loadConfig(cwd);
+  const root = personalWorkspace();
+  const merged = { ...defaultConfig(root), project: "ekip", ...loadGlobalDefaults() };
+  merged.project = merged.project || "ekip";
+  merged.projectRoot = root;
+  return resolveAuth(merged as BridgeConfig);
+}
+
+/** Does this folder have a hub of its own? */
+export function isProjectHub(cwd = process.cwd()): boolean {
+  return existsSync(resolve(cwd, CONFIG_FILENAME));
+}
+
 export function loadConfig(projectRoot = process.cwd()): BridgeConfig {
   const path = resolve(projectRoot, CONFIG_FILENAME);
   if (!existsSync(path)) {

@@ -23,6 +23,12 @@ project.
 
 ### Also
 
+- **`ekip start` runs the hub and opens the web app, from any folder.** A hub
+  no longer needs a project config to start: without one you get your own hub
+  — the crew saved in `~/.ekip` — and each conversation picks its folder in
+  the app (work with no folder chosen happens in `~/ekip`). A project that
+  wants its own crew still uses `ekip init` and gets its own hub, as before.
+
 - **Each run proves who it is.** Every launched worker gets a secret run key;
   only that key claims its task, queued work can't be claimed ahead of its
   run, and a run's `bridge_delegate` is linked to its own task.

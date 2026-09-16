@@ -48,13 +48,21 @@ cần 2 chỉnh global (một lần):
 ## 3. Dùng cho một dự án
 
 ```bash
-cd du-an-cua-ban
-ekip init     # sinh ekip.config.json từ chuẩn máy + tự nối .mcp.json
-ekip serve    # hub + web app
-ekip ui       # mở http://127.0.0.1:4319/chat
+ekip start
 ```
 
-Nếu đã có "chuẩn máy" (mục 8) thì hai lệnh đầu là **toàn bộ** setup.
+Một lệnh, chạy từ thư mục nào cũng được: bật hub với đội hình chuẩn máy của
+bạn và mở luôn web app (đã đăng nhập sẵn). Mỗi hội thoại **chọn folder ngay
+trong app**; việc không chọn folder thì chạy trong `~/ekip`.
+
+Muốn một dự án có đội hình riêng (model khác, ngân sách khác, quy trình
+riêng) thì vẫn làm như cũ:
+
+```bash
+cd du-an-cua-ban
+ekip init     # sinh ekip.config.json từ chuẩn máy + tự nối .mcp.json
+ekip start    # hub của riêng dự án này
+```
 
 Hub có mật khẩu ngay từ lần chạy đầu: `ekip ui` và CLI tự dùng token của bạn;
 gõ tay `127.0.0.1:4319` vào trình duyệt thì phải dán một lần (`ekip token` in
@@ -313,7 +321,9 @@ và mỗi lần chạy quy trình:
 | Lệnh | Công dụng |
 |---|---|
 | `ekip init` / `init --global` | Sinh config từ chuẩn máy / lưu đội hình làm chuẩn máy |
-| `ekip serve` · `ekip ui` | Chạy hub · mở web app |
+| `ekip start` | Chạy hub **và** mở web app — dùng được ở thư mục bất kỳ |
+| `ekip serve` · `ekip ui` | Chạy hub (không mở trình duyệt) · mở web app |
+| `ekip token` | In token của bạn và token cho agent |
 | `ekip run <agent> <việc\|@file>` | Giao việc + theo dõi live đến khi xong |
 | `ekip delegate` · `follow <id>` · `cancel <id>` | Giao không chờ · bám task · dừng cả cây |
 | `ekip flow [tên] [việc\|@file]` | Liệt kê hoặc chạy quy trình |

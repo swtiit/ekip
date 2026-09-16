@@ -1,11 +1,14 @@
 #!/usr/bin/env node
+import { spawn as spawnProcess } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   CONFIG_FILENAME,
   defaultConfig,
   globalDir,
+  hubConfig,
   hubUrl,
+  isProjectHub,
   loadConfig,
   loadGlobalDefaults,
   startServer,
@@ -39,7 +42,7 @@ interface AgentInfo {
 const cwd = process.cwd();
 
 function apiBase(): string {
-  return hubUrl(loadConfig(cwd)).replace(/\/mcp$/, "");
+  return hubUrl(hubConfig(cwd)).replace(/\/mcp$/, "");
 }
 
 /** `run <agent> <prompt|@file>` — delegate and live-follow until it finishes. */
@@ -428,7 +431,7 @@ function cmdInit(): void {
  */
 async function cmdModels(args: string[]): Promise<void> {
   const { catalogFor, probeClaudeModel, listAliases } = await import("../core/models.js");
-  const config = loadConfig(cwd);
+  const config = hubConfig(cwd);
   const check = args.includes("--check") ? args[args.indexOf("--check") + 1] : undefined;
   const targets = check ? [check] : args.includes("--refresh") ? ["opus", "sonnet", "haiku", "fable"] : [];
   for (const model of targets) {
@@ -459,9 +462,18 @@ async function cmdModels(args: string[]): Promise<void> {
   }
 }
 
+/** Open the web app in a browser, signed in with your token. */
+function openUi(): void {
+  const token = authHeaders().Authorization?.replace(/^Bearer /, "");
+  const url = `${apiBase()}/chat${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+  console.log(url);
+  const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+  spawnProcess(opener, [url], { detached: true, stdio: "ignore" }).unref();
+}
+
 /** `ekip token`: the two credentials, and how to hand the agent one out. */
 function cmdToken(): void {
-  const config = loadConfig(cwd);
+  const config = hubConfig(cwd);
   if (config.openAccess || !config.token) {
     console.log(`${C.dim}This hub runs open (no token): anything on this machine can drive it.${C.reset}`);
     return;
@@ -473,15 +485,23 @@ function cmdToken(): void {
   console.log(`${C.dim}Both live in ~/.ekip/auth.json; delete it to roll them.${C.reset}`);
 }
 
-async function cmdServe(): Promise<void> {
-  const config = loadConfig(cwd);
+async function cmdServe(openBrowser = false): Promise<void> {
+  const config = hubConfig(cwd);
+  const ownHub = isProjectHub(cwd);
+  // The personal hub's fallback folder should exist before anything runs in it.
+  if (!ownHub) mkdirSync(config.projectRoot, { recursive: true });
   const hub = await startServer(config);
   const url = hubUrl(config);
   console.log(`ekip serving "${config.project}" at ${url}`);
   console.log(`Web app:   ${url.replace(/\/mcp$/, "/chat")}  (Chat · Board · Guide · Settings)`);
-  if (config.token && !config.openAccess) console.log("Open it with `ekip ui` — that signs the browser in with your token.");
+  if (!ownHub) {
+    console.log(`${C.dim}Your own crew, no project config here. Pick the folder for each conversation in the app;${C.reset}`);
+    console.log(`${C.dim}work with no folder chosen happens in ${config.projectRoot}. \`ekip init\` makes a project its own hub.${C.reset}`);
+  }
+  if (config.token && !config.openAccess && !openBrowser) console.log("Open it with `ekip ui` — that signs the browser in with your token.");
   console.log(`Agents: ${config.agents.map((a) => a.name).join(", ")}`);
   console.log("Press Ctrl+C to stop.");
+  if (openBrowser) openUi();
   const shutdown = async () => {
     await hub.close();
     process.exit(0);
@@ -493,13 +513,13 @@ async function cmdServe(): Promise<void> {
 function cmdStatus(): void {
   let config: BridgeConfig;
   try {
-    config = loadConfig(cwd);
+    config = hubConfig(cwd);
   } catch (err) {
     console.error((err as Error).message);
     process.exit(1);
   }
   const stateFile = stateFilePath(config);
-  console.log(`Project: ${config.project}`);
+  console.log(`Project: ${config.project}${isProjectHub(cwd) ? "" : `  ${C.dim}(your own hub — this folder has no config of its own)${C.reset}`}`);
   console.log(`Endpoint: ${hubUrl(config)}`);
   console.log(`Agents: ${config.agents.map((a) => `${a.name}(${a.adapter})`).join(", ")}`);
   if (existsSync(stateFile)) {
@@ -540,7 +560,7 @@ function agoShort(iso: string): string {
 
 /** Live terminal view of the hub — polls /api/state, falls back to state.json. */
 async function cmdWatch(): Promise<void> {
-  const config = loadConfig(cwd);
+  const config = hubConfig(cwd);
   const apiBase = hubUrl(config).replace(/\/mcp$/, "");
   const stateFile = stateFilePath(config);
 
@@ -616,6 +636,9 @@ try {
       if (process.argv[3] === "--global") cmdInitGlobal();
       else cmdInit();
       break;
+    case "start":
+      await cmdServe(true);
+      break;
     case "serve":
       await cmdServe();
       break;
@@ -667,17 +690,9 @@ try {
     case "context":
       await cmdContext();
       break;
-    case "ui": {
-      const token = authHeaders().Authorization?.replace(/^Bearer /, "");
-      const url = `${apiBase()}/chat${token ? `?token=${encodeURIComponent(token)}` : ""}`;
-      console.log(url);
-      const { spawn } = await import("node:child_process");
-      spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], {
-        detached: true,
-        stdio: "ignore",
-      }).unref();
+    case "ui":
+      openUi();
       break;
-    }
     default:
       console.log(
         [
@@ -686,7 +701,8 @@ try {
           "Project:",
           "  init                        scaffold config (+ .mcp.json) from your machine defaults",
           "  init --global               save THIS project's agents + roles as machine defaults",
-          "  serve                       start the hub (MCP + web app at /chat)",
+          "  start                       run the hub and open the web app (works from any folder)",
+          "  serve                       run the hub without opening a browser",
           "  status                      show config and task/context counts",
           "  token                       print this machine's hub tokens",
           "",
