@@ -21,7 +21,10 @@ function renderSettings(){
     : '<div class="bill sub">' + icon('check') + '<div><b>' + esc(b.claude === 'subscription' ? T('billSub', { plan: (b.plan || '').toUpperCase() || 'Claude' }) : T('billUnknown')) + '</b><span>' + esc(T('billSubS')) + '</span></div>' +
       '<label class="chk-row"><button class="switch' + (showMoney() ? ' on' : '') + '" id="toggle-money" role="switch" aria-checked="' + showMoney() + '"></button><span>' + esc(T('showRef')) + '</span></label></div>';
   var lang = l ? (l.language || '') : '';
-  var langs = [['', T('langDef')], ['Vietnamese', 'Tiếng Việt'], ['English', 'English'], ['Japanese', '日本語'], ['Korean', '한국어'], ['Chinese', '中文']];
+  // The app itself is translated into English and Vietnamese; say so, so a hub
+  // reporting in Japanese doesn't look like a half-translated interface.
+  var uiNote = LANG === 'vi' ? ' · giao diện tiếng Anh' : ' · English interface';
+  var langs = [['', T('langDef')], ['Vietnamese', 'Tiếng Việt'], ['English', 'English'], ['Japanese', '日本語' + uiNote], ['Korean', '한국어' + uiNote], ['Chinese', '中文' + uiNote]];
   if (lang && !langs.some(function(o){ return o[0] === lang; })) langs.push([lang, lang]);
   $('lang-select').innerHTML = langs.map(function(o){
     return '<option value="' + esc(o[0]) + '"' + (o[0] === lang ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
@@ -31,6 +34,9 @@ function renderSettings(){
     var cur = bud[x[1]] || 0, opts = x[2].indexOf(cur) < 0 ? x[2].concat([cur]) : x[2];
     $(x[0]).innerHTML = opts.map(function(n){ return '<option value="' + n + '"' + (n === cur ? ' selected' : '') + '>' + esc(n ? x[3](n) : T('noLimit')) + '</option>'; }).join('');
   });
+  var ownUi = store('ekip.uiLang') || '';
+  $('ui-lang-select').innerHTML = [['', T('uiFollow') + (ownUi ? '' : ' — ' + (LANG === 'vi' ? 'Tiếng Việt' : 'English'))], ['vi', 'Tiếng Việt'], ['en', 'English']]
+    .map(function(o){ return '<option value="' + esc(o[0]) + '"' + (o[0] === ownUi ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('');
   $('roles-explain').innerHTML = '<div class="explain-grid">' + [
     ['users', T('exRole'), T('exRoleS')],
     ['at', T('exId'), T('exIdS')],
@@ -171,6 +177,11 @@ document.querySelectorAll('[data-budget]').forEach(function(sel){
       toast(T('saved')); S.sig = {}; refresh();
     });
   });
+});
+$('ui-lang-select').addEventListener('change', function(e){
+  store('ekip.uiLang', e.target.value || null);
+  LANG = pickLang(S.state && S.state.language);
+  S.sig = {}; applyStaticText(); render(); toast(T('savedNow'));
 });
 $('billing-panel').addEventListener('click', function(e){
   if (!e.target.closest('#toggle-money')) return;

@@ -145,7 +145,7 @@ export interface BridgeState {
   folders?: string[];
 }
 
-export const PROTOCOL_VERSION = "0.6.0";
+export const PROTOCOL_VERSION = "0.7.0";
 
 /** Maximum delegation depth before the dispatcher refuses to spawn again. */
 export const DEFAULT_MAX_DEPTH = 6;

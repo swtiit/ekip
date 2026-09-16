@@ -66,7 +66,7 @@ giao diện tiếng Việt).
 | **Trò chuyện** `/chat` | Gõ yêu cầu, bấm vào người nhận (hoặc gõ `@`) để chọn agent hay quy trình. Khung giữa hiện từng agent nói gì, dùng tool gì (viết bằng lời thường), giao việc cho ai (khối lồng bên dưới), kết quả và biên nhận (file, log). Thanh bên trái gom hội thoại **theo folder**, mỗi folder hiện 10 cái, bấm "Xem thêm" để hiện hết; xoá hội thoại bằng nút thùng rác. Bảng bên phải là ê-kíp: ai đang làm gì, bao lâu, nút Dừng và Nhắn. |
 | **Bảng việc** `/board` | Kanban theo trạng thái, lọc theo agent, tìm kiếm. Bấm thẻ để xem yêu cầu, kết quả, model, token, log. Bảng đen nằm cạnh. |
 | **Hướng dẫn** `/guide` | Sơ đồ cách hệ thống chạy, vòng đời một việc, quy trình, cách đọc chi phí. |
-| **Cài đặt** `/settings` | Cách Claude tính phí, ngôn ngữ báo cáo, ngân sách mỗi yêu cầu, xem các giới hạn của hub (sửa trong `ekip.config.json`); từng thành viên: tên hiển thị, việc, model (danh sách lấy trực tiếp khi hãng có), effort, số việc song song, tự bật. Lưu ngay khi đổi. |
+| **Cài đặt** `/settings` | Cách Claude tính phí, ngôn ngữ báo cáo (agent và hub viết gì) và ngôn ngữ giao diện (Anh/Việt, nhớ theo từng trình duyệt), ngân sách mỗi yêu cầu, xem các giới hạn của hub (sửa trong `ekip.config.json`); từng thành viên: tên hiển thị, việc, model (danh sách lấy trực tiếp khi hãng có), effort, số việc song song, tự bật. Lưu ngay khi đổi. |
 
 `⌘K` mở bảng lệnh: nhảy tới hội thoại, agent, quy trình, trang bất kỳ.
 

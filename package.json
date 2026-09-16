@@ -1,7 +1,7 @@
 {
   "name": "@swtiit/ekip",
-  "version": "0.6.0",
-  "description": "Assemble an ekip (ê-kíp — a tight-knit working crew) of coding agents: Claude Code, Antigravity, and any headless CLI delegate tasks and share context over MCP.",
+  "version": "0.7.0",
+  "description": "Assemble an ekip (\u00ea-k\u00edp \u2014 a tight-knit working crew) of coding agents: Claude Code, Antigravity, and any headless CLI delegate tasks and share context over MCP.",
   "type": "module",
   "bin": {
     "ekip": "dist/cli/index.js"
@@ -13,6 +13,7 @@
   "files": [
     "dist",
     "examples",
+    "CHANGELOG.md",
     "PROTOCOL.md",
     "README.md",
     "LICENSE"

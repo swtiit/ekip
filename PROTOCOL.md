@@ -1,4 +1,4 @@
-# ekip protocol (v0.6.0)
+# ekip protocol (v0.7.0)
 
 Vendor-neutral contract for coordinating multiple coding agents over MCP. No
 part of it names a specific agent or project — Claude Code and Antigravity are

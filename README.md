@@ -122,7 +122,7 @@ reporting language, so a crew set to Vietnamese gets a Vietnamese interface.
 | **Chat** `/chat` | Conversations on the left, grouped by the project folder each one works in (pick the folder before you send — recent folders or a built-in folder browser; agents then run inside it and read its `CLAUDE.md`/`AGENTS.md`), a transcript in the middle, the **crew** on the right. The transcript reads like a coding-agent session: your request as a bubble, each agent's words as prose, its tool calls as plain-language steps (open while it works, folded when done, the current step lit), work it **hands to another agent nested under the hand-off**, and a result card with receipts (files, logs) and what the run cost. Type `@` to pick who gets the message. The crew panel shows who is working on what, for how long, with Stop and Message on every member |
 | **Board** `/board` | A kanban by state (queued, working, done, failed and stopped) with per-agent filters and search. Click a card for its request, result, model, tokens, cost, receipts and log. The blackboard sits alongside |
 | **Guide** `/guide` | Diagrams of how the hub works, the life of a task, hand-offs, flows, and how to read cost — with your live crew |
-| **Settings** `/settings` | Reporting language, and each member's name, job, model (live lists where the vendor offers one), effort, parallelism and auto-launch — all saved as you change them. Plus the hub's limits, the folder guard, billing, and the snippet to connect another agent |
+| **Settings** `/settings` | Reporting language (what agents and the hub write) and interface language — the app ships English and Vietnamese, chosen per browser — and each member's name, job, model (live lists where the vendor offers one), effort, parallelism and auto-launch — all saved as you change them. Plus the hub's limits, the folder guard, billing, and the snippet to connect another agent |
 
 An agent that is working lights its tally — the red lamp a camera shows while
 it records — everywhere it appears. `⌘K` jumps to any view, conversation or
@@ -433,7 +433,7 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 
 ```bash
 npm test   # 308 end-to-end cases, no LLMs involved
-npm run test:ui   # 17 browser checks in headless Chrome (uses the installed Chrome)
+npm run test:ui   # 21 browser checks in headless Chrome (uses the installed Chrome)
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```
 

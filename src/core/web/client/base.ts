@@ -115,7 +115,7 @@ var DICT = {
     runs:'runs', runsToday:'runs today', cost:'cost', tokens:'tokens', laneQ:'Queued', laneW:'Working', laneD:'Done', laneF:'Failed & stopped', newTask:'New task', blackboard:'Blackboard', none:'Nothing here',
     openChat:'Open conversation', viewLog:'View log', prompt:'Request', copyId:'Copy id', title:'Title', optional:'optional', whatToDo:'What should this agent do?', cancel:'Cancel', send:'Send', setKey:'Set key',
     key:'key, e.g. plan.v1', value:'value (JSON or text)', emptyBB:'Nothing on the blackboard yet.', setLead:'The crew for {p}. Changes save themselves and apply from the next task.',
-    lang:'Reporting language', langS:'Agents write notes, hand-offs and results in this language. Code and commands stay as they are.', def:'Default', other:'Other…',
+    lang:'Reporting language', langS:'Agents write notes, hand-offs and results in this language, and so does the hub. Code and commands stay as they are.', uiLang:'Interface language', uiLangS:'What this browser shows. The app is translated into English and Vietnamese; with any other reporting language it stays English.', uiFollow:'Follow the reporting language', def:'Default', other:'Other…',
     roster:'Members', rosterS:'Name, job, model, effort and parallelism per role. The @handle is what agents address.', displayName:'Name', describe:'Job', describePh:'What this member is for — the crew reads this',
     langDef:'Each agent’s own default', parDef:'Up to the hub limit', parN:'At most {n} at once', autoOn:'Starts on its own when work arrives', autoOff:'Waits to be run by hand',
     eff_def:'Model default', eff_low:'Low — quick and cheap', eff_medium:'Medium', eff_high:'High — thinks it through', eff_xhigh:'Extra high', eff_max:'Max — slowest, most thorough',
@@ -125,7 +125,7 @@ var DICT = {
     exJob:'Name and job — the meaning', exJobS:'Shown to you here, and told to every agent so each one knows whom to ask for what.',
     exBrief:'Role brief — the standing orders', exBriefS:'A markdown file loaded at the start of every run: rules, checklists, what “done” means.', model:'Model', effort:'Effort', parallel:'Parallel', auto:'Auto-launch', hubLimit:'hub limit', adapterDef:'adapter default', custom:'Type another id…',
     limits:'Hub limits', limitsS:'Edit these in ekip.config.json.', lWorkers:'workers at once per folder', lDepth:'delegation depth', lWait:'max wait to be picked up', lKeep:'days finished tasks are kept',
-    sources:'Where model lists come from', connect:'Connect another agent', connectS:'Point any MCP-speaking agent at this endpoint.', copied:'Copied', saved:'Saved · applies from the next task', stopped:'Stopped',
+    sources:'Where model lists come from', connect:'Connect another agent', connectS:'Point any MCP-speaking agent at this endpoint.', copied:'Copied', saved:'Saved · applies from the next task', savedNow:'Saved', stopped:'Stopped',
     confirmStop:'Stop this and everything handed out from it?', online:'live', offline:'offline', nobody:'All quiet', nWorking:'{n} working', delegated:'Sent to {a}',
     goTo:'Go to', chats:'Conversations', msgTo:'Message', actions:'Actions', theme:'Toggle light / dark', toggleCrew:'Show / hide crew panel', nav:'navigate', openK:'open', closeK:'close', noResults:'No results',
     ago:'ago', now:'just now', s:'s', m:'m', h:'h', d:'d', status:'Status', duration:'Duration', route:'Route', modelUsed:'Model', artifacts:'Receipts', details:'Details', usage:'Tokens', started:'Created',
@@ -167,7 +167,7 @@ var DICT = {
     runs:'lượt chạy', runsToday:'lượt hôm nay', cost:'chi phí', tokens:'token', laneQ:'Đang chờ', laneW:'Đang làm', laneD:'Xong', laneF:'Lỗi & đã dừng', newTask:'Giao việc', blackboard:'Bảng đen', none:'Trống',
     openChat:'Mở hội thoại', viewLog:'Xem log', prompt:'Yêu cầu', copyId:'Sao chép id', title:'Tiêu đề', optional:'không bắt buộc', whatToDo:'Agent này cần làm gì?', cancel:'Huỷ', send:'Gửi', setKey:'Ghi khoá',
     key:'khoá, vd plan.v1', value:'giá trị (JSON hoặc chữ)', emptyBB:'Bảng đen đang trống.', setLead:'Ê-kíp của dự án {p}. Thay đổi tự lưu và áp dụng từ task tiếp theo.',
-    lang:'Ngôn ngữ báo cáo', langS:'Agent viết ghi chú, bàn giao và kết quả bằng ngôn ngữ này. Code và câu lệnh giữ nguyên.', def:'Mặc định', other:'Khác…',
+    lang:'Ngôn ngữ báo cáo', langS:'Agent viết ghi chú, bàn giao và kết quả bằng ngôn ngữ này, hub cũng vậy. Code và câu lệnh giữ nguyên.', uiLang:'Ngôn ngữ giao diện', uiLangS:'Chỉ áp dụng cho trình duyệt này. Giao diện có tiếng Anh và tiếng Việt; chọn ngôn ngữ báo cáo khác thì giao diện dùng tiếng Anh.', uiFollow:'Theo ngôn ngữ báo cáo', def:'Mặc định', other:'Khác…',
     roster:'Thành viên', rosterS:'Tên, việc, model, mức suy nghĩ và số việc song song cho từng vai. @id là địa chỉ để agent gọi nhau.', displayName:'Tên', describe:'Việc', describePh:'Vai này làm gì — cả ê-kíp sẽ đọc dòng này',
     langDef:'Để mỗi agent tự chọn', parDef:'Theo giới hạn chung của hub', parN:'Tối đa {n} việc cùng lúc', autoOn:'Tự chạy khi có việc giao tới', autoOff:'Chờ bạn chạy tay',
     eff_def:'Mặc định của model', eff_low:'Thấp — nhanh, rẻ', eff_medium:'Vừa', eff_high:'Cao — suy nghĩ kỹ', eff_xhigh:'Rất cao', eff_max:'Tối đa — chậm nhất, kỹ nhất',
@@ -177,7 +177,7 @@ var DICT = {
     exJob:'Tên và việc — ý nghĩa', exJobS:'Hiện cho bạn đọc ở đây, và được báo cho mọi agent để biết nên nhờ ai làm gì.',
     exBrief:'Chỉ dẫn vai — quy tắc thường trực', exBriefS:'File markdown nạp vào đầu mỗi lần chạy: quy tắc, checklist, thế nào là xong việc.', model:'Model', effort:'Suy nghĩ', parallel:'Song song', auto:'Tự khởi chạy', hubLimit:'theo hub', adapterDef:'mặc định adapter', custom:'Nhập id khác…',
     limits:'Giới hạn hub', limitsS:'Sửa trong ekip.config.json.', lWorkers:'worker cùng lúc mỗi folder', lDepth:'tầng giao việc', lWait:'chờ nhận việc tối đa', lKeep:'ngày lưu task đã xong',
-    sources:'Danh sách model lấy từ đâu', connect:'Kết nối agent khác', connectS:'Trỏ agent biết MCP vào địa chỉ này.', copied:'Đã sao chép', saved:'Đã lưu · áp dụng từ task sau', stopped:'Đã dừng',
+    sources:'Danh sách model lấy từ đâu', connect:'Kết nối agent khác', connectS:'Trỏ agent biết MCP vào địa chỉ này.', copied:'Đã sao chép', saved:'Đã lưu · áp dụng từ task sau', savedNow:'Đã lưu', stopped:'Đã dừng',
     confirmStop:'Dừng việc này và mọi việc đã giao tiếp từ nó?', online:'trực tuyến', offline:'mất kết nối', nobody:'Không ai đang làm', nWorking:'{n} đang làm', delegated:'Đã gửi cho {a}',
     goTo:'Đi tới', chats:'Hội thoại', msgTo:'Nhắn cho', actions:'Thao tác', theme:'Đổi sáng / tối', toggleCrew:'Ẩn / hiện ê-kíp', nav:'di chuyển', openK:'mở', closeK:'đóng', noResults:'Không có kết quả',
     ago:'trước', now:'vừa xong', s:' giây', m:' phút', h:' giờ', d:' ngày', status:'Trạng thái', duration:'Thời lượng', route:'Luồng', modelUsed:'Model', artifacts:'Biên nhận', details:'Chi tiết', usage:'Token', started:'Tạo lúc',
@@ -190,7 +190,15 @@ var DICT = {
   }
 };
 var LANG = 'en';
+/*
+ * Which language the app itself speaks. Your own choice (kept in this
+ * browser) wins; otherwise it follows the hub's reporting language, and
+ * failing that the browser's. The app ships English and Vietnamese, so a hub
+ * reporting in, say, Japanese still shows an English interface.
+ */
 function pickLang(language){
+  var own = store('ekip.uiLang');
+  if (own === 'vi' || own === 'en') return own;
   var l = String(language || '').toLowerCase();
   if (l) return (l.indexOf('viet') >= 0 || l.indexOf('việt') >= 0 || l === 'vi') ? 'vi' : 'en';
   return (navigator.language || '').toLowerCase().indexOf('vi') === 0 ? 'vi' : 'en';

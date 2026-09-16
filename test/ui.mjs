@@ -137,6 +137,21 @@ try {
   }
   t("settings saves the budget", saved === 10, String(saved));
 
+  // ---- interface language ----
+  await page.goto(`${BASE}/settings`);
+  await page.waitForSelector("#ui-lang-select option", { state: "attached" });
+  await page.selectOption("#ui-lang-select", "vi");
+  await page.waitForFunction(() => /Trò chuyện/.test(document.querySelector("nav, header, body").textContent), null, { timeout: 4000 }).catch(() => {});
+  t("interface can be switched to Vietnamese", /Trò chuyện/.test(await page.content()) && /Ngôn ngữ giao diện/.test(await page.content()));
+  const reportStill = await page.$eval("#lang-select", (el) => el.value);
+  t("switching the interface leaves the reporting language alone", reportStill === "", reportStill);
+  await page.reload();
+  await page.waitForSelector("#ui-lang-select option", { state: "attached" });
+  t("the choice sticks across a reload", (await page.$eval("#ui-lang-select", (el) => el.value)) === "vi" && /Trò chuyện/.test(await page.content()));
+  await page.selectOption("#ui-lang-select", "en");
+  await page.waitForFunction(() => /Reporting language/.test(document.body.textContent), null, { timeout: 4000 }).catch(() => {});
+  t("and back to English", /Reporting language/.test(await page.content()));
+
   // ---- guide and palette ----
   await page.goto(`${BASE}/guide`);
   await page.waitForSelector(".gsec svg.dg", { state: "attached" });

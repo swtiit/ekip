@@ -138,8 +138,16 @@ export function appHtml(): string {
       <div class="section">
         <div class="section-hd"><h2 data-t="lang">Reporting language</h2></div>
         <div class="panel pad setting-row">
-          <select class="field" id="lang-select" style="max-width:240px"></select>
+          <select class="field" id="lang-select" style="max-width:240px" aria-label="Reporting language"></select>
           <p class="muted" data-t="langS"></p>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-hd"><h2 data-t="uiLang">Interface language</h2></div>
+        <div class="panel pad setting-row">
+          <select class="field" id="ui-lang-select" style="max-width:240px" aria-label="Interface language"></select>
+          <p class="muted" data-t="uiLangS"></p>
         </div>
       </div>
 
