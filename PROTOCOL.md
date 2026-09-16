@@ -52,7 +52,9 @@ never launched, for a member it launches) and fails a flow root still running
 (its runner was in the old process), cancelling its unstarted stages. An MCP
 request carrying an unknown session id gets `404`, which tells the client to
 initialize a new session. The state file is replaced atomically; an
-unreadable one is renamed `state.json.corrupt-<time>`. The watchdog's idle
+unreadable one is renamed `state.json.corrupt-<time>`. State and spawn logs
+live in `~/.ekip/projects/<project>-<hash of its path>/`, outside the project
+a hub serves; a pre-0.7 layout inside the project is moved there on start. The watchdog's idle
 clock counts messages a run produces (tool calls, notes), not only task
 updates.
 

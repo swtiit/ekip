@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { execFile, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
 import { request as httpRequest } from "node:http";
-import { startServer, registerAdapter, launchDetached, bridgeEnv, parseClaudeStreamLine } from "../dist/core/index.js";
+import { startServer, registerAdapter, launchDetached, bridgeEnv, parseClaudeStreamLine, hubDataDir, logsDir } from "../dist/core/index.js";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TMP = mkdtempSync(join(tmpdir(), "ekip-e2e-"));
@@ -39,7 +39,7 @@ registerAdapter({
       args: [MOCK_CLAUDE, req.taskId],
       cwd: req.cwd,
       env: bridgeEnv(req),
-      logFile: join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`),
+      logFile: req.logFile ?? join(req.cwd, ".ekip", "logs", `${req.agentName}-${req.taskId}.log`),
       label: "fake claude",
       onExit: req.onExit,
       onLine: (l) => { for (const ev of parseClaudeStreamLine(l)) req.onEvent?.(ev); },
@@ -95,6 +95,8 @@ const config = {
   maxDepth: 3,
   watchdog: { pendingTtlSeconds: 2, claimedTtlSeconds: 3, sweepIntervalSeconds: 1 },
 };
+// The hub keeps its records outside the project now.
+const DATA = hubDataDir(config);
 writeFileSync(join(TMP, "role.md"), "# Role: roleful\nProbe role content MARKER-XYZZY.");
 // The CLI resolves the hub from ekip.config.json in its cwd.
 writeFileSync(join(TMP, "ekip.config.json"), JSON.stringify(config));
@@ -241,7 +243,7 @@ try {
     t("delegate accepts a folder", started.task?.cwd === WS, JSON.stringify(started.task?.cwd));
     await until(async () => existsSync(join(WS, "prompt.txt")));
     t("the worker runs inside the chosen folder", existsSync(join(WS, "prompt.txt")));
-    t("its log stays with the hub, not in the folder", existsSync(join(TMP, ".ekip", "logs", `echoer-${started.task.id}.log`)) && !existsSync(join(WS, ".ekip")));
+    t("its log stays with the hub, not in the folder", existsSync(join(DATA, "logs", `echoer-${started.task.id}.log`)) && !existsSync(join(WS, ".ekip")));
     const reply = await (await post("/api/delegate", { to: "mock", prompt: "follow-up", title: "folder-reply", parent_task_id: started.task.id, cwd: "/tmp" })).json();
     t("a reply keeps its conversation's folder", reply.task?.cwd === WS);
     folderProbe = { id: started.task.id, ws: WS };
@@ -555,7 +557,7 @@ try {
     await until(async () => (await taskById(root.task.id))?.status === "done");
     const child = await (await post("/api/delegate", { to: "mock", prompt: "child", title: "delete-me-child", parent_task_id: root.task.id })).json();
     await until(async () => (await taskById(child.task.id))?.status === "done");
-    const logPath = join(TMP, ".ekip", "logs", `mock-${child.task.id}.log`);
+    const logPath = join(DATA, "logs", `mock-${child.task.id}.log`);
     t("conversation to delete has a log", existsSync(logPath));
     const gone = await (await post("/api/threads/delete", { id: child.task.id })).json();
     t("delete by any task removes the whole conversation", gone.deleted === 2 && gone.thread === root.task.id, JSON.stringify(gone));
@@ -778,11 +780,11 @@ try {
 
   // ---- retention: prune finished tasks + their logs ----
   const { removeSpawnLog, spawnLogPath } = await import("../dist/core/index.js");
-  const d1Log = spawnLogPath(TMP, "mock", d1.task.id);
+  const d1Log = spawnLogPath(config, "mock", d1.task.id);
   t("spawn log exists before prune", existsSync(d1Log));
   const cutoff = new Date(Date.parse((await taskById(d1.task.id)).updatedAt) + 1).toISOString();
   const pruned = hub.store.prune(cutoff);
-  for (const p of pruned) removeSpawnLog(TMP, p.to, p.id);
+  for (const p of pruned) removeSpawnLog(config, p.to, p.id);
   t("prune removes old finished tasks", pruned.some((p) => p.id === d1.task.id) && !(await taskById(d1.task.id)));
   t("prune removes their spawn logs", !existsSync(d1Log));
   t("prune keeps live tasks", (await api("/api/state")).tasks.some((x) => x.status === "pending" || x.status === "claimed") || true);
@@ -961,7 +963,7 @@ try {
     if (leaked) execFileSync("rm", ["-f", join(process.env.HOME, "ekip-e2e-leak.txt")]);
     t("sandbox: writes inside the folder work", existsSync(join(TMP, "boxed-in.txt")));
     t("sandbox: writes into home outside the folder are blocked", !leaked && !existsSync(join(TMP, "boxed-leaked.flag")));
-    t("sandbox: the log says the run was sandboxed", readFileSync(join(TMP, ".ekip", "logs", `boxed-${bx.task.id}.log`), "utf8").includes("[ekip] sandboxed to"));
+    t("sandbox: the log says the run was sandboxed", readFileSync(join(DATA, "logs", `boxed-${bx.task.id}.log`), "utf8").includes("[ekip] sandboxed to"));
   }
 
   // ---- robustness: a launch that throws fails the task instead of the hub ----
@@ -972,12 +974,12 @@ try {
   t("an unknown MCP session gets 404 (client should re-initialize)", stale.status === 404);
 
   const { spawnLogHint } = await import("../dist/core/logs.js");
-  mkdirSync(join(TMP, ".ekip", "logs"), { recursive: true });
-  writeFileSync(join(TMP, ".ekip", "logs", "hintprobe-t1.log"), [
+  mkdirSync(join(DATA, "logs"), { recursive: true });
+  writeFileSync(join(DATA, "logs", "hintprobe-t1.log"), [
     JSON.stringify({ type: "system", subtype: "init", permissionMode: "acceptEdits" }),
     JSON.stringify({ type: "result", subtype: "success", is_error: true, result: "Failed to authenticate: OAuth session expired" }),
   ].join("\n"));
-  t("failure hint quotes the run's own error, not its init line", spawnLogHint(TMP, "hintprobe", "t1") === JSON.stringify("Failed to authenticate: OAuth session expired"));
+  t("failure hint quotes the run's own error, not its init line", spawnLogHint(config, "hintprobe", "t1") === JSON.stringify("Failed to authenticate: OAuth session expired"));
 
   // ---- run keys: only the run the hub started can claim its task ----
   const rk = await (await post("/api/delegate", { to: "sleeper", prompt: "never claims", title: "run-key" })).json();
@@ -1035,6 +1037,8 @@ try {
         { name: "person", adapter: "command", spawnable: false, command: "true" },
       ] };
     let rhub = await startServer(rcfg);
+    const RDATA = hubDataDir(rcfg);
+    t("restart: records from an older layout are moved out of the project", existsSync(join(RDATA, "state.json")) && !existsSync(join(RROOT, ".ekip", "state.json")));
     const rstate = async () => (await (await fetch(RB + "/api/state")).json()).tasks;
     const rt = async (id) => (await rstate()).find((x) => x.id === id);
     t("restart: a flow left running is failed with the reason", (await rt("flow-root")).status === "failed" && /restarted/.test((await rt("flow-root")).result ?? ""));
@@ -1045,14 +1049,14 @@ try {
     const napPid = await until(async () => (await rt(nap.task.id))?.pid);
     await rhub.close();
     await sleep(400);
-    const afterClose = JSON.parse(readFileSync(join(RROOT, ".ekip", "state.json"), "utf8")).tasks.find((x) => x.id === nap.task.id);
+    const afterClose = JSON.parse(readFileSync(join(RDATA, "state.json"), "utf8")).tasks.find((x) => x.id === nap.task.id);
     t("stopping the hub stops its workers", typeof napPid === "number" && !isAlive(napPid));
     t("stopping the hub says so on their tasks", afterClose?.status === "failed" && /hub stopped/.test(afterClose?.result ?? ""), afterClose?.result);
-    t("state is written atomically (no temp file left)", !existsSync(join(RROOT, ".ekip", "state.json.tmp")));
-    writeFileSync(join(RROOT, ".ekip", "state.json"), "{ torn write");
+    t("state is written atomically (no temp file left)", !existsSync(join(RDATA, "state.json.tmp")));
+    writeFileSync(join(RDATA, "state.json"), "{ torn write");
     rhub = await startServer(rcfg);
-    const aside = readdirSync(join(RROOT, ".ekip")).filter((f) => f.startsWith("state.json.corrupt-"));
-    t("restart: an unreadable state file is kept aside, not overwritten", aside.length === 1 && readFileSync(join(RROOT, ".ekip", aside[0]), "utf8") === "{ torn write");
+    const aside = readdirSync(RDATA).filter((f) => f.startsWith("state.json.corrupt-"));
+    t("restart: an unreadable state file is kept aside, not overwritten", aside.length === 1 && readFileSync(join(RDATA, aside[0]), "utf8") === "{ torn write");
     t("restart: the hub still starts on unreadable state", (await fetch(RB + "/health")).status === 200);
     await rhub.close();
   }
@@ -1256,7 +1260,7 @@ done
 
 // persistence across restart
 {
-  const state = JSON.parse(readFileSync(join(TMP, ".ekip", "state.json"), "utf8"));
+  const state = JSON.parse(readFileSync(join(DATA, "state.json"), "utf8"));
   t("state persisted to disk", state.tasks.length >= 8 && state.context.some((c) => c.key === "e2e.mcp"));
   t("messages persisted to disk", Array.isArray(state.messages) && state.messages.some((m) => m.kind === "tool"));
 }

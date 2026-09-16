@@ -335,7 +335,7 @@ export class Dispatcher {
       // The conversation's folder wins: that is where the person asked for
       // the work to happen. Logs stay with the hub either way.
       cwd: task.cwd ?? agent.cwd ?? this.config.projectRoot,
-      logFile: spawnLogPath(this.config.projectRoot, agent.name, task.id),
+      logFile: spawnLogPath(this.config, agent.name, task.id),
       taskId: task.id,
       hubUrl: hubUrl(this.config),
       depth: task.depth,
@@ -396,7 +396,7 @@ export class Dispatcher {
         const how = exit.error
           ? w.failedToStart(exit.error)
           : w.exited(exit.signal ? w.signal(exit.signal) : w.code(exit.code), task.status !== "pending");
-        const hint = spawnLogHint(this.config.projectRoot, agent, taskId);
+        const hint = spawnLogHint(this.config, agent, taskId);
         patch.status = "failed";
         patch.result = `${how}${hint ? w.hints(hint) : ""}`;
         this.store.addMessage({ taskId, from: "hub", kind: "system", text: patch.result, meta: { workerExit: true } });

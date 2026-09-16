@@ -1,5 +1,5 @@
-import { randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, resolve, join } from "node:path";
 
@@ -273,6 +273,46 @@ export function hubUrl(config: BridgeConfig): string {
   return `http://${config.host}:${config.port}/mcp`;
 }
 
+/**
+ * Where a hub keeps what it records — tasks, conversations, the blackboard,
+ * spawn logs: `~/.ekip/projects/<project>-<hash of its path>/`.
+ *
+ * Not inside the project, on purpose. A run working in the project that hosts
+ * the hub would otherwise be able to read every conversation of every folder
+ * this hub has served, and to edit the hub's own config. Out here the folder
+ * guard and the sandbox keep it out. Role files and flows stay in the
+ * project's `.ekip/` — those are yours to write and to commit.
+ */
+export function hubDataDir(config: Pick<BridgeConfig, "project" | "projectRoot">): string {
+  const slug = (config.project || "project").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "project";
+  const hash = createHash("sha256").update(resolve(config.projectRoot)).digest("hex").slice(0, 8);
+  return join(globalDir(), "projects", `${slug}-${hash}`);
+}
+
 export function stateFilePath(config: BridgeConfig): string {
-  return join(config.projectRoot, ".ekip", "state.json");
+  return join(hubDataDir(config), "state.json");
+}
+
+/**
+ * Move a pre-0.7 hub's records out of the project, once. Anything already at
+ * the new location wins; the old folder is left with whatever else is in it
+ * (roles, flows).
+ */
+export function migrateHubData(config: BridgeConfig): string | undefined {
+  const old = join(config.projectRoot, ".ekip");
+  const now = hubDataDir(config);
+  let moved: string | undefined;
+  for (const name of ["state.json", "logs"]) {
+    const from = join(old, name);
+    const to = join(now, name);
+    if (!existsSync(from) || existsSync(to)) continue;
+    try {
+      mkdirSync(now, { recursive: true });
+      renameSync(from, to);
+      moved = now;
+    } catch {
+      // different filesystem, or no permission: leave it and carry on
+    }
+  }
+  return moved;
 }

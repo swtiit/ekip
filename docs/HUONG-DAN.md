@@ -278,6 +278,12 @@ và mỗi lần chạy quy trình:
 - Hub nghe ở `127.0.0.1` và **từ chối** request đổi trạng thái từ trang web
   khác (bắt buộc `Content-Type: application/json`, Origin phải là hub) và
   request có Host lạ (chống DNS rebinding).
+- **Dữ liệu của hub nằm ngoài dự án:** task, hội thoại, bảng đen và log chạy
+  để ở `~/.ekip/projects/<tên dự án>-<mã>/`. Lý do: nếu để trong `.ekip/` của
+  dự án thì một agent làm việc ngay trong dự án chứa hub sẽ đọc được hội thoại
+  của mọi folder khác và sửa được cấu hình hub. Bản cũ tự được dời sang chỗ
+  mới ở lần khởi động kế tiếp. Riêng `.ekip/roles` và `.ekip/flows` vẫn nằm
+  trong dự án vì đó là file bạn viết và commit.
 - **Hub có sẵn hai token**, tự sinh lần chạy đầu, để trong `~/.ekip/auth.json`
   (chỉ bạn đọc được). Xem bằng `ekip token`; xoá file đó là cấp lại cặp mới.
   - **Token của bạn**: mở được cả API và MCP. Web app hỏi một lần rồi nhớ bằng

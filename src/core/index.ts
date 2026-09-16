@@ -16,7 +16,7 @@ export * from "./server.js";
 export { Store } from "./store.js";
 export { Dispatcher } from "./dispatcher.js";
 export { buildHub } from "./hub.js";
-export { removeSpawnLog, spawnLogHint, spawnLogPath } from "./logs.js";
+export { logsDir, removeSpawnLog, spawnLogHint, spawnLogPath } from "./logs.js";
 export { FlowRunner, checkGate, loadFlows, validateFlow } from "./flows.js";
 export type { Flow, FlowGate, FlowStep } from "./flows.js";
 export { agyCatalog, catalogFor, claudeCatalog, listSeenModels, recordSeenModel } from "./models.js";

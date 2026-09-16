@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-301_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-302_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -330,6 +330,13 @@ Anything that can reach the hub can launch agents that edit files, so:
   send `Content-Type: application/json` and, when a browser sends an Origin,
   come from the hub itself — a web page on another site can't drive it. The
   Host header must be one of the hub's own addresses (DNS rebinding).
+- **The hub's records live outside the project.** Tasks, conversations, the
+  blackboard and spawn logs go to `~/.ekip/projects/<project>-<hash>/`, not
+  into the repo. A run working in the project that hosts the hub would
+  otherwise read every conversation of every folder this hub has served, and
+  could edit the hub's own config; out there the folder guard and the sandbox
+  keep it out. An older layout is moved on the next start, and the project's
+  `.ekip/roles` and `.ekip/flows` — yours to write and commit — stay put.
 - **Two credentials, generated on first use** and kept in `~/.ekip/auth.json`
   (readable only by you; `ekip token` prints them, delete the file to roll
   them):
@@ -425,7 +432,7 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 301 end-to-end cases, no LLMs involved
+npm test   # 302 end-to-end cases, no LLMs involved
 npm run test:ui   # 17 browser checks in headless Chrome (uses the installed Chrome)
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```

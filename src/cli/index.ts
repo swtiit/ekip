@@ -9,6 +9,7 @@ import {
   loadConfig,
   loadGlobalDefaults,
   startServer,
+  stateFilePath,
 } from "../core/index.js";
 import { getAdapter } from "../adapters/index.js";
 import type { BridgeConfig } from "../core/config.js";
@@ -497,7 +498,7 @@ function cmdStatus(): void {
     console.error((err as Error).message);
     process.exit(1);
   }
-  const stateFile = resolve(cwd, ".ekip", "state.json");
+  const stateFile = stateFilePath(config);
   console.log(`Project: ${config.project}`);
   console.log(`Endpoint: ${hubUrl(config)}`);
   console.log(`Agents: ${config.agents.map((a) => `${a.name}(${a.adapter})`).join(", ")}`);
@@ -541,7 +542,7 @@ function agoShort(iso: string): string {
 async function cmdWatch(): Promise<void> {
   const config = loadConfig(cwd);
   const apiBase = hubUrl(config).replace(/\/mcp$/, "");
-  const stateFile = resolve(cwd, ".ekip", "state.json");
+  const stateFile = stateFilePath(config);
 
   interface WatchState {
     tasks: Array<{

@@ -11,10 +11,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:net";
-import { startServer } from "../dist/core/index.js";
+import { startServer, hubDataDir } from "../dist/core/index.js";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TMP = mkdtempSync(join(tmpdir(), "ekip-soak-"));
+// Keep the machine's own ~/.ekip out of the run (records, tokens, model lists).
+process.env.EKIP_HOME = join(TMP, "machine-home");
 const ROUNDS = Number(process.env.SOAK_ROUNDS ?? 3);
 const BURST = Number(process.env.SOAK_BURST ?? 12);
 const PORT = await new Promise((res) => {
@@ -177,7 +179,7 @@ try {
   check("no workers still holding slots", finalState.workers.running.length === 0, JSON.stringify(finalState.workers));
   const leaked = [...spawnedPids].filter((pid) => alive(pid));
   check("no orphan worker processes", leaked.length === 0, leaked.join(", "));
-  const stateFile = join(TMP, ".ekip", "state.json");
+  const stateFile = join(hubDataDir(config), "state.json");
   check("state file is valid JSON", existsSync(stateFile) && !!JSON.parse(readFileSync(stateFile, "utf8")).tasks);
   const heap = Math.round(process.memoryUsage().heapUsed / 1048576);
   console.log(`\n    peak concurrent workers: ${peakRunning}/${config.maxConcurrent} · tasks: ${finalState.tasks.length} · heap: ${heap}MB`);

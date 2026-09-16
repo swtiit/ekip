@@ -19,10 +19,11 @@ import {
   resolveRoleFile,
   setAgentFlag,
   stateFilePath,
+  migrateHubData,
 } from "./config.js";
 import { Dispatcher } from "./dispatcher.js";
 import { buildHub, type HubSessions } from "./hub.js";
-import { removeSpawnLog } from "./logs.js";
+import { removeSpawnLog, logsDir } from "./logs.js";
 import { FlowRunner, loadFlows, validateFlow } from "./flows.js";
 import { assertSafeBinding, checkAccess, hubToken, presentedToken, tokenMatches } from "./access.js";
 import { isTerminal, type Task } from "../protocol/index.js";
@@ -93,6 +94,8 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   } catch (err) {
     return Promise.reject(err);
   }
+  const movedData = migrateHubData(config);
+  if (movedData) console.log(`ekip: moved this hub's records out of the project to ${movedData}`);
   const store = new Store(stateFilePath(config));
   const dispatcher = new Dispatcher(config, store);
   const watchdog = new Watchdog(config, store, (taskId) => dispatcher.kill(taskId));
@@ -111,7 +114,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
   const prune = (): void => {
     if (!retentionDays || retentionDays <= 0) return;
     const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString();
-    for (const t of store.prune(cutoff)) removeSpawnLog(config.projectRoot, t.to, t.id);
+    for (const t of store.prune(cutoff)) removeSpawnLog(config, t.to, t.id);
   };
   prune();
   const pruneTimer = setInterval(prune, 3_600_000);
@@ -523,7 +526,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       dispatcher.cancel(root, "human", "conversation deleted");
     }
     const removed = store.deleteThread(root);
-    for (const t of removed) removeSpawnLog(config.projectRoot, t.to, t.id);
+    for (const t of removed) removeSpawnLog(config, t.to, t.id);
     sendJson(res, 200, { deleted: removed.length, thread: root });
   }
 
@@ -706,7 +709,7 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       sendText(res, 400, "Invalid task id.");
       return;
     }
-    const dir = join(config.projectRoot, ".ekip", "logs");
+    const dir = logsDir(config);
     const file = existsSync(dir)
       ? readdirSync(dir).find((f) => f.endsWith(`-${taskId}.log`))
       : undefined;

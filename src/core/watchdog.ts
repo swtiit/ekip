@@ -91,7 +91,7 @@ export class Watchdog {
   }
 
   private fail(taskId: string, agent: string, reason: string): void {
-    const hint = spawnLogHint(this.config.projectRoot, agent, taskId);
+    const hint = spawnLogHint(this.config, agent, taskId);
     const w = hubWords(this.config.language);
     this.store.updateTask(taskId, {
       status: "failed",
