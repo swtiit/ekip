@@ -204,7 +204,7 @@ main{flex:1;min-height:0;display:flex}
 .you-row{display:flex;justify-content:flex-end;margin:4px 0 22px}
 .you{max-width:82%;background:var(--you);border:1px solid var(--you-line);border-radius:16px 16px 4px 16px;padding:10px 14px;box-shadow:var(--shadow-sm)}
 .you .to{font-size:11.5px;color:var(--muted);margin-bottom:3px;display:flex;align-items:center;gap:6px}
-.you .text{white-space:pre-wrap;overflow-wrap:anywhere}
+.you .text{overflow-wrap:anywhere}
 
 /* an agent's turn */
 .turn{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;margin:0 0 20px}
@@ -222,8 +222,15 @@ main{flex:1;min-height:0;display:flex}
 .brief summary{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;list-style:none;padding:3px 8px 3px 6px;border-radius:6px;background:var(--sunk)}
 .brief summary::-webkit-details-marker{display:none}
 .brief summary:hover{color:var(--ink)}
-.brief .text{margin-top:8px;padding:10px 12px;border-left:2px solid var(--line);color:var(--ink-2);white-space:pre-wrap;font-size:13.5px}
-.prose{white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0 10px;color:var(--ink)}
+.brief .text{margin-top:8px;padding:10px 12px;border-left:2px solid var(--line);color:var(--ink-2);font-size:13.5px}
+.prose{overflow-wrap:anywhere;margin:2px 0 10px;color:var(--ink)}
+.prose p,.answer .ab p,.outcome .ob p,.you .text p,.brief .text p{margin:0 0 9px}
+.prose p:last-child,.answer .ab p:last-child,.outcome .ob p:last-child,.you .text p:last-child,.brief .text p:last-child{margin-bottom:0}
+.prose ul,.prose ol,.answer .ab ul,.answer .ab ol,.outcome .ob ul,.outcome .ob ol,.you .text ul,.you .text ol,.brief .text ul,.brief .text ol{margin:0 0 9px;padding-left:20px}
+.prose li,.answer .ab li,.outcome .ob li,.you .text li,.brief .text li{margin:3px 0}
+.prose li::marker,.answer .ab li::marker,.outcome .ob li::marker{color:var(--faint)}
+.prose .mdh,.outcome .ob .mdh,.brief .text .mdh{font-weight:650;margin:12px 0 5px}
+.prose hr,.answer .ab hr,.outcome .ob hr{border:0;border-top:1px solid var(--line);margin:12px 0}
 .prose code,.outcome code,.you code,.brief code{font-family:var(--mono);font-size:.88em;background:var(--sunk);padding:1px 5px;border-radius:5px}
 .prose pre,.outcome pre{background:var(--sunk);border:1px solid var(--line-soft);border-radius:9px;padding:10px 12px;overflow:auto;font-family:var(--mono);font-size:12.5px;line-height:1.5;margin:8px 0;white-space:pre}
 
@@ -264,12 +271,15 @@ main{flex:1;min-height:0;display:flex}
 .notice{display:flex;align-items:flex-start;gap:8px;margin:2px 0 10px;padding:8px 11px;border-radius:9px;font-size:12.5px;background:var(--sunk);color:var(--ink-2)}
 .notice.bad{background:var(--bad-soft);color:var(--bad)}
 .notice.warn{background:var(--warn-soft);color:var(--warn)}
+.followup{margin:14px 0 0;padding-top:12px;border-top:1px solid var(--line-soft)}
 .answer{margin:10px 0 14px;border-left:3px solid var(--ok);padding:2px 0 2px 14px}
 .answer.failed{border-left-color:var(--bad)}
 .answer .ah{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-2);margin-bottom:6px}
 .answer .ah .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
 .answer .ah .sp{flex:1}
-.answer .ab{font-size:14.5px;line-height:1.62;overflow-wrap:anywhere;white-space:pre-wrap}
+.answer .ab{font-size:14.5px;line-height:1.62;overflow-wrap:anywhere}
+.answer .ab .mdh{font-weight:650;margin:14px 0 6px;font-size:14px}
+.answer .ab > :first-child{margin-top:0}
 .answer .ab > :first-child{margin-top:0}
 .answer .ab > :last-child{margin-bottom:0}
 .outcome.nested > summary{display:flex;align-items:center;gap:7px;padding:7px 12px;cursor:pointer;list-style:none;font-size:12px}
@@ -281,7 +291,7 @@ main{flex:1;min-height:0;display:flex}
 .outcome .oh{display:flex;align-items:center;gap:7px;padding:8px 12px 0;font-size:11.5px;font-weight:650;color:var(--ok);text-transform:uppercase;letter-spacing:.05em}
 .outcome.failed .oh{color:var(--bad)}
 .outcome .oh .sp{flex:1}
-.outcome .ob{padding:4px 12px 10px;white-space:pre-wrap;overflow-wrap:anywhere}
+.outcome .ob{padding:4px 12px 10px;overflow-wrap:anywhere}
 .receipts{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 11px}
 .receipt{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:7px;background:var(--surface);border:1px solid var(--line);font-size:12px;color:var(--ink-2)}
 .receipt:hover{border-color:var(--accent);color:var(--accent)}

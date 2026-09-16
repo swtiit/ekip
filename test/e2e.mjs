@@ -341,6 +341,15 @@ try {
     let parses = true;
     try { new Function(js); } catch { parses = false; }
     t("client script parses", parses);
+  {
+    const mdOf = new Function("esc", "text", js.match(/function md\(text\)[\s\S]*?\n}/)[0] + js.match(/function mdInline\(line\)[\s\S]*?\n}/)[0] + js.match(/function mdBlocks\(text\)[\s\S]*?\n}/)[0] + "; return md(text);");
+    const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+    const html = mdOf(esc, "## Tổng quan\n\n- **Stack**: Rails 6\n- Redis + Sidekiq\n  chạy nền\n\n1. Bước một\n2. Bước hai\n\nMột đoạn văn.");
+    t("markdown: headings, bullets, steps and paragraphs become blocks",
+      /<div class="mdh">Tổng quan<\/div>/.test(html) && /<ul><li><b>Stack<\/b>: Rails 6<\/li>/.test(html) && /chạy nền<\/li><\/ul>/.test(html) &&
+      /<ol><li>Bước một<\/li><li>Bước hai<\/li><\/ol>/.test(html) && /<p>Một đoạn văn\.<\/p>/.test(html), html.slice(0, 220));
+    t("markdown: still escapes html", !/<script>/.test(mdOf(esc, "<script>alert(1)</script>")));
+  }
     t("client regexes keep their backslashes", js.includes("/^\\S+ started: /") && js.includes("\\x60\\x60\\x60"));
     t("client speaks Vietnamese and English", js.includes("Giao việc cho ê-kíp") && js.includes("Put your crew to work"));
   }

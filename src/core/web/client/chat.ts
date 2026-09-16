@@ -215,6 +215,9 @@ function renderStage(){
       if (i < 0) i = 0;
       var k = pending.splice(i, 1)[0];
       if (!k) return '';
+      // Your own follow-up continues the conversation; it is not a hand-off
+      // between agents, so it reads straight on instead of nesting.
+      if (k.from === 'human') return '<div class="followup">' + turn(k, depth) + '</div>';
       return '<div class="handoff">' + avatar(t.to, { size:'sm' }) + '<span class="baton">' + icon('handoff', 'sm') + '</span>' + avatar(k.to, { size:'sm' }) +
         '<span><b>' + esc(dn(t.to)) + '</b> ' + esc(T('hands')) + ' <b>' + esc(dn(k.to)) + '</b></span></div>' +
         '<div class="nested">' + turn(k, depth + 1) + '</div>';

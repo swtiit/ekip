@@ -263,11 +263,52 @@ function md(text){
   var parts = String(text == null ? '' : text).split(/(\x60\x60\x60[\s\S]*?\x60\x60\x60)/g);
   return parts.map(function(p){
     if (p.indexOf(FENCE) === 0) return '<pre>' + esc(p.slice(3, -3).replace(/^[\w-]*\n/, '')) + '</pre>';
-    return esc(p)
-      .replace(/\x60([^\x60\n]+)\x60/g, '<code>$1</code>')
-      .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
-      .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    return mdBlocks(p);
   }).join('');
+}
+/* Bold, code, links inside one line. */
+function mdInline(line){
+  return esc(line)
+    .replace(/\x60([^\x60\n]+)\x60/g, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+    .replace(/(^|[\s(\[])_([^_\n]+)_(?=$|[\s).,;:\]])/g, '$1<i>$2</i>')
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+/*
+ * Agents write markdown, so headings, bullets and numbered steps should read
+ * as such instead of one pre-wrapped wall. Blank lines separate paragraphs;
+ * a line under a bullet continues it.
+ */
+function mdBlocks(text){
+  var out = '', list = null, para = [];
+  function endPara(){ if (para.length) { out += '<p>' + para.join('<br>') + '</p>'; para = []; } }
+  function endList(){ if (list) { out += '</' + list + '>'; list = null; } }
+  String(text).split('\n').forEach(function(raw){
+    var line = raw.trim();
+    if (!line) { endPara(); endList(); return; }
+    var head = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (head) { endPara(); endList(); out += '<div class="mdh">' + mdInline(head[2]) + '</div>'; return; }
+    if (/^([-*_])\1{2,}$/.test(line)) { endPara(); endList(); out += '<hr>'; return; }
+    var bullet = /^[-*•]\s+(.*)$/.exec(line);
+    if (bullet) {
+      endPara();
+      if (list !== 'ul') { endList(); out += '<ul>'; list = 'ul'; }
+      out += '<li>' + mdInline(bullet[1]) + '</li>';
+      return;
+    }
+    var step = /^(\d+)[.)]\s+(.*)$/.exec(line);
+    if (step) {
+      endPara();
+      if (list !== 'ol') { endList(); out += '<ol>'; list = 'ol'; }
+      out += '<li>' + mdInline(step[2]) + '</li>';
+      return;
+    }
+    if (list && !para.length) { out = out.replace(/<\/li>$/, ' ' + mdInline(line) + '</li>'); return; }
+    para.push(mdInline(line));
+  });
+  endPara();
+  endList();
+  return out;
 }
 function initials(name){
   // First letter of the first and last word: "Lập trình · Gemini" → LG, "Điều phối" → ĐP.
