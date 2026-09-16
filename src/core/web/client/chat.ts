@@ -276,8 +276,9 @@ function renderStage(){
             '<span class="k">' + esc(a.kind) + '</span>' + esc(a.label || base(a.value)) + '</button>';
         }).join('') + '</div>' : '');
         var copyBtn = '<button class="btn ghost sm icon" data-copy="' + esc(m.id) + '" title="copy">' + icon('copy', 'sm') + '</button>';
-        if (depth === 0) {
-          // The conversation's answer: what you asked for, read as prose.
+        // Anything you asked for — the conversation, or a follow-up inside it —
+        // answers you in full; only work agents hand each other folds away.
+        if (depth === 0 || t.from === 'human') {
           body += '<div class="answer' + (failed ? ' failed' : '') + '"><div class="ah">' + avatar(m.from || t.to, { size:'sm' }) +
             '<b>' + esc(dn(m.from || t.to)) + '</b><span class="lbl">' + esc(failed ? T('failedT') : T('answer')) + '</span><span class="sp"></span>' + copyBtn + '</div>' +
             '<div class="ab" data-text="' + esc(m.id) + '">' + md(m.text) + receipts + '</div></div>';

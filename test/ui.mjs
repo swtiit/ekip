@@ -118,6 +118,15 @@ try {
   t("a folded report opens on click", await page.$eval(".outcome.nested", (e) => e.open));
   t("header counts the runs", /4 runs/.test((await page.textContent("#chat-top, .chat-top, header")) ?? "") || /4 runs/.test(await page.content()));
 
+  // a follow-up is a request of yours too, so it answers in full
+  await page.goto(`${BASE}/chat/${firstId}`);
+  await page.waitForSelector("#text");
+  await page.fill("#text", "one more thing");
+  await page.click("#send");
+  await page.waitForFunction(() => document.querySelectorAll(".answer").length >= 2, null, { timeout: 15000 });
+  const answers = await page.$$eval(".answer", (els) => els.map((e) => e.textContent ?? ""));
+  t("a follow-up answers in full, not folded away", answers.length >= 2 && /mock done/.test(answers[answers.length - 1]), String(answers.length));
+
   // ---- delete through the in-app dialog, never the browser's ----
   await page.goto(`${BASE}/chat/${firstId}`);
   await page.waitForSelector(`[data-del-current="${firstId}"]`);
