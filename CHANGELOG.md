@@ -3,7 +3,7 @@
 ## 0.7.0
 
 Two changes affect how an existing hub behaves; both take care of themselves
-on the next `ekip serve`.
+on the next `ekip start`.
 
 **A hub now has a token, and agents get a weaker one.** Two credentials are
 generated on first use and kept in `~/.ekip/auth.json` (`ekip token` prints
