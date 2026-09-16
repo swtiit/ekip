@@ -64,12 +64,18 @@ npm install -g @swtiit/ekip      # the installed command is `ekip`
 
 cd /any/project
 ekip init      # writes config + prints the MCP snippets to paste
-ekip serve     # hub + web app at http://127.0.0.1:4319/chat
+ekip serve     # hub + web app, keeps running
+ekip ui        # opens the web app, already signed in   (new terminal)
 ```
 
 `init` prints exactly what to paste into each agent (Claude Code's
 `.mcp.json`, Antigravity's global config — including the permission grants
-headless runs need). Then, from any connected agent or your own terminal:
+headless runs need, and the agent token line to export).
+
+The hub is password-protected from the first run: `ekip ui` and the CLI use
+your token by themselves, and typing `127.0.0.1:4319` into a browser asks for
+it once (`ekip token` prints it). Then, from any connected agent or your own
+terminal:
 
 ```bash
 ekip run claude-coder "Add input validation to src/api/users.ts"
@@ -89,6 +95,12 @@ task 54d00e94 → conductor · chat: http://127.0.0.1:4319/chat/54d00e94…
 
 ━━ DONE ━━ · auditor verdict: SHIP
 ```
+
+Day to day it is three habits: **a small, clear task goes straight to a
+coder**; **a change that matters runs the `code-review` flow**; **vague work
+goes to the conductor**, which splits it up. Each conversation is pinned to
+the folder it started in, and each request has a budget (20 runs, 120 minutes
+by default), so nothing runs away with your quota while you are not looking.
 
 ## How a delegation works
 

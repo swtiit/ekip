@@ -56,6 +56,16 @@ ekip ui       # mở http://127.0.0.1:4319/chat
 
 Nếu đã có "chuẩn máy" (mục 8) thì hai lệnh đầu là **toàn bộ** setup.
 
+Hub có mật khẩu ngay từ lần chạy đầu: `ekip ui` và CLI tự dùng token của bạn;
+gõ tay `127.0.0.1:4319` vào trình duyệt thì phải dán một lần (`ekip token` in
+ra). Agent bạn tự chạy thì cần `export EKIP_AGENT_TOKEN=…`, `ekip init` có in
+sẵn dòng này.
+
+Thói quen dùng hằng ngày: việc nhỏ rõ ràng gửi thẳng **Lập trình · Claude**;
+thay đổi quan trọng chạy quy trình **Code rồi review**; việc mơ hồ giao
+**Điều phối**. Mỗi hội thoại gắn với folder nó bắt đầu, và mỗi yêu cầu có
+ngân sách (mặc định 20 lượt, 120 phút) nên không sợ chạy quá đà.
+
 ## 4. Web app
 
 Thanh trên cùng có 4 mục. Giao diện theo ngôn ngữ của hub (đặt tiếng Việt là
