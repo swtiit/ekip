@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Artifact, Task } from "../protocol/index.js";
 import { isTerminal } from "../protocol/index.js";
+import { machineAuth } from "../core/config.js";
 
 /** ANSI palette shared by the CLI surfaces. */
 export const C = {
@@ -34,16 +35,20 @@ export interface HubState {
 
 export class HubDownError extends Error {}
 
-/** Headers for talking to the hub: the token from EKIP_TOKEN or ekip.config.json, when set. */
+/** Headers for talking to the hub: your token — EKIP_TOKEN, the project config, or ~/.ekip/auth.json. */
 export function authHeaders(json = false): Record<string, string> {
   let token = process.env.EKIP_TOKEN;
+  let open = false;
   if (!token) {
     try {
-      token = (JSON.parse(readFileSync(resolve(process.cwd(), "ekip.config.json"), "utf8")) as { token?: string }).token;
+      const cfg = JSON.parse(readFileSync(resolve(process.cwd(), "ekip.config.json"), "utf8")) as { token?: string; openAccess?: boolean };
+      token = cfg.token;
+      open = cfg.openAccess === true;
     } catch {
-      // no config here — no token
+      // no config here — fall back to this machine's token
     }
   }
+  if (!token && !open) token = machineAuth().token;
   return { ...(json ? { "Content-Type": "application/json" } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 }
 

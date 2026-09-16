@@ -1,4 +1,5 @@
-import { readFileSync, existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, resolve, join } from "node:path";
 
@@ -91,6 +92,17 @@ export interface BridgeConfig {
    * Optional on 127.0.0.1; required to listen on any other address.
    */
   token?: string;
+  /**
+   * The credential spawned agents get. It opens `/mcp` only — never the HTTP
+   * API — so a run that is talked into something by a file it reads still
+   * can't start work outside its own task. Filled in automatically.
+   */
+  agentToken?: string;
+  /**
+   * Run without any token: anything on this machine (including an agent) can
+   * drive the hub. Only on a machine where you trust every process.
+   */
+  openAccess?: boolean;
   /**
    * Language agents should speak in — appended to every bootstrap prompt, e.g.
    * "Vietnamese". Affects what they say and write, not the code they produce.
@@ -186,6 +198,46 @@ export function resolveRoleFile(projectRoot: string, promptFile: string): string
   return existsSync(global) ? global : undefined;
 }
 
+/**
+ * The hub's two credentials, kept in `~/.ekip/auth.json` (readable only by
+ * you) and shared by every project's hub on this machine:
+ *
+ * - `token` is yours: the web app, the CLI, anything that drives the hub.
+ * - `agentToken` is what spawned runs get. It is accepted on `/mcp` and
+ *   nowhere else, so a run can use the bridge tools but cannot call the HTTP
+ *   API to start work outside its own task.
+ *
+ * Generated on first use. Delete the file to roll both.
+ */
+export function machineAuth(): { token: string; agentToken: string } {
+  const path = join(globalDir(), "auth.json");
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8")) as { token?: string; agentToken?: string };
+    if (typeof raw.token === "string" && typeof raw.agentToken === "string" && raw.token && raw.agentToken) {
+      return { token: raw.token, agentToken: raw.agentToken };
+    }
+  } catch {
+    // no file yet, or unreadable — make a fresh pair
+  }
+  const made = { token: randomBytes(24).toString("base64url"), agentToken: randomBytes(24).toString("base64url") };
+  try {
+    mkdirSync(globalDir(), { recursive: true });
+    writeFileSync(path, JSON.stringify(made, null, 2) + "\n", { mode: 0o600 });
+  } catch {
+    // can't persist (read-only home?): the pair still works for this hub's life
+  }
+  return made;
+}
+
+/** Fill in the credentials a hub runs with, unless it was told to run open. */
+export function resolveAuth(config: BridgeConfig): BridgeConfig {
+  if (config.openAccess) return config;
+  const machine = machineAuth();
+  config.token = process.env.EKIP_TOKEN?.trim() || config.token || machine.token;
+  config.agentToken = process.env.EKIP_AGENT_TOKEN?.trim() || config.agentToken || machine.agentToken;
+  return config;
+}
+
 export function loadConfig(projectRoot = process.cwd()): BridgeConfig {
   const path = resolve(projectRoot, CONFIG_FILENAME);
   if (!existsSync(path)) {
@@ -198,7 +250,7 @@ export function loadConfig(projectRoot = process.cwd()): BridgeConfig {
   const merged = { ...defaultConfig(projectRoot), ...loadGlobalDefaults(), ...raw };
   // projectRoot always reflects where the config actually lives.
   merged.projectRoot = projectRoot;
-  return merged as BridgeConfig;
+  return resolveAuth(merged as BridgeConfig);
 }
 
 /** Read the value following a CLI flag in an agent's args (e.g. "--model"). */

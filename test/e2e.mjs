@@ -1,7 +1,7 @@
 // End-to-end suite: boots a real hub on a scratch port and exercises the
 // HTTP API, the MCP tool surface, the dispatcher, the watchdog, and the CLI.
 // No LLMs involved — agents are scripted mocks. Run with `npm test`.
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -588,14 +588,16 @@ try {
     t("same-origin writes still work", (await fetch(BASE + "/api/context", { method: "POST", headers: { "Content-Type": "application/json", Origin: BASE }, body: JSON.stringify({ key: "same.origin", value: 1 }) })).status === 200);
 
     const TOKEN = "s3cret-token-for-tests";
+    const AGENT_TOKEN = "agent-token-for-tests";
     const TPORT = await new Promise((res) => { const probe = createServer(); probe.listen(0, "127.0.0.1", () => { const p = probe.address().port; probe.close(() => res(p)); }); });
     const TROOT = mkdtempSync(join(tmpdir(), "ekip-token-"));
     const TB = `http://127.0.0.1:${TPORT}`;
-    const tokenHub = await startServer({ project: "tok", host: "127.0.0.1", port: TPORT, projectRoot: TROOT, token: TOKEN,
+    const tokenHub = await startServer({ project: "tok", host: "127.0.0.1", port: TPORT, projectRoot: TROOT, token: TOKEN, agentToken: AGENT_TOKEN,
       agents: [{ name: "envdump", adapter: "command", spawnable: true, command: "sh", args: ["-c", 'printf "%s" "$EKIP_TOKEN" > token.txt'] }] });
     try {
       t("token hub: API without a token → 401", (await fetch(TB + "/api/state")).status === 401);
-      t("token hub: health says only that it is up", JSON.stringify(await (await fetch(TB + "/health")).json()) === JSON.stringify({ ok: true, auth: true }));
+      const health = await (await fetch(TB + "/health")).json();
+      t("token hub: health says only that it is up and which language to ask in", JSON.stringify(health) === JSON.stringify({ ok: true, auth: true, language: null }));
       t("token hub: Bearer token works", (await fetch(TB + "/api/state", { headers: { Authorization: "Bearer " + TOKEN } })).status === 200);
       t("token hub: a wrong token is refused", (await fetch(TB + "/api/state", { headers: { Authorization: "Bearer nope" } })).status === 401);
       const mcpNoToken = await fetch(TB + "/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "x", version: "0" } } }) });
@@ -614,7 +616,11 @@ try {
       t("token hub: login with a wrong token → 401", (await fetch(TB + "/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: "nope" }) })).status === 401);
       const d = await (await fetch(TB + "/api/delegate", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + TOKEN }, body: JSON.stringify({ to: "envdump", prompt: "x" }) })).json();
       await until(async () => existsSync(join(TROOT, "token.txt")));
-      t("token hub: spawned workers receive the token", existsSync(join(TROOT, "token.txt")) && readFileSync(join(TROOT, "token.txt"), "utf8") === TOKEN && !!d.task);
+      t("token hub: spawned workers get the agent token, not yours", existsSync(join(TROOT, "token.txt")) && readFileSync(join(TROOT, "token.txt"), "utf8") === AGENT_TOKEN && !!d.task);
+      const mcpWithAgent = await fetch(TB + "/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", Authorization: "Bearer " + AGENT_TOKEN }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "a", version: "0" } } }) });
+      t("agent token opens MCP", mcpWithAgent.status === 200);
+      t("agent token cannot read the API", (await fetch(TB + "/api/state", { headers: { Authorization: "Bearer " + AGENT_TOKEN } })).status === 401);
+      t("agent token cannot start work through the API", (await fetch(TB + "/api/delegate", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + AGENT_TOKEN }, body: JSON.stringify({ to: "envdump", prompt: "sneaky" }) })).status === 401);
     } finally {
       await tokenHub.close();
     }
@@ -802,6 +808,31 @@ try {
       r,
     ),
   );
+  {
+    const AHOME = mkdtempSync(join(tmpdir(), "ekip-auth-"));
+    const savedHome = process.env.EKIP_HOME;
+    const savedTok = process.env.EKIP_TOKEN;
+    const savedAgent = process.env.EKIP_AGENT_TOKEN;
+    process.env.EKIP_HOME = AHOME;
+    delete process.env.EKIP_TOKEN;
+    delete process.env.EKIP_AGENT_TOKEN;
+    const { machineAuth, resolveAuth } = await import("../dist/core/config.js");
+    const first = machineAuth();
+    const again = machineAuth();
+    const authFile = join(AHOME, "auth.json");
+    t("auth: a hub gets a token pair on first use, kept in ~/.ekip/auth.json", first.token.length > 20 && first.agentToken.length > 20 && first.token !== first.agentToken && first.token === again.token && existsSync(authFile));
+    t("auth: the file is private", (statSync(authFile).mode & 0o777) === 0o600);
+    const resolved = resolveAuth({ project: "p", host: "127.0.0.1", port: 1, projectRoot: AHOME, agents: [] });
+    t("auth: a config with no token gets the machine pair", resolved.token === first.token && resolved.agentToken === first.agentToken);
+    const open = resolveAuth({ project: "p", host: "127.0.0.1", port: 1, projectRoot: AHOME, agents: [], openAccess: true });
+    t("auth: openAccess keeps the hub token-free", open.token === undefined && open.agentToken === undefined);
+    const tokenOut = await new Promise((r) => execFile(process.execPath, [join(REPO, "dist/cli/index.js"), "token"], { cwd: TMP, env: { ...process.env, EKIP_HOME: AHOME } }, (err, stdout, stderr) => r(`${stdout}${stderr}`)));
+    t("auth: `ekip token` prints both credentials", tokenOut.includes(first.token) && tokenOut.includes(first.agentToken));
+    process.env.EKIP_HOME = savedHome;
+    if (savedTok) process.env.EKIP_TOKEN = savedTok;
+    if (savedAgent) process.env.EKIP_AGENT_TOKEN = savedAgent;
+  }
+
   const freshCfg = JSON.parse(readFileSync(join(FRESH, "ekip.config.json"), "utf8"));
   {
     const G2 = mkdtempSync(join(tmpdir(), "ekip-g2-"));

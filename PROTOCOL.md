@@ -167,10 +167,12 @@ queues. On macOS, agents with `sandbox` (default for Antigravity) run under
 
 State-changing requests to `/api/*` and `/mcp` must carry
 `Content-Type: application/json` and, if an `Origin` is sent, match the Host.
-The Host must be one of the hub's addresses. When a token is configured
-(`EKIP_TOKEN` or `token`), every API and MCP request must present it as
-`Authorization: Bearer <token>`, `x-ekip-token`, or the `ekip_token` cookie;
-otherwise the hub answers `401`.
+The Host must be one of the hub's addresses. A hub has two credentials (generated on first use, in `~/.ekip/auth.json`):
+the operator's `token`, required on every `/api/*` and `/mcp` request, and the
+`agentToken` handed to spawned runs, accepted on `/mcp` only. Either is
+presented as `Authorization: Bearer <token>`, `x-ekip-token`, or the
+`ekip_token` cookie; otherwise the hub answers `401`. `openAccess: true`
+disables both.
 
 ## Cancellation
 

@@ -15,7 +15,8 @@ import { realish } from "./scope.js";
  *   refused. Writes outside home (temp folders) stay allowed.
  * - reads: not your ordinary home folders (Documents, other projects, …), and
  *   not credential stores — ~/.ssh, ~/.aws, ~/.gnupg, ~/.netrc, ~/.npmrc,
- *   git/docker/kube/gh credentials, Claude's own files, shell history,
+ *   git/docker/kube/gh credentials, Claude's and ekip's own files (the hub's
+ *   tokens live in ~/.ekip/auth.json), shell history,
  *   browser profiles, Mail and Messages. (The keychain file stays reachable:
  *   agy signs in through it; its items remain protected by macOS itself.)
  * - network and processes are not restricted (the agent must reach its model).
@@ -55,7 +56,7 @@ const WRITABLE_IN_HOME = [
 /** Never readable, even though they sit in dot-folders or ~/Library. */
 const SECRET_IN_HOME = [
   ".ssh", ".aws", ".gnupg", ".netrc", ".npmrc", ".git-credentials", ".docker", ".kube",
-  ".config/gh", ".config/gcloud", ".azure", ".claude", ".claude.json",
+  ".config/gh", ".config/gcloud", ".azure", ".claude", ".claude.json", ".ekip",
   ".zsh_history", ".bash_history", ".python_history", ".node_repl_history",
   "Library/Cookies", "Library/Mail", "Library/Messages", "Library/Safari",
   "Library/Application Support/Google/Chrome", "Library/Application Support/Firefox",

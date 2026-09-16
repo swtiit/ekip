@@ -740,7 +740,10 @@ export function startServer(config: BridgeConfig): Promise<RunningHub> {
       if (path === "/mcp") return handleMcp(req, res);
       switch (route) {
         case "GET /health":
-          if (hubToken(config) && !tokenMatches(config, presentedToken(req))) return sendJson(res, 200, { ok: true, auth: true });
+          // Before sign-in we say only that a token is needed, and in which language to ask.
+          if (hubToken(config) && !tokenMatches(config, presentedToken(req))) {
+            return sendJson(res, 200, { ok: true, auth: true, language: config.language ?? null });
+          }
           return sendJson(res, 200, {
             ok: true,
             project: config.project,

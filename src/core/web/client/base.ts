@@ -16,6 +16,16 @@ var asking = false;
 function askToken(){
   if (asking || typeof dialog !== 'function') return;
   asking = true;
+  // Not signed in yet, so /api/state says nothing: /health still tells us which
+  // language to ask in. Settle that before the dialog goes up.
+  if (!S.state && !S.askedLang) {
+    S.askedLang = true;
+    fetch('/health').then(function(r){ return r.json(); }).then(function(h){
+      var lang = pickLang(h && h.language);
+      if (lang !== LANG) { LANG = lang; applyStaticText(); }
+    }).catch(function(){}).then(function(){ asking = false; askToken(); });
+    return;
+  }
   dialog({ title: T('tokenTitle'), message: T('tokenBody'), input: true, placeholder: 'EKIP_TOKEN', ok: T('signIn'), icon: 'plug' }).then(function(tok){
     if (!tok) { asking = false; return; }
     fetch('/api/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: tok }) }).then(function(r){
@@ -77,7 +87,7 @@ var DICT = {
   en: {
     runsN:'{n} runs', bRunsU:'runs', bMinU:'min', budgetTitle:'Budget for this request: the hub stops it when a limit is reached', budget:'Budget per request', budgetS:'Each message you send, flow you run, or top-level delegation may spend at most this much. When a limit is reached the hub starts nothing more for it; a time limit also stops work in flight. 0 = no limit.', bRuns:'Worker runs', bTokens:'Output tokens', bMinutes:'Minutes', noLimit:'No limit',
     flows:'Flows', flowCantRun:'can’t run here', gatePass:'Gate passed: {s} — {d}', gateRetry:'Not yet: {s} — {d}. Back to {g} (round {r}/{n})', gateStop:'Stopped at {s} — {d}. No rounds left.',
-    tokenTitle:'This hub needs a token', tokenBody:'Enter the token set as EKIP_TOKEN (or "token" in ekip.config.json) where the hub runs. This browser remembers it.', signIn:'Sign in', tokenWrong:'That token is not right',
+    tokenTitle:'This hub needs a token', tokenBody:'Run "ekip token" where the hub runs and paste the first one (yours). "ekip ui" opens the app already signed in. This browser remembers it.', signIn:'Sign in', tokenWrong:'That token is not right',
     billing:'How Claude is billed', runTime:'run time today', runTimeTitle:'Total time agents spent running today.', turnsL:'Turns',
     billSub:'Claude {plan} subscription — not billed per token', billUnknown:'Could not tell how Claude is signed in', billSubS:'Runs use your plan’s usage limits. Heavier models (Opus) use them up faster than lighter ones (Sonnet, Haiku).',
     billApi:'Claude is billed through an API key — real money per token', billApiKey:'An API key is set in the hub’s environment — every run is billed per token', billApiS:'Spawned agents use the key instead of your subscription. Costs are shown everywhere.',
@@ -128,7 +138,7 @@ var DICT = {
   vi: {
     runsN:'{n} lượt chạy', bRunsU:'lượt', bMinU:'phút', budgetTitle:'Ngân sách của yêu cầu này: hub dừng khi chạm giới hạn', budget:'Ngân sách mỗi yêu cầu', budgetS:'Mỗi tin bạn gửi, mỗi lần chạy quy trình hay mỗi việc giao trực tiếp chỉ được tiêu tối đa chừng này. Chạm giới hạn thì hub không bật thêm lượt nào; giới hạn thời gian còn dừng cả việc đang chạy. 0 = không giới hạn.', bRuns:'Lượt chạy', bTokens:'Token ra', bMinutes:'Phút', noLimit:'Không giới hạn',
     flows:'Quy trình', flowCantRun:'không chạy được ở đây', gatePass:'Qua cổng: {s} — {d}', gateRetry:'Chưa đạt: {s} — {d}. Quay lại {g} (vòng {r}/{n})', gateStop:'Dừng ở {s} — {d}. Đã hết số vòng.',
-    tokenTitle:'Hub này cần token', tokenBody:'Nhập token đã đặt ở EKIP_TOKEN (hoặc "token" trong ekip.config.json) nơi chạy hub. Trình duyệt sẽ nhớ.', signIn:'Đăng nhập', tokenWrong:'Token không đúng',
+    tokenTitle:'Hub này cần token', tokenBody:'Chạy "ekip token" ở máy đang chạy hub rồi dán dòng đầu (token của bạn). Dùng "ekip ui" thì vào thẳng khỏi cần dán. Trình duyệt sẽ nhớ.', signIn:'Đăng nhập', tokenWrong:'Token không đúng',
     billing:'Cách Claude tính phí', runTime:'thời gian chạy hôm nay', runTimeTitle:'Tổng thời gian các agent chạy trong hôm nay.', turnsL:'Số lượt model',
     billSub:'Gói Claude {plan} — không bị tính tiền theo token', billUnknown:'Không xác định được Claude đăng nhập bằng gì', billSubS:'Lượt chạy trừ vào hạn mức của gói. Model nặng (Opus) dùng hết hạn mức nhanh hơn model nhẹ (Sonnet, Haiku).',
     billApi:'Claude đang tính tiền qua API key — mỗi token là tiền thật', billApiKey:'Môi trường của hub có API key — mọi lượt chạy bị tính tiền theo token', billApiS:'Agent được bật sẽ dùng key thay cho gói thuê bao. Chi phí được hiện ở mọi nơi.',
@@ -274,7 +284,7 @@ function avatar(name, opts){
 
 /* ================= state ================= */
 var SIDEBAR_LIMIT = 10;
-var S = { gone:{}, expandedFolders:{}, billing:null, folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
+var S = { gone:{}, askedLang:false, expandedFolders:{}, billing:null, folders:[], folder:null, collapsed:{}, browsePath:null, state:null, threads:[], thread:null, current:null, notFound:false, catalogs:null, limits:null,
   view:'chat', filter:'', boardFilter:'', boardAgent:'', target:null, selectedTask:null,
   openGroups:{}, openSteps:{}, sig:{} };
 function agentByName(n){ return S.state ? S.state.agents.filter(function(a){ return a.name === n; })[0] : null; }

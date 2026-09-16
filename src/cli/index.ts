@@ -351,7 +351,7 @@ function cmdInitGlobal(): void {
 function wireMcpJson(url: string, withToken = false): void {
   const path = resolve(cwd, ".mcp.json");
   // Claude Code expands \${EKIP_TOKEN}, so the secret itself never lands in the repo.
-  const entry = { type: "http", url, ...(withToken ? { headers: { Authorization: "Bearer ${EKIP_TOKEN}" } } : {}) };
+  const entry = { type: "http", url, ...(withToken ? { headers: { Authorization: "Bearer ${EKIP_AGENT_TOKEN}" } } : {}) };
   let doc: { mcpServers?: Record<string, unknown> } = {};
   if (existsSync(path)) {
     try {
@@ -360,8 +360,16 @@ function wireMcpJson(url: string, withToken = false): void {
       console.log("  ! .mcp.json exists but is not valid JSON — paste the snippet manually.");
       return;
     }
-    if (doc.mcpServers?.["ekip"]) {
-      console.log("  .mcp.json already has ekip — left untouched.");
+    const current = doc.mcpServers?.["ekip"] as { headers?: Record<string, string> } | undefined;
+    if (current) {
+      // An older entry has no token header; the hub needs one now.
+      if (withToken && !current.headers?.Authorization) {
+        current.headers = { ...current.headers, Authorization: "Bearer ${EKIP_AGENT_TOKEN}" };
+        writeFileSync(path, JSON.stringify(doc, null, 2) + "\n");
+        console.log("  .mcp.json: added the agent token header to the existing ekip entry.");
+      } else {
+        console.log("  .mcp.json already has ekip — left untouched.");
+      }
       return;
     }
   }
@@ -388,7 +396,7 @@ function cmdInit(): void {
   const config = loadConfig(cwd);
   const url = hubUrl(config);
   console.log(`\nHub endpoint: ${url}`);
-  const needsToken = Boolean(process.env.EKIP_TOKEN || config.token);
+  const needsToken = Boolean(config.token) && !config.openAccess;
   wireMcpJson(url, needsToken);
   console.log("\nMCP snippets per agent (Claude Code is already wired via .mcp.json):\n");
   for (const agent of config.agents) {
@@ -399,11 +407,31 @@ function cmdInit(): void {
     }
     console.log(`# ${agent.name} → ${adapter.mcpConfigLocation()}`);
     console.log(
-      JSON.stringify({ mcpServers: adapter.mcpConfigSnippet(url, needsToken ? { tokenEnv: "EKIP_TOKEN" } : undefined) }, null, 2),
+      JSON.stringify({ mcpServers: adapter.mcpConfigSnippet(url, needsToken ? { tokenEnv: "EKIP_AGENT_TOKEN" } : undefined) }, null, 2),
     );
     console.log("");
   }
+  if (needsToken) {
+    console.log("This hub needs a token. `ekip ui` and the CLI use yours automatically.");
+    console.log("An agent you drive yourself (Claude Code, agy) needs the agent token:\n");
+    console.log(`  export EKIP_AGENT_TOKEN=${config.agentToken ?? ""}\n`);
+    console.log("`ekip token` prints both again; `\"openAccess\": true` in the config turns tokens off.\n");
+  }
   console.log("Then run: ekip serve");
+}
+
+/** `ekip token`: the two credentials, and how to hand the agent one out. */
+function cmdToken(): void {
+  const config = loadConfig(cwd);
+  if (config.openAccess || !config.token) {
+    console.log(`${C.dim}This hub runs open (no token): anything on this machine can drive it.${C.reset}`);
+    return;
+  }
+  console.log(`${C.cyan}Yours${C.reset}    ${config.token}   ${C.dim}web app · CLI · MCP${C.reset}`);
+  console.log(`${C.cyan}Agents${C.reset}   ${config.agentToken}   ${C.dim}MCP only — what spawned runs get${C.reset}`);
+  console.log("");
+  console.log(`${C.dim}Interactive agent:${C.reset} export EKIP_AGENT_TOKEN=${config.agentToken}`);
+  console.log(`${C.dim}Both live in ~/.ekip/auth.json; delete it to roll them.${C.reset}`);
 }
 
 async function cmdServe(): Promise<void> {
@@ -412,6 +440,7 @@ async function cmdServe(): Promise<void> {
   const url = hubUrl(config);
   console.log(`ekip serving "${config.project}" at ${url}`);
   console.log(`Web app:   ${url.replace(/\/mcp$/, "/chat")}  (Chat · Board · Guide · Settings)`);
+  if (config.token && !config.openAccess) console.log("Open it with `ekip ui` — that signs the browser in with your token.");
   console.log(`Agents: ${config.agents.map((a) => a.name).join(", ")}`);
   console.log("Press Ctrl+C to stop.");
   const shutdown = async () => {
@@ -572,6 +601,9 @@ try {
     case "flow":
       await cmdFlow();
       break;
+    case "token":
+      cmdToken();
+      break;
     case "config":
       await cmdConfig();
       break;
@@ -614,6 +646,7 @@ try {
           "  init --global               save THIS project's agents + roles as machine defaults",
           "  serve                       start the hub (MCP + web app at /chat)",
           "  status                      show config and task/context counts",
+          "  token                       print this machine's hub tokens",
           "",
           "Work:",
           "  run <agent> <prompt|@file>  delegate and live-follow the task tree",

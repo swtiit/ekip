@@ -16,14 +16,27 @@ import type { BridgeConfig } from "./config.js";
  *    it must be the hub itself.
  * 2. DNS rebinding. A hostile name that resolves to 127.0.0.1 still sends its
  *    own Host header, so the Host must be one of the hub's own addresses.
- * 3. Token (EKIP_TOKEN or `token` in ekip.config.json). Required for every
- *    API and MCP call when set — as a Bearer header, an `x-ekip-token` header,
- *    or the `ekip_token` cookie the web app gets after signing in. A hub
- *    listening beyond loopback refuses to start without one.
+ * 3. Tokens. A hub has two, generated on first use (see `machineAuth`):
+ *    your own `token` opens the HTTP API and MCP — as a Bearer header, an
+ *    `x-ekip-token` header, or the `ekip_token` cookie the web app gets after
+ *    signing in — while the `agentToken` spawned runs receive is accepted on
+ *    `/mcp` only. So a run that is talked into something by a file it reads
+ *    can still only use the bridge tools, within the limits the hub puts on
+ *    its own task; it cannot POST /api/delegate to start work elsewhere.
+ *    `openAccess: true` turns tokens off entirely. A hub listening beyond
+ *    loopback refuses to start without a token.
  */
 
 export function hubToken(config: BridgeConfig): string | undefined {
+  if (config.openAccess) return undefined;
   const t = process.env.EKIP_TOKEN ?? config.token;
+  return t && t.trim() ? t.trim() : undefined;
+}
+
+/** The credential spawned runs get: MCP only. */
+export function agentToken(config: BridgeConfig): string | undefined {
+  if (config.openAccess) return undefined;
+  const t = process.env.EKIP_AGENT_TOKEN ?? config.agentToken;
   return t && t.trim() ? t.trim() : undefined;
 }
 
@@ -72,6 +85,13 @@ export function tokenMatches(config: BridgeConfig, candidate: string | undefined
   return !token || (candidate !== undefined && safeEqual(candidate, token));
 }
 
+/** Does this request carry a credential good for `/mcp` (yours, or an agent's)? */
+export function mcpTokenMatches(config: BridgeConfig, candidate: string | undefined): boolean {
+  if (tokenMatches(config, candidate)) return true;
+  const agent = agentToken(config);
+  return Boolean(agent && candidate !== undefined && safeEqual(candidate, agent));
+}
+
 export interface AccessDenied {
   status: number;
   error: string;
@@ -112,8 +132,18 @@ export function checkAccess(config: BridgeConfig, req: IncomingMessage, path: st
     }
   }
 
-  if (token && api && path !== "/api/login" && !tokenMatches(config, presentedToken(req))) {
-    return { status: 401, error: "this hub needs a token — sign in with it, or send Authorization: Bearer <token>" };
+  if (token && api && path !== "/api/login") {
+    const presented = presentedToken(req);
+    const ok = path === "/mcp" ? mcpTokenMatches(config, presented) : tokenMatches(config, presented);
+    if (!ok) {
+      return {
+        status: 401,
+        error:
+          path === "/mcp"
+            ? "this hub needs a token — send Authorization: Bearer <token> (agents use the hub's agent token)"
+            : "this hub needs a token — sign in with it, or send Authorization: Bearer <token>",
+      };
+    }
   }
   return undefined;
 }

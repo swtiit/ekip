@@ -104,9 +104,8 @@ thư mục). Folder quyết định:
   tự báo "APPROVE" thay reviewer. Việc giao tiếp từ lượt chạy tự gắn vào task
   của nó (cùng folder, ngân sách, độ sâu). Kết quả đã báo xong thì không thay
   được.
-- **Giới hạn còn lại:** nếu hub không đặt token, tiến trình bất kỳ trên máy
-  (kể cả một agent) vẫn gọi được HTTP API trực tiếp. Làm việc với repo lạ thì
-  nên đặt `EKIP_TOKEN`.
+- **Lưu ý:** bật `openAccess` là bỏ hàng rào này — mọi tiến trình trên máy,
+  kể cả agent, gọi thẳng được HTTP API.
 - **Tắt / bật lại hub:** Ctrl+C dừng luôn các worker hub đã bật và ghi lý do
   lên task. Bật lại thì việc đang xếp hàng tự chạy tiếp; quy trình đang dở bị
   đánh dấu thất bại "hub đã khởi động lại" để bạn chạy lại.
@@ -218,7 +217,8 @@ Các field khác trong `ekip.config.json` (đều có mặc định):
 | `retention.days` | Xoá hội thoại đã xong sau N ngày (14); chỉ xoá khi cả hội thoại đều cũ |
 | `watchdog` | `pendingTtlSeconds` (600), `claimedTtlSeconds` (3600), `sweepIntervalSeconds` (30), `enabled` |
 | `mcpSessions` | `max` (256) phiên MCP, đóng phiên im lặng sau `idleMinutes` (30) |
-| `token` | Token của hub (hoặc biến môi trường `EKIP_TOKEN`) |
+| `token` / `agentToken` | Token của bạn / của agent (hoặc `EKIP_TOKEN`, `EKIP_AGENT_TOKEN`); tự sinh nếu bỏ trống |
+| `openAccess` | `true` = chạy không cần token |
 | `agents[].sandbox` / `writer` / `cwd` | Sandbox hệ điều hành · có sửa file không · folder cố định |
 
 `ekip init --global` lưu mọi field trên làm chuẩn máy, trừ `token` và tên dự án.
@@ -263,10 +263,17 @@ và mỗi lần chạy quy trình:
 - Hub nghe ở `127.0.0.1` và **từ chối** request đổi trạng thái từ trang web
   khác (bắt buộc `Content-Type: application/json`, Origin phải là hub) và
   request có Host lạ (chống DNS rebinding).
-- Muốn khoá bằng token: đặt `EKIP_TOKEN` (hoặc `"token"` trong config). Mọi
-  API/MCP khi đó cần `Authorization: Bearer <token>`; web app hỏi token một
-  lần rồi nhớ bằng cookie; `ekip ui` tự mở kèm token; `ekip init` ghi header
-  vào `.mcp.json`.
+- **Hub có sẵn hai token**, tự sinh lần chạy đầu, để trong `~/.ekip/auth.json`
+  (chỉ bạn đọc được). Xem bằng `ekip token`; xoá file đó là cấp lại cặp mới.
+  - **Token của bạn**: mở được cả API và MCP. Web app hỏi một lần rồi nhớ bằng
+    cookie; `ekip ui` mở thẳng khỏi cần dán; CLI tự dùng.
+  - **Token của agent**: chỉ mở được `/mcp`. Nhờ vậy một agent bị nội dung xấu
+    trong repo dụ dỗ cũng chỉ dùng được các công cụ bridge trong phạm vi task
+    của nó, không gọi được `/api/delegate` để mở việc ở folder khác. Agent bạn
+    tự chạy (Claude Code, agy) thì `export EKIP_AGENT_TOKEN=…`; `ekip init` ghi
+    sẵn header này vào `.mcp.json`.
+  - Muốn tắt hẳn: `"openAccess": true` trong config — khi đó mọi tiến trình
+    trên máy đều điều khiển được hub.
 - Hub nghe ra ngoài máy (`host` khác loopback) mà **không có token thì không
   chịu khởi động**.
 

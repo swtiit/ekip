@@ -11,7 +11,7 @@ and any headless CLI agent **delegate tasks to each other and share context**
 [![npm](https://img.shields.io/npm/v/%40swtiit%2Fekip?logo=npm&color=cb3837)](https://www.npmjs.com/package/@swtiit/ekip)
 ![node](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
 ![license](https://img.shields.io/badge/license-MIT-blue)
-![tests](https://img.shields.io/badge/e2e_tests-287_cases-brightgreen)
+![tests](https://img.shields.io/badge/e2e_tests-295_cases-brightgreen)
 
 `plan → debate → code → review → audit` — an Opus architect, a Sonnet
 reviewer, and a Gemini coder shipped a feature together in **5m39s**,
@@ -323,11 +323,21 @@ Anything that can reach the hub can launch agents that edit files, so:
   send `Content-Type: application/json` and, when a browser sends an Origin,
   come from the hub itself — a web page on another site can't drive it. The
   Host header must be one of the hub's own addresses (DNS rebinding).
-- Set **`EKIP_TOKEN`** (or `"token"` in the config) to require a token on
-  every API and MCP call: `Authorization: Bearer <token>` or `x-ekip-token`.
-  The web app asks once and keeps it in an HttpOnly cookie; `ekip ui` opens
-  it signed in; `ekip init` writes the header into `.mcp.json`; spawned
-  workers get it automatically.
+- **Two credentials, generated on first use** and kept in `~/.ekip/auth.json`
+  (readable only by you; `ekip token` prints them, delete the file to roll
+  them):
+  - **yours** opens the HTTP API and MCP. The web app asks for it once and
+    keeps it in an HttpOnly cookie; `ekip ui` opens the app already signed
+    in; the CLI uses it automatically.
+  - **the agent token** is what spawned runs get, and it is accepted on
+    `/mcp` only. So a run that a file talks into something can still only use
+    the bridge tools, inside the limits the hub puts on its own task — it
+    cannot `POST /api/delegate` to start work in another folder. Hand it to
+    an agent you drive yourself with `export EKIP_AGENT_TOKEN=…`; `ekip init`
+    writes that header into `.mcp.json`.
+  - `EKIP_TOKEN` / `EKIP_AGENT_TOKEN` or `token` / `agentToken` in the config
+    override them; **`"openAccess": true`** turns tokens off entirely (then
+    anything on the machine can drive the hub).
 - A hub told to listen beyond loopback **refuses to start without a token**.
 - **Each run proves who it is.** The hub gives every worker it launches a
   secret run key (in its instructions, its environment, and — for Claude — an
@@ -339,9 +349,8 @@ Anything that can reach the hub can launch agents that edit files, so:
 - **A run's hand-offs stay attached.** When a run calls `bridge_delegate`, the
   hub links the sub-task to that run's task — same folder, thread, budget and
   depth — and refuses a parent outside it.
-- **Known limit:** without a hub token, any local process — including a run —
-  can use the HTTP API directly (e.g. start a request in another folder). Set
-  `EKIP_TOKEN` if the agents you run may be steered by untrusted content.
+- **Known limit:** `openAccess: true` gives that up — anything on the machine,
+  including a run, can then drive the hub through the HTTP API.
 
 ## Cost on a subscription vs an API key
 
@@ -409,7 +418,7 @@ estimates (best case 6, worst case ~12 per feature run) so you can budget.
 ## Testing
 
 ```bash
-npm test   # 287 end-to-end cases, no LLMs involved
+npm test   # 295 end-to-end cases, no LLMs involved
 npm run test:ui   # 17 browser checks in headless Chrome (uses the installed Chrome)
 npm run soak   # stability: bursts of work, cancels, a hub restart
 ```
